@@ -1,0 +1,16 @@
+node_modules
+dist
+postgres-data
+.git
+.github
+.vscode
+docs
+tests
+*.zip
+.env
+.env.test
+*.log
+*.db
+*.db-journal
+.DS_Store
+Thumbs.db
