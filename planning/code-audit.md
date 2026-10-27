@@ -135,7 +135,7 @@ The first audit had no access to these files. This one did, so the table below i
   - Its `docker-compose up -d` now also builds and starts the `api` container.
 - **No API reference:** `docs/api.md` doesn't exist *(read)*.
 - **The ERD is stale:** `docs/mise-en-place_MVP_ERD.png` (March 2025) shows `Int` ids on all three tables *(read: image viewed)*.
-- **Two copies of each spec:** `docs/technical_spec.md` and `docs/design_spec.md` (March 2025) are older versions with a different phase structure. The current ones are in `planning/specs/` *(read)*.
+- **Two copies of each spec:** `docs/technical_spec.md` and `docs/design_spec.md` (March 2025) were older versions with a different phase structure. The current ones are in `planning/specs/` *(read)*. Resolved on 27 Oct 2026, when the `docs/` copies were deleted on `setup/planning`.
 - **The spec has drifted from the code:**
   - §5.4's test script lacks `dotenv` and `--runInBand`, and its setup calls `server.close()`. The code is better than the spec in both cases.
   - §6.1's Compose file still uses the `./postgres-data` bind mount *(read)*.
