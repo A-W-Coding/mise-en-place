@@ -47,7 +47,7 @@ This is the reference behind the `A` IDs in `PLAN.md`. It checks whether the cod
 - **S3 (passing `req.body` to Prisma): ✅ not present.** Every handler builds Prisma's `data` from named fields, so a client can't set `id` or `createdAt` or add nested writes. Unknown fields are ignored rather than rejected *(read)*.
 - **Error handler** (`src/middleware/error-handler.ts`):
   - ✅ Unknown errors return 500 `{ error: 'Internal server error' }`. The stack goes only to `console.error`, never into the response *(read)*.
-  - ❌ It ignores `err.status`, so malformed JSON in a request body, which `express.json()` reports as a 400, comes back as a 500 (**unverified**: not run).
+  - ❌ It ignores `err.status`, so malformed JSON in a request body, which `express.json()` reports as a 400, comes back as a 500 *(ran, Step 2)*.
   - Prisma errors are mapped route by route (P2025, P2003). Nothing is mapped centrally *(read)*.
 - All error responses already share one shape, `{ error: string }` *(read)*.
 
@@ -55,7 +55,7 @@ This is the reference behind the `A` IDs in `PLAN.md`. It checks whether the cod
 **Plan:** Steps 2, 3, 4 and 5.4. **Related:** M2.
 - ✅ **pg_trgm is enabled by a migration.** `20260302213608_add_trigram_fuzzy_search` runs `CREATE EXTENSION IF NOT EXISTS pg_trgm` and creates two GIN indexes. It sorts after every migration that creates tables, and no earlier migration uses trigram functions *(read)*. Whether the extension was also enabled by hand in the dev database is **unverified**.
 - ❌ **The GIN indexes exist only in migration SQL**, not in `schema.prisma`. Prisma will see them as drift, so the next `prisma migrate dev` will probably generate a `DROP INDEX` for both (**unverified**: not run). Step 4 should declare them with `map: "recipe_name_trgm_idx"` and `map: "ingredient_name_trgm_idx"` to keep their existing names.
-- ❌ **A repeated parameter breaks search.** The routes cast `search as string` (`ingredients.ts:33`, `recipes.ts:67`). Express 5's default query parser turns `?search=a&search=b` into an array, so `searchTerm.toLowerCase()` throws and the request returns 500 (read; **unverified** at runtime).
+- ❌ **A repeated parameter breaks search.** The routes cast `search as string` (`ingredients.ts:33`, `recipes.ts:67`). Express 5's default query parser turns `?search=a&search=b` into an array, so `searchTerm.toLowerCase()` throws and the request returns 500 *(ran, Step 2)*.
 - ❌ **ILIKE wildcards aren't escaped.** `%` and `_` in a search term act as wildcards, so `?search=%` should match every name (read; **unverified** at runtime).
 - ⚠️ **The term isn't trimmed or capped.** `?search=%20` is truthy, so it runs a search for a single space instead of being treated as no search *(read)*.
 - ⚠️ **Raw SQL goes through `$queryRawUnsafe`** with the table name interpolated (`fuzzy-search.ts:42–54`). The search term and threshold are bound as `$1` and `$2`, and the table name comes from a TypeScript union, so there's no injection today. The plan still asks for the tagged-template `$queryRaw` (Step 5.4) *(read)*.
@@ -84,7 +84,7 @@ Some existing tests assert very little. For example, "should return all seeded i
 ### A6. No real health endpoint ❌
 **Plan:** Step 5.6.
 - The only health check is `GET /` (`app.ts:21–23`). It returns a static `{ message }` and never touches the database *(read)*.
-- Spec §3.2 lists `GET /api/health`, which returns 404 today. The spec's deploy script curls that URL *(read)*.
+- Spec §3.2 lists `GET /api/health`, which returns 404 today *(ran, Step 2)*. The spec's deploy script curls that URL *(read)*.
 
 ### A7. No pagination, and no stable ordering ❌
 **Plan:** Step 5.5. **Related:** D6.
@@ -112,7 +112,7 @@ The first audit had no access to these files. This one did, so the table below i
 | CI workflow | ❌ | `.github/workflows/node.js.yml` is still the SQLite-era workflow. It writes `DATABASE_URL=file:./test.db` while the schema's provider is `postgresql`, so `prisma migrate deploy` should fail (read; **unverified**: no CI results seen). It has no Postgres service and never runs the tests, lint or coverage. Node 18, `actions/setup-node@v3`, `actions/checkout@v4` | Step 3 |
 | `.gitignore` | ⚠️ | Covered: `.env` plus four named variants, `*postgres-data`, `*.db`, `dist/`. Missing: a general `.env*` pattern *(read)* | Fixed in the setup commit on `setup/planning` |
 | `package.json` | ⚠️ | Scripts: `dev`, `build`, `start`, `test`, `seed`. `prisma` and `@prisma/client` are `^6.6.0`, with 6.6.0 locked and installed, so the range can't cross a major version but isn't an exact pin (D3). No `engines` field, no `.nvmrc`. `zod` and `cors` aren't installed. No ESLint or Prettier config, although the workspace file recommends both extensions. `"main": "index.js"` points at a file that doesn't exist *(read)* | Steps 1 (D3), 3 and 5 |
-| The seed runs | ❌ | `base-seed.ts` only exports `seed()`, and nothing calls it, so `npm run seed` and `npx prisma db seed` should exit without seeding (read; **unverified**: not run). The entry point was removed in commit `1d19728`. The two commands also use different runners (`tsx` and `node --loader ts-node/esm`) | Steps 3 and 4 (not yet listed) |
+| The seed runs | ❌ | `base-seed.ts` only exports `seed()`, and nothing calls it, so `npm run seed` and `npx prisma db seed` both exit without connecting to a database *(ran, Step 2, with an unreachable `_test` URL)*. The entry point was removed in commit `1d19728`. The two commands also use different runners (`tsx` and `node --loader ts-node/esm`) | Steps 3 and 4 (not yet listed) |
 | CORS | ✅ | No CORS middleware, and `cors` isn't installed, so browsers block cross-origin calls. There's no wildcard `cors()` *(read)* | Step 5.7 adds an allowlist |
 | README and API docs | ⚠️ | See A10 | Step 7 |
 | Dockerfile (not in Step 2's list) | ❌ | ✅ Multi-stage, `node:22-slim`, `openssl` installed. ❌ Runs as root. ❌ The `CMD` runs `npx prisma migrate deploy`, but `prisma` is a devDependency and the runtime stage installs with `npm ci --omit=dev`. With no TTY, npx downloads whatever version npm's `latest` tag points to when the container starts (read; **unverified**: not built) | Step 8.4 |

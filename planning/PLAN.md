@@ -3,9 +3,9 @@
 # Mise en place: hardening plan (Phase 1 to Phase 2)
 
 > **Status**
-> - Current step: **Step 2: Inspect the files neither review saw**
-> - Last updated: 2026-10-27 (Step 1 done: D1–D5 decided, Prisma pinned to 6.6.0)
-> - Blockers: none
+> - Current step: **Step 3: Make the tests safe and reliable**
+> - Last updated: 2026-10-27 (Step 2 done: every check recorded in the Progress log)
+> - Blockers: none. Step 3 needs Docker Desktop running. Open question: whether to add the tasks marked "proposed" in the Step 2 entry
 
 ## How to use this file
 - Work through the steps in order. Each step gives a goal, why it matters, tasks as checkboxes, and a "done when" test.
@@ -98,21 +98,21 @@ Matching ignores case, surrounding spaces and a trailing full stop. Units can be
 **Why:** later steps should fix real problems, not assumed ones, and several fixes depend on these answers. For example, if `pg_trgm` was enabled by hand rather than in a migration, search will fail in CI and on the Pi.
 
 Check each item and record ✅ or ❌, with a note, in the Progress log:
-- [ ] Some migration in `prisma/migrations/` contains `CREATE EXTENSION ... pg_trgm` (A3)
-- [ ] The test reset (`tests/helpers/test-lifecycle.ts`) and the seed refuse to run against a non-test database (T1)
-- [ ] Tests use their own database, separate from dev (T1)
-- [ ] How Jest runs: in parallel, or with `--runInBand` or `maxWorkers: 1`. Also where `prisma migrate deploy` runs: in each file's `beforeAll`, or once per run (T1)
-- [ ] Test files are named `*.test.ts`; confirm with `npx jest --listTests` (A5)
-- [ ] No handler passes `req.body`, or `...req.body`, into a Prisma call (S3)
-- [ ] How recipe bodies refer to ingredients (by `ingredientId`, by name, or both), and how `toRecipeIngredientCreateData` builds the write
-- [ ] What the error handler does with unknown errors (a 500? does it leak stack traces?) and with Prisma errors (A2)
-- [ ] In `docker-compose.yml`: how the Postgres port is bound, where the data lives (`./postgres-data` inside the repo?) and the image version (S2, M4)
-- [ ] In the CI workflow: whether it sets `DATABASE_URL`, waits for Postgres to be healthy and runs lint and coverage, plus its Node version and action versions (T2)
-- [ ] `.gitignore` covers `.env*` and any data directory (M4)
-- [ ] In package.json: the scripts, the Prisma version, any Node `engines` field, and whether `zod` and `cors` are installed. Also whether ESLint and Prettier configs exist
-- [ ] How CORS is set up in `app.ts`; a bare `cors()` call allows every origin (S1)
-- [ ] Whether a README and API docs exist
-- [ ] Update the **Commands** and **Code map** sections of the local working notes (not committed) with what you found
+- [x] Some migration in `prisma/migrations/` contains `CREATE EXTENSION ... pg_trgm` (A3)
+- [x] The test reset (`tests/helpers/test-lifecycle.ts`) and the seed refuse to run against a non-test database (T1)
+- [x] Tests use their own database, separate from dev (T1)
+- [x] How Jest runs: in parallel, or with `--runInBand` or `maxWorkers: 1`. Also where `prisma migrate deploy` runs: in each file's `beforeAll`, or once per run (T1)
+- [x] Test files are named `*.test.ts`; confirm with `npx jest --listTests` (A5)
+- [x] No handler passes `req.body`, or `...req.body`, into a Prisma call (S3)
+- [x] How recipe bodies refer to ingredients (by `ingredientId`, by name, or both), and how `toRecipeIngredientCreateData` builds the write
+- [x] What the error handler does with unknown errors (a 500? does it leak stack traces?) and with Prisma errors (A2)
+- [x] In `docker-compose.yml`: how the Postgres port is bound, where the data lives (`./postgres-data` inside the repo?) and the image version (S2, M4)
+- [x] In the CI workflow: whether it sets `DATABASE_URL`, waits for Postgres to be healthy and runs lint and coverage, plus its Node version and action versions (T2)
+- [x] `.gitignore` covers `.env*` and any data directory (M4)
+- [x] In package.json: the scripts, the Prisma version, any Node `engines` field, and whether `zod` and `cors` are installed. Also whether ESLint and Prettier configs exist
+- [x] How CORS is set up in `app.ts`; a bare `cors()` call allows every origin (S1)
+- [x] Whether a README and API docs exist
+- [x] Update the **Commands** and **Code map** sections of the local working notes (not committed) with what you found
 
 **Done when:** every item has a ✅ or ❌ in the Progress log, each ❌ names the step that fixes it, and the commands in the local working notes are the real ones.
 
@@ -460,3 +460,26 @@ First, settle D7–D11. Then write the Phase 3 spec segments, taking in the desi
   - D5: Tailscale moves into Phase 2
 
   Next: Step 2.
+- **2026-10-27:** Step 2 done. Docker Desktop wasn't running, so nothing touched a database. Each ❌ names the step that fixes it. "Proposed" means no task covers it yet.
+  - ✅ **pg_trgm migration (A3):** `20260302213608_add_trigram_fuzzy_search` runs `CREATE EXTENSION IF NOT EXISTS pg_trgm` and sorts after every table migration. Its GIN indexes exist only in SQL, so Step 4 declares them with `map:` (`recipe_name_trgm_idx`, `ingredient_name_trgm_idx`).
+  - ❌ **Reset and seed guard (T1):** `cleanDatabase()` and `seed()` delete every row with no check on the database name → Step 3.
+  - ✅ **Separate test database (T1):** `npm test` loads `.env.test` (`mydatabase_test`); dev is `mydatabase` on the same server. A bare `npx jest` would fall back to `.env`, which the Step 3 guard closes. Dev doesn't end in `_dev` yet → Step 3.
+  - ❌ **How Jest runs (T1):** `npm test` already uses `--runInBand`. `prisma migrate deploy` runs in every file's `beforeAll` → Step 3 (`globalSetup`).
+  - ❌ **Test discovery (A5):** files are named `*.test.ts`, but `npx jest --listTests` lists six: the three in `tests/` and their compiled copies in `dist/tests/`. `tests/helpers/jest-setup.ts` isn't loaded by `jest.config.js` → Step 3 (proposed).
+  - ✅ **`req.body` into Prisma (S3):** no handler passes it through; every `data` object is built from named fields.
+  - ✅ **Ingredient references:** by `ingredientId` only. `toRecipeIngredientCreateData` builds `{ ingredientId, quantity: quantity ?? 0, unit }` for a nested create, so a bad id gives P2003 → 400. Step 5.3 keeps this style.
+  - ❌ **Error handler (A2):** unknown errors return a generic 500 with no stack trace in the body (run). Malformed JSON also returns 500 instead of 400 (run). P2002 isn't mapped anywhere → Steps 5.1, 5.2 and 5.7.
+  - ❌ **Compose file (S2, M4):** `'5432:5432'` and `'3000:3000'` publish on every interface. Image `postgres:15` (D4 chose 17), obsolete `version` key (Compose warns about it), no healthcheck. Data is in the named volume `postgres-data`, not `./postgres-data`. The in-repo `postgres-data/` folder (Postgres 15, 71 MB) is unused leftover → Step 3 (ask before deleting anything).
+  - ❌ **CI (T2):** still the SQLite workflow (`DATABASE_URL=file:./test.db` against a `postgresql` provider). No Postgres service or health check; never runs tests, lint or coverage; Node 18; `setup-node@v3` → Step 3. Run results not seen (no `gh` CLI).
+  - ✅ **.gitignore (M4):** `.env*` (added during setup), `*postgres-data`, `*.db` and `dist/` are all covered.
+  - ❌ **package.json:** scripts `dev`, `build`, `start`, `test`, `seed`. Prisma is pinned to 6.6.0 (Step 1), `npm ls` is clean and `npx tsc --noEmit` passes. No `engines` field or `.nvmrc` → Step 3. `zod` isn't installed → Step 5.1. `cors` isn't installed → Step 5.7, if needed. No ESLint or Prettier config, although Step 3's CI runs lint → Step 3 (proposed).
+  - ✅ **CORS (S1):** no CORS middleware and no wildcard `cors()`. Step 5.7 adds the allowlist.
+  - ❌ **README and API docs:** the README is stale (Node 18+, a missing `.env.example`, `GET /` as the health check, `npm run seed` described as working). There's no `docs/api.md` → Step 7.
+  - ✅ **Commands and Code map:** updated in the local working notes.
+  - Also confirmed by running:
+    - `npm run seed` and `npx prisma db seed` both exit 0 without connecting, even with an unreachable `_test` URL, because the seed has no entry point. Step 4's "the seed runs" depends on this → Step 3 or 4 (proposed).
+    - `GET /api/health` → 404 → Step 5.6.
+    - `?search=a&search=b` → 500 (`TypeError` in `fuzzy-search.ts:52`) → Step 5.4.
+  - Still to check once Docker is running, at the start of Step 3: a baseline `npm test`, `prisma migrate status` on both databases, whether the test database exists, and whether `migrate dev` would drop the trigram indexes.
+
+  Next: Step 3.
