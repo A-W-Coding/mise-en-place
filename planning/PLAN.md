@@ -4,8 +4,8 @@
 
 > **Status**
 > - Current step: **Step 3: Make the tests safe and reliable**
-> - Last updated: 2026-10-27 (Step 2 done: every check recorded in the Progress log)
-> - Blockers: none. Step 3 needs Docker Desktop running. Open question: whether to add the tasks marked "proposed" in the Step 2 entry
+> - Last updated: 2026-10-27 (Step 2 done; three tasks added to Steps 3 and 4)
+> - Blockers: none. Step 3 needs Docker Desktop running
 
 ## How to use this file
 - Work through the steps in order. Each step gives a goal, why it matters, tasks as checkboxes, and a "done when" test.
@@ -128,10 +128,17 @@ Check each item and record ✅ or ❌, with a note, in the Progress log:
   - Move `prisma migrate deploy` into a `globalSetup` file, so it runs once per test run instead of once per test file.
   - Load `.env.test` inside `globalSetup` as well, because that file runs in its own context.
   - If tests only use `app`, remove `server.close()` from teardown.
+- [ ] **Test discovery (A5).** Added 2026-10-27 from Step 2.
+  - Stop Jest picking up the compiled copies in `dist/`, for example with `roots: ['<rootDir>/tests']` in `jest.config.js`. Otherwise every suite runs twice.
+  - Either load `tests/helpers/jest-setup.ts` through `setupFilesAfterEnv` (it sets a 15-second timeout), or delete it. Today nothing loads it.
+  - Confirm that `npx jest --listTests` lists only the files in `tests/`.
 - [ ] **pg_trgm.** If Step 2 found no migration for it:
   - Run `npx prisma migrate dev --create-only --name enable_pg_trgm`.
   - Put `CREATE EXTENSION IF NOT EXISTS pg_trgm;` in the generated file. `IF NOT EXISTS` keeps it safe where you already enabled it by hand.
   - Make sure it sorts before any migration that uses trigram functions.
+- [ ] **Lint (T2).** Added 2026-10-27 from Step 2. The CI target below runs lint, but there's no config for it yet.
+  - Add ESLint with a flat config (`eslint.config.js`) using `typescript-eslint`'s recommended rules, and an `npm run lint` script.
+  - Fix what it reports, or disable a rule explicitly with a comment saying why, so lint passes before CI depends on it.
 - [ ] **CI.** Fix whatever Step 2 found. The target is:
   - `env: DATABASE_URL: postgresql://test:test@localhost:5432/recipe_test`, matching the Postgres service's user, password and database name
   - A Postgres service with `options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10`, so tests wait for the database
@@ -220,6 +227,10 @@ Notes:
 - [ ] Update `schema.prisma` to the target models
 - [ ] Create the migration: `npx prisma migrate dev --name phase1_ingredient_model`
 - [ ] Run `migrate dev` again and confirm there's no drift
+- [ ] **Give the seed an entry point (A8).** Added 2026-10-27 from Step 2. Today `npm run seed` and `npx prisma db seed` exit without seeding, so "the seed runs" below can't pass.
+  - Put the entry point in its own file, such as `prisma/seeds/run.ts`. It creates a Prisma client, calls `assertSafeDatabase()` from Step 3 (which allows `_test` and `_dev`), runs `seed()`, then disconnects.
+  - Keep it out of `base-seed.ts`. The test helpers import that file, and code that runs on import would seed during every test run.
+  - Point both `npm run seed` and the `prisma.seed` setting in package.json at the new file, using `tsx` for both. The current `node --loader ts-node/esm` prints deprecation warnings on Node 22.
 - [ ] Update the seed to use the new fields: ordered lines, a line with a null quantity, a line with a note, and a range
 - [ ] Check that the tests still compile. Many will fail until Step 5, and that's expected
 
@@ -483,3 +494,4 @@ First, settle D7–D11. Then write the Phase 3 spec segments, taking in the desi
   - Still to check once Docker is running, at the start of Step 3: a baseline `npm test`, `prisma migrate status` on both databases, whether the test database exists, and whether `migrate dev` would drop the trigram indexes.
 
   Next: Step 3.
+- **2026-10-27:** The three "proposed" items from Step 2 are now tasks: **Test discovery (A5)** and **Lint (T2)** in Step 3, and **Give the seed an entry point (A8)** in Step 4.
