@@ -3,8 +3,8 @@
 # Mise en place: hardening plan (Phase 1 to Phase 2)
 
 > **Status**
-> - Current step: **Step 1: Make the decisions**
-> - Last updated: 2026-09-27 (plan created; no code changed yet)
+> - Current step: **Step 2: Inspect the files neither review saw**
+> - Last updated: 2026-10-27 (Step 1 done: D1–D5 decided, Prisma pinned to 6.6.0)
 > - Blockers: none
 
 ## How to use this file
@@ -46,11 +46,11 @@ The rule that reconciles them: **settle the spec first, then bring the code in l
 ## Decisions
 | ID | Decision | Recommendation | When | Status / answer |
 |---|---|---|---|---|
-| D1 | How to validate requests | **Zod.** One schema per route gives validation, TypeScript types and an allowlist of fields in one place. Extending the helpers is acceptable if it's used everywhere | Step 1 | Pending |
-| D2 | How units are enforced | **A canonical unit list with aliases, in API code.** "gram" and "grams" both become `g`. A database enum would need a migration for every new unit | Step 1 | Pending |
-| D3 | Prisma version | **Pin the exact version already in use.** Upgrading is a separate task later (V5). On 27 Sept 2026, npm's `latest` tag for `prisma` pointed at `8.0.0-rc.17`, so an unpinned fresh install could pull a pre-release major | Step 1 | Pending |
-| D4 | Postgres version | **17**, in dev, CI and on the Pi, adopted now while dev data is disposable. 18 also works but moves the Docker data path (see the Step 3 note) | Step 1 | Pending |
-| D5 | Move Tailscale into Phase 2 | **Yes.** The PWA needs HTTPS and a single origin (F1) | Before Step 7 | Pending |
+| D1 | How to validate requests | **Zod.** One schema per route gives validation, TypeScript types and an allowlist of fields in one place. Extending the helpers is acceptable if it's used everywhere | Step 1 | **Decided 2026-10-27: Zod** |
+| D2 | How units are enforced | **A canonical unit list with aliases, in API code.** "gram" and "grams" both become `g`. A database enum would need a migration for every new unit | Step 1 | **Decided 2026-10-27: a canonical list with aliases, in API code.** Starting list as in Step 1 |
+| D3 | Prisma version | **Pin the exact version already in use.** Upgrading is a separate task later (V5). On 27 Sept 2026, npm's `latest` tag for `prisma` pointed at `8.0.0-rc.17`, so an unpinned fresh install could pull a pre-release major | Step 1 | **Decided 2026-10-27: pin `prisma` and `@prisma/client` to exactly 6.6.0** |
+| D4 | Postgres version | **17**, in dev, CI and on the Pi, adopted now while dev data is disposable. 18 also works but moves the Docker data path (see the Step 3 note) | Step 1 | **Decided 2026-10-27: 17.** The dev data is disposable (one placeholder recipe) |
+| D5 | Move Tailscale into Phase 2 | **Yes.** The PWA needs HTTPS and a single origin (F1) | Before Step 7 | **Decided 2026-10-27: yes** |
 | D6 | List response shape for pagination | **Keep a plain array and add an `X-Total-Count` header**, which breaks nothing. The alternative is a `{ items, total, limit, offset }` envelope | Step 5 | Pending |
 | D7 | Electron | **Drop it or defer it.** An installed PWA already covers the desktop (V2) | Phase 3 gate | Deferred |
 | D8 | Sync design | **A full snapshot with an ETag first.** Add delta sync with tombstones only if it's ever needed (F2) | Phase 3 gate | Deferred |
@@ -76,11 +76,11 @@ The rule that reconciles them: **settle the spec first, then bring the code in l
 
 **Why:** Steps 3–5 depend on these answers.
 
-- [ ] D1: choose the validation approach
-- [ ] D2: choose how units are enforced, and agree the starting unit list below
-- [ ] D3: read the exact `prisma` and `@prisma/client` versions from package.json, then either pin them exactly (no `^`) or confirm the range can't cross a major version
-- [ ] D4: choose the Postgres version
-- [ ] Record each answer and its date in the Decisions table
+- [x] D1: choose the validation approach
+- [x] D2: choose how units are enforced, and agree the starting unit list below
+- [x] D3: read the exact `prisma` and `@prisma/client` versions from package.json, then either pin them exactly (no `^`) or confirm the range can't cross a major version
+- [x] D4: choose the Postgres version
+- [x] Record each answer and its date in the Decisions table
 
 **Starting unit list for D2** (canonical symbol first, example aliases in brackets):
 - Mass: `g` (gram, grams, gr), `kg`, `oz` (ounce, ounces), `lb` (pound, pounds, lbs)
@@ -451,3 +451,12 @@ First, settle D7–D11. Then write the Phase 3 spec segments, taking in the desi
 
 ## Progress log
 - **2026-09-27:** Plan created from the design review and the Phase 1 code audit. No code changed yet. Next: Step 1.
+- **2026-10-27:** Planning documents moved into the repo, and `code-audit.md` rewritten from the code at `8e61e98`. Its A8 section already answers most of Step 2's checks, but Step 2 still records them here.
+- **2026-10-27:** Step 1 done.
+  - D1: Zod
+  - D2: canonical unit list with aliases, in API code
+  - D3: `prisma` and `@prisma/client` pinned to exactly 6.6.0 in package.json and the lockfile; installed versions unchanged
+  - D4: Postgres 17, and the dev data is disposable
+  - D5: Tailscale moves into Phase 2
+
+  Next: Step 2.
