@@ -3,9 +3,9 @@
 # Mise en place: hardening plan (Phase 1 to Phase 2)
 
 > **Status**
-> - Current step: **Step 6: Fill in the missing tests**
-> - Last updated: 2026-11-02 (Step 5 done: tests pass, every endpoint checked with curl)
-> - Blockers: none
+> - Current step: **Step 6: Fill in the missing tests** (every task done locally; waiting on CI)
+> - Last updated: 2026-11-02 (Step 6: 220 tests pass locally twice)
+> - Blockers: CI needs a pull request, which needs the branch pushed
 
 ## How to use this file
 - Work through the steps in order. Each step gives a goal, why it matters, tasks as checkboxes, and a "done when" test.
@@ -300,24 +300,24 @@ General rules:
 
 ## Step 6: Fill in the missing tests (A4, A9)
 Integration tests:
-- [ ] PATCH an ingredient to a name that already exists → 409
-- [ ] Two POSTs of the same new name → one 201 and one 409
-- [ ] POST `" Onion "` → stored as `onion`
-- [ ] Invalid `servings` (`"abc"`, `-1`, `1.5`) and invalid `prepTime` → 400
-- [ ] Invalid `quantity`, `quantityMax` below `quantity`, or an unknown unit → 400
-- [ ] A unit alias such as `"grams"` is stored as `g`
-- [ ] An unknown field in the body → 400
-- [ ] An unknown ingredient id in a recipe body → 400
-- [ ] Line order is preserved, and null quantity, null unit and notes all come back unchanged
-- [ ] A PATCH containing only `ingredients` changes `updatedAt`
-- [ ] A PATCH without `ingredients` leaves the lines alone, and `ingredients: []` removes them
-- [ ] `?search=a&search=b` → 400, and a `%` in the term matches literally
-- [ ] Pagination: `limit` and `offset` work, the maximum limit is enforced, invalid values → 400, and the default order is stable
-- [ ] `/api/health` → 200. A test for the 503 case is optional, if simulating a database outage is cheap
+- [x] PATCH an ingredient to a name that already exists → 409
+- [x] Two POSTs of the same new name → one 201 and one 409
+- [x] POST `" Onion "` → stored as `onion`
+- [x] Invalid `servings` (`"abc"`, `-1`, `1.5`) and invalid `prepTime` → 400
+- [x] Invalid `quantity`, `quantityMax` below `quantity`, or an unknown unit → 400
+- [x] A unit alias such as `"grams"` is stored as `g`
+- [x] An unknown field in the body → 400
+- [x] An unknown ingredient id in a recipe body → 400
+- [x] Line order is preserved, and null quantity, null unit and notes all come back unchanged
+- [x] A PATCH containing only `ingredients` changes `updatedAt`
+- [x] A PATCH without `ingredients` leaves the lines alone, and `ingredients: []` removes them
+- [x] `?search=a&search=b` → 400, and a `%` in the term matches literally
+- [x] Pagination: `limit` and `offset` work, the maximum limit is enforced, invalid values → 400, and the default order is stable
+- [x] `/api/health` → 200. A test for the 503 case is optional, if simulating a database outage is cheap
 
 Unit tests:
-- [ ] The validation schemas or helpers, `isPrismaError`, name normalisation, `canonicaliseUnit`, `assertSafeDatabase` and the ILIKE escaping
-- [ ] Make CI report coverage, with no threshold yet. Set one once coverage settles
+- [x] The validation schemas or helpers, `isPrismaError`, name normalisation, `canonicaliseUnit`, `assertSafeDatabase` and the ILIKE escaping
+- [x] Make CI report coverage, with no threshold yet. Set one once coverage settles
 
 **Done when:** all tests pass locally and in CI. **Phase 1 is then complete.**
 
@@ -566,3 +566,28 @@ First, settle D7–D11. Then write the Phase 3 spec segments, taking in the desi
   - CI hasn't run on Steps 4 and 5 yet: the branch isn't pushed.
 
   Next: Step 6.
+- **2026-11-02:** Steps 4 and 5 merged in pull request #2. CI passed on the pull request (run #5, 1m 15s) and on `main` after the merge (run #6, 1m 11s). That was the first run of the Phase 1 migration on a fresh Postgres 17.
+- **2026-11-02:** Step 6: every task done locally. It isn't finished until CI passes, which needs the branch pushed and a pull request.
+  - **Tests:** 220 in 10 suites (was 53 in 4). They passed twice in a row, in about 27 s each.
+    - **Integration, in the existing files:**
+      - Ingredients: a rename to a taken name, two simultaneous POSTs of one name (one 201, one 409), and `" Onion "` stored as `onion`.
+      - Recipe validation: servings, prepTime, the line rules, unit aliases, unknown fields at both levels, and ids.
+      - Line order and values, including one ingredient on two lines.
+      - The three PATCH cases for `ingredients`, plus a PATCH that leaves out `servings` not resetting it.
+      - Search: a repeated or over-long term, a blank term, and literal `%` and `_`.
+    - **New files:**
+      - `pagination.test.ts`: both list endpoints, covering paging, totals, the order (including the id tie-break) and invalid parameters.
+      - `health.test.ts`: 200, the 503 case, and `GET /` being gone.
+    - **Unit tests:**
+      - `units.test.ts`.
+      - `schemas.test.ts`, which includes name normalisation.
+      - `utils.test.ts`: `isPrismaError`, the ILIKE escaping and `fieldMessages`.
+      - `assertSafeDatabase` was already covered in Step 3.
+    - **Extras beyond the list:** malformed JSON → 400, and `cors.test.ts` for the CORS policy.
+  - **Checked that a test can fail:** with the explicit `updatedAt` removed from the recipe PATCH, the `updatedAt` test failed, because the timestamp stayed at its backdated value. So Prisma's `@updatedAt` really doesn't fire when only the lines change.
+  - **The 503 case:** the test swaps the client's `$queryRaw` for one that fails, rather than stopping the database.
+  - **Coverage:** 93.6% of statements and 90.1% of branches (was 84.6% and 64.8%). Most of what's left is catch blocks for unexpected errors.
+    - CI now writes the totals and a per-file table to the run's summary page, using `scripts/coverage-summary.js` and Jest's `json-summary` reporter.
+    - There's no threshold yet.
+
+  Next: push `step-6/missing-tests` and open a pull request. Step 6, and with it Phase 1, is done when CI passes.
