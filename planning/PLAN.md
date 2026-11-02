@@ -3,9 +3,9 @@
 # Mise en place: hardening plan (Phase 1 to Phase 2)
 
 > **Status**
-> - Current step: **Step 7: Update the docs**
-> - Last updated: 2026-11-02 (Step 6 done, CI green: Phase 1 is complete)
-> - Blockers: none
+> - Current step: **Step 7: Update the docs** (everything drafted; waiting for the spec segments to be pasted in)
+> - Last updated: 2026-11-02 (Step 7: segments drafted, README and API reference written)
+> - Blockers: the six segments in `planning/spec-segments/` need pasting into the specs (you)
 
 ## How to use this file
 - Work through the steps in order. Each step gives a goal, why it matters, tasks as checkboxes, and a "done when" test.
@@ -327,17 +327,17 @@ Unit tests:
 **Why:** the design doc's quality section requires a README, API docs and schema docs, and the ERD is stale (A10, M1). Each spec segment is drafted first, and I paste them into the specs.
 
 Spec segments, each written to `planning/spec-segments/`:
-- [ ] `01-phase1-schema.md`: replaces the tables in technical spec §2.1 and its "Current Prisma Schema" block. Explain why quantity and unit are nullable, why names are unique and why lines have an order. Also correct the UUID rationale: UUIDs help with offline creation, but they aren't a security measure (M3).
-- [ ] `02-api.md`: the Phase 1 parts of §3.1 and §3.2. Cover the health endpoint, pagination parameters and response shape, PATCH semantics, validation rules and a table of error codes.
-- [ ] `03-testing.md`: §5, covering the separate test and dev databases, the guard, serial Jest runs, `globalSetup` and what unit tests cover.
-- [ ] `04-dev-and-ci.md`: §6.1 (the Compose file) and §6.4 (CI) as they now stand.
-- [ ] `05-phase-plan.md`: the design spec's phases, following the revised phase map. This needs D5.
+- [x] `01-phase1-schema.md`: replaces the tables in technical spec §2.1 and its "Current Prisma Schema" block. Explain why quantity and unit are nullable, why names are unique and why lines have an order. Also correct the UUID rationale: UUIDs help with offline creation, but they aren't a security measure (M3).
+- [x] `02-api.md`: the Phase 1 parts of §3.1 and §3.2. Cover the health endpoint, pagination parameters and response shape, PATCH semantics, validation rules and a table of error codes.
+- [x] `03-testing.md`: §5, covering the separate test and dev databases, the guard, serial Jest runs, `globalSetup` and what unit tests cover.
+- [x] `04-dev-and-ci.md`: §6.1 (the Compose file) and §6.4 (CI) as they now stand.
+- [x] `05-phase-plan.md`: the design spec's phases, following the revised phase map. This needs D5.
 
 In the repo, committed:
-- [ ] A README covering setup, environment variables, commands, the test database and how to run everything
-- [ ] An API reference at `docs/api.md`, listing every endpoint with its parameters, bodies, responses and error codes
-- [ ] A new ERD, because the current PNG shows `Int` ids. Either redo it in the tool you used, or add a Mermaid `erDiagram` to `docs/`. Mermaid is plain text, so changes show up in diffs, and GitHub renders it.
-- [ ] A corrected architecture diagram, with the arrows running Express → Prisma → PostgreSQL (M1)
+- [x] A README covering setup, environment variables, commands, the test database and how to run everything
+- [x] An API reference at `docs/api.md`, listing every endpoint with its parameters, bodies, responses and error codes
+- [x] A new ERD, because the current PNG shows `Int` ids. Either redo it in the tool you used, or add a Mermaid `erDiagram` to `docs/`. Mermaid is plain text, so changes show up in diffs, and GitHub renders it.
+- [x] A corrected architecture diagram, with the arrows running Express → Prisma → PostgreSQL (M1)
 
 Later-phase segments wait until just before their phase (see the Backlog).
 
@@ -597,3 +597,23 @@ First, settle D7–D11. Then write the Phase 3 spec segments, taking in the desi
   - **Seen, not acted on:** both runs warn that `actions/checkout@v4` and `actions/setup-node@v4` target the deprecated Node 20 and are being run on Node 24. They also note that `ubuntu-latest` is moving to Ubuntu 26 (from 19 Oct 2026). Moving to newer action versions is a dependency update, so it waits for a step that covers one.
 
   Next: Step 7.
+- **2026-11-02:** Step 7: everything drafted. It isn't finished until the spec segments are pasted in.
+  - **Spec segments,** in `planning/spec-segments/`. Each starts with exactly what it replaces, then the text to paste:
+    - `01-phase1-schema.md`: technical spec §2.1
+    - `02-api.md`: §3.1 and the Phase 1 table in §3.2
+    - `03-testing.md`: §5
+    - `04-dev-and-ci.md`: §6.1 and §6.4
+    - `05-phase-plan.md`: the design spec's phases. D5 is reflected; open decisions (D7–D12) are shown as open, with their recommendations.
+    - `06-architecture-diagram.md` is an extra: it replaces the design spec's diagram, which is where M1's wrong arrows were.
+  - **In the repo:**
+    - A new README, covering setup, the test database, environment variables, the safety guard, commands, tests and CI.
+    - `.env.example`, which the old README already told people to copy.
+    - `docs/api.md`, listing every endpoint with its parameters, bodies, responses and errors, plus the units table.
+    - `docs/erd.md` and `docs/architecture.md`, as Mermaid diagrams. The stale `docs/mise-en-place_MVP_ERD.png` is deleted.
+  - **Checked against the running code, not from memory:**
+    - The 413 message, non-JSON bodies (400 under `(input)`), and non-UUID ids in URLs (404).
+    - The search example in `docs/api.md`. The first draft guessed the result wrong; the published example is the real output.
+    - All three Mermaid diagrams, rendered with Mermaid 11. Mermaid drew a `https://` address in a label as "Unsupported markdown: link", so that label has no scheme.
+  - **Seen, not acted on:** `.env` has a `DATABASE_PORT` variable that nothing reads.
+
+  Next: paste the segments into the specs. Step 7 is then done.
