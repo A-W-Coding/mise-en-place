@@ -4,7 +4,7 @@
 
 > **Status**
 > - Current step: **Step 6: Fill in the missing tests**
-> - Last updated: 2026-11-02 (Step 5 done: tests pass, every endpoint checked with curl)
+> - Last updated: 2026-11-02 (Steps 4 and 5 merged in pull request #2, CI green)
 > - Blockers: none
 
 ## How to use this file
@@ -566,3 +566,4 @@ First, settle D7–D11. Then write the Phase 3 spec segments, taking in the desi
   - CI hasn't run on Steps 4 and 5 yet: the branch isn't pushed.
 
   Next: Step 6.
+- **2026-11-02:** Steps 4 and 5 merged in pull request #2. CI passed on the pull request (run #5, 1m 15s) and on `main` after the merge (run #6, 1m 11s). That was the first run of the Phase 1 migration on a fresh Postgres 17.
