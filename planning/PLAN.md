@@ -290,7 +290,7 @@ General rules:
 - [x] Use the response shape chosen in D6.
 
 ### 5.6 Health check (A6)
-- [ ] Replace `GET /` with `GET /api/health`. It runs `SELECT 1` through Prisma and returns 200 `{ "status": "ok" }`. If the database is unreachable, it returns 503 `{ "status": "error" }` with no error detail in the body.
+- [x] Replace `GET /` with `GET /api/health`. It runs `SELECT 1` through Prisma and returns 200 `{ "status": "ok" }`. If the database is unreachable, it returns 503 `{ "status": "error" }` with no error detail in the body.
 
 ### 5.7 Errors and CORS (S1, A2)
 - [ ] Unknown errors return 500 with a generic message. Full details go only to the server logs, and no stack traces appear in responses.

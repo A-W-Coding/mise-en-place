@@ -7,7 +7,8 @@
  * import `app` without starting a listener.
  */
 
-import express, { Request, Response } from 'express';
+import express from 'express';
+import healthRouter from './routes/health.js';
 import ingredientsRouter from './routes/ingredients.js';
 import recipesRouter from './routes/recipes.js';
 import { globalErrorHandler } from './middleware/error-handler.js';
@@ -17,12 +18,8 @@ const app = express();
 // ── Body Parsing ────────────────────────────────────────────────────────────
 app.use(express.json());
 
-// ── Health Check ────────────────────────────────────────────────────────────
-app.get('/', (_req: Request, res: Response) => {
-    res.status(200).json({ message: 'Recipe API is running!' });
-});
-
 // ── Route Modules ───────────────────────────────────────────────────────────
+app.use('/api/health', healthRouter);
 app.use('/api/ingredients', ingredientsRouter);
 app.use('/api/recipes', recipesRouter);
 
