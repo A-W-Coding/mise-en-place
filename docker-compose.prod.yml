@@ -1,0 +1,55 @@
+# docker-compose.prod.yml — mise-en-place on the Raspberry Pi
+# The API listens on 127.0.0.1:3000 only, and `tailscale serve` publishes it
+# over HTTPS on the tailnet. The database has no published port at all.
+#
+# Values come from .env next to this file, on the Pi only (never from git):
+# POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB and, optionally, CORS_ORIGINS.
+# See docs/deployment.md. scripts/deploy.sh and scripts/backup.sh use this file.
+
+# A project name of its own, so this stack never shares containers or volumes
+# with the development one (docker-compose.yml) on the same machine
+name: miseenplace-prod
+
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+    # No ports: the API reaches the database over the Compose network (S2)
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    image: miseenplace-api
+    # A tiny init process as PID 1, so `docker compose stop` reaches Node at once
+    init: true
+    restart: unless-stopped
+    ports:
+      # 127.0.0.1 only: tailscale serve is the way in from other devices
+      - '127.0.0.1:3000:3000'
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      PORT: 3000
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      # The image has no curl, so Node's fetch does the request
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+volumes:
+  pgdata:
