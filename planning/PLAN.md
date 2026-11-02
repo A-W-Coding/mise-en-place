@@ -268,14 +268,14 @@ General rules:
 - [x] Remove the `findFirst` pre-check, which has a race condition, and let the unique constraint decide. Map P2002 to 409 for both POST and PATCH, ideally once, in the error handler.
 
 ### 5.3 Recipe writes
-- [ ] POST creates the recipe and its lines in a single nested write.
-- [ ] PATCH handles `ingredients` like this:
+- [x] POST creates the recipe and its lines in a single nested write.
+- [x] PATCH handles `ingredients` like this:
   - Absent: the lines are left untouched.
   - Present: **the whole list is replaced**, using `deleteMany` plus `create` in the same nested update, which Prisma runs atomically.
   - An empty array: all lines are removed.
-- [ ] Set `updatedAt: new Date()` explicitly on the recipe in every PATCH. The timestamp must change even when only the lines change, and `@updatedAt` can't be relied on for relation-only changes.
-- [ ] An unknown ingredient id in the body returns 400, not 404. Which Prisma error you get depends on the write style: P2003 for a raw `ingredientId`, P2025 for `connect`. Map whichever you use, or check the ids with a single `findMany` beforehand.
-- [ ] Return lines sorted with `orderBy: { orderIndex: 'asc' }`.
+- [x] Set `updatedAt: new Date()` explicitly on the recipe in every PATCH. The timestamp must change even when only the lines change, and `@updatedAt` can't be relied on for relation-only changes.
+- [x] An unknown ingredient id in the body returns 400, not 404. Which Prisma error you get depends on the write style: P2003 for a raw `ingredientId`, P2025 for `connect`. Map whichever you use, or check the ids with a single `findMany` beforehand.
+- [x] Return lines sorted with `orderBy: { orderIndex: 'asc' }`.
 - [x] Optional, and ask me first: accept an ingredient `name` in a line and find-or-create it with `upsert` on the unique name. **Answered 2026-11-02: not now.** Revisit in Phase 3.
 
 ### 5.4 Search (A3)

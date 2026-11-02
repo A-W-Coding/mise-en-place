@@ -22,11 +22,12 @@ const router = Router();
 /**
  * Standard Prisma `include` clause used by every recipe query.
  * Nests recipeIngredients → ingredient so the client receives
- * fully-resolved ingredient data.
+ * fully-resolved ingredient data, with the lines in recipe order.
  */
 const RECIPE_INCLUDE = {
     recipeIngredients: {
         include: { ingredient: true },
+        orderBy: { orderIndex: 'asc' },
     },
 } as const;
 
@@ -154,8 +155,15 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
 /**
  * Partially update a recipe. Only supplied fields are changed.
  *
- * If an `ingredients` array is provided, the existing associations
- * are **replaced** entirely (delete-all then re-create).
+ * `ingredients`:
+ *  - absent: the lines are left untouched.
+ *  - an array: the lines are **replaced** entirely (delete-all then
+ *    re-create, in one nested write that Prisma runs atomically).
+ *  - an empty array: all lines are removed.
+ *
+ * `updatedAt` is set explicitly on every PATCH. Prisma's `@updatedAt`
+ * can't be relied on when only the lines change, and sync needs the
+ * timestamp to move whenever anything in the recipe does (F2).
  *
  * @returns 200 with the updated Recipe, or 400/404 on failure.
  */
@@ -171,6 +179,7 @@ router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => 
             where: { id: req.params.id },
             data: {
                 ...fields,
+                updatedAt: new Date(),
                 // Replace all ingredient lines when a new array is provided
                 ...(ingredients && {
                     recipeIngredients: {
