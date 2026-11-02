@@ -3,9 +3,9 @@
 # Mise en place: hardening plan (Phase 1 to Phase 2)
 
 > **Status**
-> - Current step: **Step 7: Update the docs** (everything drafted; waiting for the spec segments to be pasted in)
-> - Last updated: 2026-11-02 (Step 7: segments drafted, README and API reference written)
-> - Blockers: the six segments in `planning/spec-segments/` need pasting into the specs (you)
+> - Current step: **Step 8: Phase 2, the Pi with Tailscale** (not started)
+> - Last updated: 2026-11-02 (Step 7 done: the spec segments are in the specs)
+> - Blockers: none
 
 ## How to use this file
 - Work through the steps in order. Each step gives a goal, why it matters, tasks as checkboxes, and a "done when" test.
@@ -617,3 +617,15 @@ First, settle D7–D11. Then write the Phase 3 spec segments, taking in the desi
   - **Seen, not acted on:** `.env` has a `DATABASE_PORT` variable that nothing reads.
 
   Next: paste the segments into the specs. Step 7 is then done.
+- **2026-11-02:** Step 7 done. The six segments are in the specs.
+  - **How:** applied with a script, as asked, instead of pasted by hand. The script replaced exactly the range each segment's header named, and refused to run unless every start and end heading appeared once.
+  - **Where:**
+    - `technical-spec.md`: §2.1, §3.1, the Phase 1 table in §3.2, §5, §6.1 and §6.4
+    - `design-spec.md`: the architecture diagram and the six phases
+  - **Checked:** the diff touches nothing outside those ranges, and each join with the old text reads cleanly. The only changes in the end-to-end section (now §5.6) are blank lines: the old ones held a single space.
+  - `planning/spec-segments/` is deleted, so the specs are the only copy again.
+  - **Seen, not acted on:** two parts of the design spec that Step 7 didn't cover are slightly out of date.
+    - "Continuous Integration and Deployment" says CI runs on every push and lists Prettier. CI runs on pull requests into `main` and pushes to `main`/`develop*`, and there's no Prettier config. Its deployment bullets change with Step 8 anyway.
+    - The "System Architecture" intro still lists Electron, which D7 may drop.
+
+  Next: Step 8, when you're ready.
