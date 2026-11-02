@@ -3,9 +3,9 @@
 # Mise en place: hardening plan (Phase 1 to Phase 2)
 
 > **Status**
-> - Current step: **Step 6: Fill in the missing tests** (every task done locally; waiting on CI)
-> - Last updated: 2026-11-02 (Step 6: 220 tests pass locally twice)
-> - Blockers: CI needs a pull request, which needs the branch pushed
+> - Current step: **Step 7: Update the docs**
+> - Last updated: 2026-11-02 (Step 6 done, CI green: Phase 1 is complete)
+> - Blockers: none
 
 ## How to use this file
 - Work through the steps in order. Each step gives a goal, why it matters, tasks as checkboxes, and a "done when" test.
@@ -591,3 +591,9 @@ First, settle D7–D11. Then write the Phase 3 spec segments, taking in the desi
     - There's no threshold yet.
 
   Next: push `step-6/missing-tests` and open a pull request. Step 6, and with it Phase 1, is done when CI passes.
+- **2026-11-02:** Step 6 done, and with it **Phase 1 is complete**. Merged in pull request #3. CI passed on the pull request (run #7, 37 s) and on `main` after the merge (run #8, 46 s).
+  - Both CI steps ran: the tests took 4 s, and the coverage summary step ran, which it only does when Jest has written its coverage file. GitHub only shows step summaries to signed-in viewers, so the table itself is still to be checked on the run page.
+  - The runs are shorter mainly because `npm ci` hit npm's cache: 5 s, against 41 s in run #5.
+  - **Seen, not acted on:** both runs warn that `actions/checkout@v4` and `actions/setup-node@v4` target the deprecated Node 20 and are being run on Node 24. They also note that `ubuntu-latest` is moving to Ubuntu 26 (from 19 Oct 2026). Moving to newer action versions is a dependency update, so it waits for a step that covers one.
+
+  Next: Step 7.
