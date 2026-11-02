@@ -3,9 +3,9 @@
 # Mise en place: hardening plan (Phase 1 to Phase 2)
 
 > **Status**
-> - Current step: **Step 3: Make the tests safe and reliable** (every task done locally; waiting on CI)
-> - Last updated: 2026-11-02 (`npm test` passes twice locally)
-> - Blockers: "CI is green twice in a row" needs the branch pushed to GitHub
+> - Current step: **Step 4: One schema migration for Phase 1**
+> - Last updated: 2026-11-02 (Step 3 done: CI green twice)
+> - Blockers: none
 
 ## How to use this file
 - Work through the steps in order. Each step gives a goal, why it matters, tasks as checkboxes, and a "done when" test.
@@ -508,3 +508,7 @@ First, settle D7–D11. Then write the Phase 3 spec segments, taking in the desi
     - CI also runs `npx tsc --noEmit`, because ts-jest only transpiles (`isolatedModules`) and type errors never fail the tests.
     - `engines.node` is `^22.13.0`, ESLint 10's minimum.
   - Not needed: the pg_trgm task, because Step 2 found the migration.
+- **2026-11-02:** Step 3 done. CI passed twice in a row: run #3 on pull request #1, then run #4 on `main` after the merge. Runs #1 and #2 were the old SQLite workflow failing.
+  - The dev database is already fresh (Postgres 17, migrations only, no rows), so Step 4's reset may not be needed.
+
+  Next: Step 4.
