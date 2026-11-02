@@ -3,9 +3,9 @@
 # Mise en place: hardening plan (Phase 1 to Phase 2)
 
 > **Status**
-> - Current step: **Step 3: Make the tests safe and reliable**
-> - Last updated: 2026-10-27 (Step 2 done; three tasks added to Steps 3 and 4)
-> - Blockers: none. Step 3 needs Docker Desktop running
+> - Current step: **Step 3: Make the tests safe and reliable** (every task done locally; waiting on CI)
+> - Last updated: 2026-11-02 (`npm test` passes twice locally)
+> - Blockers: "CI is green twice in a row" needs the branch pushed to GitHub
 
 ## How to use this file
 - Work through the steps in order. Each step gives a goal, why it matters, tasks as checkboxes, and a "done when" test.
@@ -121,38 +121,38 @@ Check each item and record ✅ or ❌, with a note, in the Progress log:
 
 **Why:** Steps 4–6 change the schema and every handler, so you need a trustworthy safety net first. The current reset wipes every table, so one wrong `DATABASE_URL` erases your recipe collection (T1). Jest also runs test files in parallel, so one file's reset can delete rows in the middle of another file's test (T1).
 
-- [ ] **Separate databases.** Dev uses `<name>_dev` and tests use `<name>_test` (for example `miseenplace_dev` and `miseenplace_test`). Both live in the same Postgres container. Tests load their connection string from `.env.test`. Create the test database with a Postgres init script or a one-off `createdb`.
-- [ ] **Guard.** Add a small `assertSafeDatabase()` helper that parses `DATABASE_URL` with `new URL()` and checks the database name. The test reset allows only names ending in `_test`. The seed allows `_test` or `_dev`. Both refuse when `NODE_ENV=production`, and they throw a clear error before touching anything.
-- [ ] **Jest.**
+- [x] **Separate databases.** Dev uses `<name>_dev` and tests use `<name>_test` (for example `miseenplace_dev` and `miseenplace_test`). Both live in the same Postgres container. Tests load their connection string from `.env.test`. Create the test database with a Postgres init script or a one-off `createdb`.
+- [x] **Guard.** Add a small `assertSafeDatabase()` helper that parses `DATABASE_URL` with `new URL()` and checks the database name. The test reset allows only names ending in `_test`. The seed allows `_test` or `_dev`. Both refuse when `NODE_ENV=production`, and they throw a clear error before touching anything.
+- [x] **Jest.**
   - Run test files one at a time: add `--runInBand` to the test script, or set `maxWorkers: 1`.
   - Move `prisma migrate deploy` into a `globalSetup` file, so it runs once per test run instead of once per test file.
   - Load `.env.test` inside `globalSetup` as well, because that file runs in its own context.
   - If tests only use `app`, remove `server.close()` from teardown.
-- [ ] **Test discovery (A5).** Added 2026-10-27 from Step 2.
+- [x] **Test discovery (A5).** Added 2026-10-27 from Step 2.
   - Stop Jest picking up the compiled copies in `dist/`, for example with `roots: ['<rootDir>/tests']` in `jest.config.js`. Otherwise every suite runs twice.
   - Either load `tests/helpers/jest-setup.ts` through `setupFilesAfterEnv` (it sets a 15-second timeout), or delete it. Today nothing loads it.
   - Confirm that `npx jest --listTests` lists only the files in `tests/`.
-- [ ] **pg_trgm.** If Step 2 found no migration for it:
+- [x] **pg_trgm.** Not needed: Step 2 found the migration. If Step 2 found no migration for it:
   - Run `npx prisma migrate dev --create-only --name enable_pg_trgm`.
   - Put `CREATE EXTENSION IF NOT EXISTS pg_trgm;` in the generated file. `IF NOT EXISTS` keeps it safe where you already enabled it by hand.
   - Make sure it sorts before any migration that uses trigram functions.
-- [ ] **Lint (T2).** Added 2026-10-27 from Step 2. The CI target below runs lint, but there's no config for it yet.
+- [x] **Lint (T2).** Added 2026-10-27 from Step 2. The CI target below runs lint, but there's no config for it yet.
   - Add ESLint with a flat config (`eslint.config.js`) using `typescript-eslint`'s recommended rules, and an `npm run lint` script.
   - Fix what it reports, or disable a rule explicitly with a comment saying why, so lint passes before CI depends on it.
-- [ ] **CI.** Fix whatever Step 2 found. The target is:
+- [x] **CI.** Fix whatever Step 2 found. The target is:
   - `env: DATABASE_URL: postgresql://test:test@localhost:5432/recipe_test`, matching the Postgres service's user, password and database name
   - A Postgres service with `options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10`, so tests wait for the database
   - `actions/checkout@v4`, and `actions/setup-node@v4` with `node-version-file: .nvmrc` and `cache: npm`
   - Steps in this order: `npm ci`, then `npx prisma generate` (unless a postinstall script already does it), then lint, then the tests with `--coverage`
   - The Postgres image version chosen in D4
-- [ ] **Node version.** Add a `.nvmrc` file and an `"engines"` entry in package.json, both set to the Node LTS major you develop on.
-- [ ] **Dev Compose file.**
+- [x] **Node version.** Add a `.nvmrc` file and an `"engines"` entry in package.json, both set to the Node LTS major you develop on.
+- [x] **Dev Compose file.**
   - Bind Postgres to `127.0.0.1:5432:5432`, never to every interface. Docker's published ports bypass UFW (S2).
   - Use a named volume (`pgdata:/var/lib/postgresql/data`) instead of `./postgres-data` inside the repo (M4).
   - Use the D4 image version, add a `pg_isready` healthcheck, and remove the obsolete `version:` key.
   - **If you choose Postgres 18 or later:** the official image moved its data directory. Mount the volume at `/var/lib/postgresql` instead, or the data won't persist.
   - Dev data is assumed to be disposable, but ask me before deleting the old `./postgres-data` directory.
-- [ ] **Guard tests.** Add unit tests showing that the test reset's guard throws for `.../miseenplace` and `.../miseenplace_dev`, and passes for `.../miseenplace_test`.
+- [x] **Guard tests.** Add unit tests showing that the test reset's guard throws for `.../miseenplace` and `.../miseenplace_dev`, and passes for `.../miseenplace_test`.
 
 **Done when:**
 - `npm test` passes twice in a row locally.
@@ -495,3 +495,16 @@ First, settle D7–D11. Then write the Phase 3 spec segments, taking in the desi
 
   Next: Step 3.
 - **2026-10-27:** The three "proposed" items from Step 2 are now tasks: **Test discovery (A5)** and **Lint (T2)** in Step 3, and **Give the seed an entry point (A8)** in Step 4.
+- **2026-11-02:** Step 3: every task done locally. It isn't finished until CI is green twice, which needs the branch pushed.
+  - **Found first:** this session's environment had `.env` loaded, so `DATABASE_URL` already pointed at the dev database. dotenv doesn't override existing variables, so the old `npm test` would have ignored `.env.test` and reset the dev database. Now closed three ways: `dotenv -o` in `npm test`, an override in `globalSetup`, and the guard.
+  - **Databases:** Postgres 17.11 in Docker, published on `127.0.0.1` only, on a new volume `pgdata`. `miseenplace_dev` and `miseenplace_test` replace `mydatabase` and `mydatabase_test` in the env files. The old Postgres 15 data is untouched: the Docker volume `miseenplace_postgres-data` and the `postgres-data/` folder (ask before deleting).
+  - **Baseline before any test changes:** 86 tests in 6 suites passed in 57 s. That's 43 tests run twice, because of the `dist/` copies.
+  - **Checks deferred from Step 2:** dev migrations applied and up to date. The test database is migrated by `globalSetup`. `prisma migrate diff` confirms `migrate dev` would drop `ingredient_name_trgm_idx` and `recipe_name_trgm_idx` → Step 4.
+  - **After:** `npm test` passed twice in a row: 53 tests in 4 suites (the 43 plus 10 guard tests) in about 11 s. A bare `npx jest` in the same shell also used `miseenplace_test`. `npm run lint` and `npx tsc --noEmit` are clean, and coverage is 88.6% of statements.
+  - **Guard:** `cleanDatabase()` refuses a `_dev` URL before deleting anything, and a test proves it.
+  - **Choices:**
+    - `globalSetup` repeats the `_test` check inline, because Jest loads it outside its module mapping and it can't import the TypeScript guard.
+    - `jest-setup.ts` is deleted, and the `testTimeout` option does its job.
+    - CI also runs `npx tsc --noEmit`, because ts-jest only transpiles (`isolatedModules`) and type errors never fail the tests.
+    - `engines.node` is `^22.13.0`, ESLint 10's minimum.
+  - Not needed: the pg_trgm task, because Step 2 found the migration.
