@@ -9,6 +9,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import { prisma } from '../client.js';
+import { assertSafeDatabase, TEST_ONLY } from './safe-database.js';
 
 /** Shape every seed module must satisfy. */
 interface SeedModule {
@@ -19,9 +20,13 @@ interface SeedModule {
  * Delete all rows from every table in foreign-key-safe order.
  * RecipeIngredient → Recipe → Ingredient.
  *
+ * Refuses to run unless DATABASE_URL names a `_test` database.
+ *
+ * @throws If the database isn't a `_test` database, before deleting anything.
  * @throws Re-throws any Prisma error after logging.
  */
 export async function cleanDatabase(): Promise<void> {
+    assertSafeDatabase(TEST_ONLY);
     try {
         await prisma.recipeIngredient.deleteMany({});
         await prisma.recipe.deleteMany({});

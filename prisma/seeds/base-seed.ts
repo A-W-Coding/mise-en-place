@@ -8,6 +8,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
+import { assertSafeDatabase, TEST_OR_DEV } from '../utils/safe-database.js';
 
 /** Raw ingredient names to seed (stored lowercase per API convention). */
 const SEED_INGREDIENTS = [
@@ -38,6 +39,8 @@ const BEEF_CHILI_INSTRUCTIONS = [
 /**
  * Seed the database with base data.
  *
+ * Refuses to run unless DATABASE_URL names a `_test` or `_dev` database.
+ *
  * Execution order:
  *  1. Clear all existing rows (junction → parent).
  *  2. Bulk-create ingredients.
@@ -47,6 +50,8 @@ const BEEF_CHILI_INSTRUCTIONS = [
  * @param prisma - PrismaClient instance to operate on.
  */
 export async function seed(prisma: PrismaClient): Promise<void> {
+    assertSafeDatabase(TEST_OR_DEV);
+
     // 1. Clear existing data (safe order)
     await prisma.recipeIngredient.deleteMany({});
     await prisma.recipe.deleteMany({});
