@@ -3,8 +3,8 @@
 # Mise en place: hardening plan (Phase 1 to Phase 2)
 
 > **Status**
-> - Current step: **Step 5: Update the API to match**
-> - Last updated: 2026-11-02 (Step 4 done: Phase 1 migration applied, no drift, seed runs)
+> - Current step: **Step 6: Fill in the missing tests**
+> - Last updated: 2026-11-02 (Step 5 done: tests pass, every endpoint checked with curl)
 > - Blockers: none
 
 ## How to use this file
@@ -538,3 +538,31 @@ First, settle D7–D11. Then write the Phase 3 spec segments, taking in the desi
     - `ts-node` is now unused. Only the old seed command used it.
 
   Next: Step 5.
+- **2026-11-02:** Step 5 done, in seven commits (one per sub-section). Tests, type-check and lint passed after each.
+  - **Answers:** D6 is a plain array plus `X-Total-Count`. The optional name lookup in 5.3: not now.
+  - **Choices:**
+    - The recipe PATCH schema is written out, not derived with `.partial()`. In Zod 4 a default still applies inside an optional field, so `.partial()` would reset `servings` to 1 on every PATCH (checked).
+    - Query strings are strict, like bodies: a misspelt `?serach=` is a 400, not an unfiltered list.
+    - A search term over 100 characters, or a `limit` over 100, gets a 400 rather than being silently cut. `limit=0` is allowed and returns only the total. `offset` is capped at 2^53 − 1, the largest whole number JavaScript holds exactly; Prisma and Postgres both accept it.
+    - P2002 → 409 lives in the error handler, with the message "That name already exists."
+    - Express's own client errors keep their status: malformed JSON is a 400 and an oversized body a 413. Malformed JSON gets a plain message, because the parser's own one quotes the body back.
+    - CORS uses the `cors` package. With `CORS_ORIGINS` unset it runs with `origin: false` and sends no CORS headers. A disallowed origin still gets `Vary` and `Access-Control-Expose-Headers`, which do nothing without `Access-Control-Allow-Origin`.
+  - **Tests:** one existing test changed. Its `whole` unit isn't on the D2 list, so that line became a count with no unit. 53 tests passed twice in a row, with 84.6% statement coverage.
+  - **Manual curl** against the dev server (`miseenplace_dev`, with `CORS_ORIGINS=http://localhost:5173`). Everything behaved as specified:
+    - **Health:** 200 `{ "status": "ok" }`. With the database unreachable, 503 `{ "status": "error" }`, and a list returned a plain 500, with details only in the log. `GET /` is gone (404).
+    - **Lists:** ordered by name. `limit`, `offset` and `X-Total-Count` work. `limit=101`, `-1` and `1.5`, `offset=abc`, a repeated parameter and an unknown parameter each got a 400.
+    - **Search:** `?search=a&search=b` is a 400. A blank term lists everything, and 101 characters is a 400. `%` and `_` match literally.
+    - **Ingredients:** `"  Shallot  "` is stored as `shallot`. A duplicate POST, or a rename to a taken name, is a 409. An unknown field or malformed JSON is a 400. Deleting an in-use ingredient is a 409.
+    - **Recipes:**
+      - Lines come back in order, with units canonicalised (`Grams` → `g`, `" Tbsp. "` → `tbsp`). A count, a range and a "to taste" line all come back unchanged.
+      - A body with many mistakes got one message per field. An unknown ingredient id is a 400.
+      - A PATCH with only `ingredients` moved `updatedAt`, a PATCH without them left the lines alone, and `ingredients: []` removed them.
+    - **CORS:** the allowed origin gets `Access-Control-Allow-Origin` and can read `X-Total-Count`, and its preflight returns 204. Any other origin gets no `Allow-Origin`.
+    - The run deleted everything it created, so dev is back to the seed.
+  - **Seen, not acted on:**
+    - Unknown routes return Express's HTML "Cannot GET" page, not JSON.
+    - When a line has a type error, Zod skips that line's range check until the error is fixed, so a client may see the `quantityMax` message on a second attempt.
+    - `npm audit --omit=dev` reports 4 advisories (1 critical, 2 high, 1 moderate), all in Express 5's own dependencies: `body-parser`, `path-to-regexp`, `proxy-addr` and `qs`. `npm audit fix` would update the lockfile. Not done, because no step covers dependency updates yet.
+  - CI hasn't run on Steps 4 and 5 yet: the branch isn't pushed.
+
+  Next: Step 6.
