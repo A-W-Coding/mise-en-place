@@ -1,9 +1,9 @@
 # CI workflow — mise-en-place
 # Runs on push to main/develop* and on PRs to main.
-# Sets up SQLite (for Prisma migration compatibility in CI),
-# installs deps, deploys migrations, and verifies the DB is usable.
+# Starts a throwaway PostgreSQL service, then installs, generates the Prisma
+# client, lints, type-checks and runs the tests with coverage.
 
-name: Database Test
+name: CI
 
 on:
   push:
@@ -12,51 +12,50 @@ on:
     branches: [ main ]
 
 jobs:
-  test-database:
+  test:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: recipe_test
+        ports:
+          - 5432:5432
+        # Wait until Postgres accepts connections before the steps start
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Ends in _test, so the test guard allows it. There's no .env.test in CI.
+      DATABASE_URL: postgresql://test:test@localhost:5432/recipe_test
+
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
-        cache: 'npm'
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
 
-    - name: Install SQLite
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y sqlite3
-        sqlite3 --version
+      - name: Install dependencies
+        run: npm ci
 
-    - name: Install dependencies
-      run: npm ci
+      - name: Generate Prisma client
+        run: npx prisma generate
 
-    - name: Create test database and run migrations
-      run: |
-        echo "DATABASE_URL=file:./test.db" > .env.test
-        npx prisma generate
-        DATABASE_URL=file:./test.db npx prisma migrate deploy
+      - name: Lint
+        run: npm run lint
 
-    - name: Verify database seeding
-      run: |
-          echo 'const { PrismaClient } = require("@prisma/client");
-          const prisma = new PrismaClient();
-          
-          async function checkTables() {
-            try {
-              const recipeCount = await prisma.recipe.count();
-              console.log(`Database has ${recipeCount} recipes`);
-              process.exit(0);
-            } catch (error) {
-              console.error("Error:", error);
-              process.exit(1);
-            } finally {
-              await prisma.$disconnect();
-            }
-          }
-          
-          checkTables();' > verify.js
-          
-          DATABASE_URL=file:./test.db node verify.js
+      # The tests don't type-check (ts-jest only transpiles), so do it here
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Test with coverage
+        run: npm test -- --coverage

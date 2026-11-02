@@ -25,6 +25,7 @@ logs/
 dist/
 build/
 out/
+coverage/
 
 # IDE and editor specific files
 .idea/

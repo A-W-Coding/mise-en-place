@@ -48,5 +48,8 @@
     "@prisma/client": "6.6.0",
     "dotenv": "^16.4.7",
     "express": "^5.2.1"
+  },
+  "engines": {
+    "node": "^22.13.0"
   }
 }
