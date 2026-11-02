@@ -40,31 +40,32 @@ The application design considers the following user stories:
 The Recipe App adopts a modern architecture utilizing Node.js, React, and Electron, with data persistence handled by Prisma and PostgreSQL.
  
 ### High-Level Architecture Diagram
- 
+
 ```
-┌─────────────────────────────────────┐     ┌─────────────────────────────┐
-│         Raspberry Pi Server         │     │       Client Devices        │
-│                                     │     │                             │
-│  ┌─────────────┐    ┌────────────┐  │     │  ┌──────────────────────┐  │
-│  │             │    │            │  │     │  │                      │  │
-│  │  Node.js    │    │ PostgreSQL │  │     │  │  Electron App        │  │
-│  │  Express    │◄───┤  Database  │  │     │  │  (Desktop)           │  │
-│  │  API Server │    │            │  │     │  │                      │  │
-│  │             │    └────────────┘  │     │  └──────────────────────┘  │
-│  └──────┬──────┘         ▲          │     │                             │
-│         │                │          │     │  ┌──────────────────────┐  │
-│         │                │          │     │  │                      │  │
-│  ┌──────▼──────┐  ┌──────┴───────┐  │     │  │  Progressive Web App │  │
-│  │             │  │              │  │     │  │  (Mobile)            │  │
-│  │  Prisma ORM │  │ Image Store  │  │     │  │                      │  │
-│  │             │  │ (Filesystem) │  │     │  └──────────────────────┘  │
-│  └─────────────┘  └──────────────┘  │     │                             │
-│                                     │     │                             │
-└──────────────────┬──────────────────┘     └──────────────┬──────────────┘
-                   │                                       │
-                   │         VPN Tunnel (Tailscale)        │
-                   └───────────────────────────────────────┘
+   Client devices                          Raspberry Pi
+┌──────────────────────┐                ┌────────────────────────────────────────┐
+│                      │                │                                        │
+│  React PWA           │   HTTPS over   │  Tailscale serve                       │
+│  (phone, laptop;     │───────────────►│  https://<name>.<tailnet>.ts.net       │
+│   Phase 3)           │   the tailnet  │           │                            │
+│                      │                │           ▼  127.0.0.1:3000            │
+│  curl, scripts       │                │  Node.js Express API ───► Image store  │
+│                      │                │           │                (Phase 3)   │
+└──────────────────────┘                │           ▼                            │
+                                        │  Prisma Client                         │
+                                        │           │                            │
+                                        │           ▼  Compose network only      │
+                                        │  PostgreSQL 17 (Docker, named volume)  │
+                                        │           │                            │
+                                        │           ▼  daily pg_dump             │
+                                        │  Backups (SSD, encrypted copy off-Pi)  │
+                                        │                                        │
+                                        └────────────────────────────────────────┘
 ```
+
+- Requests go Express → Prisma → PostgreSQL. Nothing else talks to the database.
+- Only `tailscale serve` is reachable from other devices, and only over the tailnet. The API listens on `127.0.0.1:3000`, and the database is reachable only on the Compose network (Phase 2).
+- The image store arrives with images in Phase 3. Electron isn't shown: D7 recommends dropping or deferring it in favour of the installed PWA.
  
 ### Component Details
  
@@ -129,227 +130,197 @@ The UI prioritizes function over form with a clean, modern aesthetic:
 - **Print-Friendly**: CSS print stylesheet for physical recipe copies
  
 ## Integrated Development Approach
- 
-The project follows a six-phase development approach that systematically builds functionality while maintaining a focus on quality and testability.
- 
-### Phase 1: Foundation (Backend API)
- 
-This initial phase establishes the core infrastructure, database schema, and a fully functional API that can be tested via command line tools.
- 
-**Key Deliverables:**
- 
-- **Database Implementation:**
-  - PostgreSQL database running in Docker
-  - Core schema with Recipe, Ingredient, and RecipeIngredient models
-  - UUID-based primary key strategy
-  - Normalized ingredient names (lowercase, trimmed)
- 
-- **API Development:**
-  - RESTful endpoints for CRUD operations on recipes and ingredients
-  - Search functionality (exact matching initially, partial/fuzzy matching added later in phase)
-  - Request validation and error handling
-  - Cascade delete for Recipe → RecipeIngredient relationships
-  - Restrict delete for Ingredient → RecipeIngredient relationships
- 
-- **Testing Framework:**
-  - Unit tests for database operations
-  - Integration tests for API endpoints using Jest and Supertest
-  - Test data generation utilities with database seeding
- 
-**Technical Focus:**
-- Establishing proper development environment
-- Implementing test-driven development practices
-- Creating a robust foundation for subsequent phases
-- Ensuring the API is fully functional and testable from the command line
- 
-**Success Criteria:**
+
+The project follows a six-phase development approach that systematically builds functionality while maintaining a focus on quality and testability. Each phase ends with working, tested software; the hardening plan in `planning/PLAN.md` tracks the detail.
+
+### Phase 1: Foundation (Backend API) — complete
+
+This phase established the core infrastructure, database schema and a fully functional API that can be tested from the command line, then hardened it before any real data existed. It was completed on 2 November 2026.
+
+**Delivered:**
+
+- **Database:**
+  - PostgreSQL 17 in Docker, reachable from the development machine only, with data in a named volume
+  - Recipe, Ingredient and RecipeIngredient models with UUID primary keys
+  - Unique, normalised ingredient names (lowercase, trimmed)
+  - Ordered ingredient lines with preparation notes, optional quantities, ranges such as "2–3", and units from a canonical list
+  - Indexes for foreign keys, and trigram indexes for fuzzy search
+
+- **API:**
+  - RESTful endpoints for CRUD on recipes and ingredients, and `GET /api/health`, which checks the database
+  - Strict request validation with Zod, rejecting unknown fields
+  - Fuzzy, typo-tolerant search on names
+  - Pagination with a stable order, and the total in an `X-Total-Count` header
+  - Cascade delete for Recipe → RecipeIngredient, restrict delete for Ingredient → RecipeIngredient
+  - Consistent error responses, and a CORS allowlist
+
+- **Testing and CI:**
+  - Integration tests for every endpoint with Jest and Supertest, plus unit tests: 220 tests covering 93.6% of statements
+  - A separate test database, and a guard that stops the test reset from touching any other database
+  - GitHub Actions running lint, type-check and tests against a real PostgreSQL on every pull request
+
+- **Documentation:** a README, an API reference, and an ERD that matches the schema
+
+**Success Criteria (all met):**
 - All CRUD operations work correctly for recipes and ingredients
-- Tests pass consistently
-- API can be exercised via curl, Supertest, or similar tools
- 
-### Phase 2: Pi Deployment (Local Network)
- 
-This phase focuses on deploying the application to the Raspberry Pi and making it accessible across the local network.
- 
+- Tests pass consistently, locally and in CI
+- The API can be exercised with curl, Supertest or similar tools
+
+### Phase 2: Pi Deployment with Tailscale HTTPS — next
+
+This phase deploys the API to the Raspberry Pi and makes it reachable from the user's devices over Tailscale, with HTTPS from day one. Setting up HTTPS now means the network setup doesn't have to be redone for the Phase 3 PWA, which needs a secure context for its service worker, installation and wake lock (F1).
+
 **Key Deliverables:**
- 
-- **Infrastructure Setup:**
-  - Docker containerization of backend services
-  - PostgreSQL running on Raspberry Pi
-  - Deployment scripts for consistent deployments
-  - Backup strategy implementation
- 
-- **Local Network Access:**
-  - API accessible from other devices on the same LAN
-  - Basic health monitoring
-  - Service auto-restart on failure
- 
+
+- **A durable Pi (V4):**
+  - 64-bit Raspberry Pi OS, booting from an SSD rather than an SD card
+  - Docker Engine with the Compose plugin, and unattended security updates
+
+- **Tailscale:**
+  - The Pi on the tailnet under a bland name, because the name appears in public certificate logs as `<name>.<tailnet>.ts.net`
+  - Key expiry disabled for the Pi, MagicDNS and HTTPS certificates turned on
+  - `tailscale serve` providing `https://<name>.<tailnet>.ts.net`, forwarding to the API on `127.0.0.1:3000`. The same address is used everywhere, including at home, so the PWA has one origin and one offline cache
+
+- **Containers:**
+  - A production Compose file: the API published on 127.0.0.1 only, the database not published at all, healthchecks on both, and secrets from a `.env` file on the Pi
+  - A multi-stage Dockerfile running as the non-root `node` user, built on the Pi
+
+- **Operations:**
+  - A deploy script that backs up first and aborts if the backup is empty, migrates with the new image, then waits for the health check to pass (T3)
+  - Daily backups kept for 7 days, an encrypted copy off the Pi, and a tested restore
+
 **Technical Focus:**
 - Containerization and deployment standards
-- Resource optimization for Raspberry Pi constraints
-- Reliable local network operation
- 
+- Resource limits of the Raspberry Pi
+- Reliability: everything comes back after a reboot
+
 **Success Criteria:**
-- Application runs stably on Raspberry Pi
-- Can create and retrieve recipes from another device on the LAN
-- Automated backups are functioning
- 
-### Phase 3: Desktop UI
- 
-This phase introduces the user interface, with mobile responsiveness built in from the start since the primary use case is viewing recipes on phone while cooking.
- 
+- A phone on the tailnet gets a 200 from `https://<name>.<tailnet>.ts.net/api/health`
+- From the home network, the Pi's port 3000 and port 5432 both refuse connections
+- After a reboot, everything comes back without intervention
+- A restore from backup has been tested
+
+### Phase 3: User Interface
+
+This phase introduces the user interface, mobile-friendly from the start, since the main use is reading a recipe on a phone while cooking. It is the largest phase, so it starts with a gate: decisions D7–D11 are settled and the Phase 3 spec segments are written before any UI code.
+
+**Decisions at the gate (open; recommendations from the design review):**
+- **D7, Electron:** recommended to drop or defer it. An installed PWA already gives a desktop window with offline support, from one codebase (V2).
+- **D8, sync design:** recommended to start with a full snapshot plus an ETag, and add delta sync with tombstones only if needed. Timestamp-based delta sync misses child edits and deletes (F2).
+- **D9, offline editing:** recommended read-only offline at first, to avoid edit conflicts between devices (F3).
+- **D10, splitting the phase:** recommended to split it in three (V3):
+  - **3a:** the UI and cooking mode, on the Phase 1 schema
+  - **3b:** structured instructions and sections, images, tags and equipment
+  - **3c:** offline support
+- **D11, image uploads:** allowed types, size and pixel limits, and re-encoding (S4).
+
 **Key Deliverables:**
- 
-- **Expanded Database Schema:**
-  - Structured instructions and recipe sections
-  - Image metadata storage
-  - Equipment and tag management
- 
-- **Enhanced API Development:**
-  - Image upload and processing endpoints
-  - Advanced search and filtering options
-  - Tag and category management
- 
-- **Frontend Implementation:**
-  - React application with core components
-  - Recipe viewing and editing interfaces
-  - Image management
-  - Responsive design (mobile-friendly from day one)
-  - Electron packaging for desktop use
-  - Offline data caching
-  - Print stylesheet for recipe printing
- 
-- **Cooking Mode (Foundation):**
-  - Large, readable text
-  - Step-by-step instruction view
-  - Screen stays awake during cooking
-  - Basic timer functionality
- 
-- **Sync Strategy:**
-  - Timestamp-based synchronization using `updatedAt` fields
-  - Client stores last sync timestamp
-  - Server returns only changed records since last sync
-  - Efficient delta updates rather than full data transfers
- 
+
+- **Frontend:**
+  - React application with recipe viewing and editing
+  - Responsive design, installable as a PWA over the Phase 2 HTTPS address
+  - Quantities shown as fractions, using the same units module as the API (F5)
+  - Print stylesheet
+
+- **Cooking Mode:**
+  - Large, readable text and a step-by-step view
+  - Screen kept awake (Screen Wake Lock)
+  - Basic timer
+
+- **Expanded Schema and API:**
+  - Structured instructions and recipe sections, including a section link on ingredient lines
+  - Image upload and storage, with a `primaryImageId` on Recipe rather than an `isPrimary` flag on images (F7)
+  - Tags and equipment, and the endpoints the original plan lacked: instruction CRUD, attaching tags and equipment to recipes, and deletes for sections, links and equipment (F6)
+
+- **Offline:** read-only offline caching of recipes, using the sync design chosen in D8
+
 **Technical Focus:**
-- Creating an intuitive user interface
-- Implementing responsive design practices
-- Setting up efficient data communication
-- Ensuring offline functionality with smart sync
- 
-### Phase 4: Pi Deployment (Global Access)
- 
-This phase extends the Pi deployment to allow secure access from outside the local network.
- 
+- An intuitive interface that works one-handed on a phone
+- Efficient data loading, and offline reading that stays correct
+
+### Phase 4: Hardening and Monitoring
+
+Remote access moved into Phase 2, so this phase makes the running system easier to keep healthy.
+
 **Key Deliverables:**
- 
-- **Remote Access Setup:**
-  - VPN configuration (Tailscale or similar)
-  - Secure connection from external networks
-  - Mobile device connectivity testing
- 
-- **Security & Reliability:**
-  - System health monitoring
-  - Error handling and recovery
-  - Data integrity validation
- 
+- Uptime and disk-space alerts
+- Log rotation
+- Automated dependency updates (Dependabot or Renovate), including GitHub Actions versions
+- The Prisma upgrade, as its own task after reading that version's upgrade guide (V5)
+- Optionally, an API check that requests come from the expected Tailscale user (S1)
+
 **Technical Focus:**
-- Secure remote access implementation
-- Performance optimization over VPN connections
-- Resilience testing
- 
+- Noticing problems before they lose data
+- Keeping dependencies current without breaking the build
+
 **Success Criteria:**
-- Application accessible securely from outside home network
-- Performance remains acceptable over VPN
-- Basic mobile browser access works
- 
+- An alert fires when the API is down or the disk is nearly full
+- Dependency updates arrive as pull requests that CI tests
+
 ### Phase 5: Mobile UI Polish
- 
-This phase refines the mobile experience. Since the React app is already responsive and installable as a PWA from Phase 3, this phase focuses on mobile-specific optimizations.
- 
+
+This phase refines the mobile experience. Since the React app is already responsive and installable as a PWA from Phase 3, it focuses on mobile-specific improvements.
+
 **Key Deliverables:**
- 
+
 - **PWA Enhancements:**
   - Optimized PWA manifest and icons
   - Improved offline experience
   - Better touch interactions
   - Camera integration for recipe photos
- 
+
 - **Cooking Mode Enhancements:**
   - Voice control exploration (stretch goal)
   - Multiple concurrent timers
   - Improved step navigation
   - Wake lock improvements
- 
+
 - **Mobile-Specific Features:**
-  - Quick recipe search with recent/favorites
-  - Shopping list generation from recipes
-  - Share recipes functionality
- 
+  - Quick recipe search with recent and favourite recipes
+  - Share recipes
+  - Shopping list generation from recipes. This needs the shopping-list tables, which the schema places in Phase 6 (F7): bring those tables forward, or move this item to Phase 6.
+
 **Technical Focus:**
 - Mobile UX refinement
 - Touch gesture optimization
 - Battery and data efficiency
 - Performance profiling on mobile devices
- 
+
 ### Phase 6: Enhanced Features
- 
-The final phase adds advanced features that transform the application from a basic recipe manager to a comprehensive cooking companion.
- 
+
+The final phase adds features that turn the application from a recipe manager into a cooking companion.
+
 **Key Deliverables:**
- 
+
 - **Advanced Database Schema:**
-  - Meal planning and calendar models
+  - Meal planning, with dates stored as dates (`@db.Date`) to avoid timezone off-by-one errors, and a delete rule that doesn't make planned recipes undeletable (F7)
   - Shopping list management
-  - Nutritional information tracking
-  - Recipe variations
-  - Recipe linking (components, variations, pairings)
-  - Ingredient categories/tags (produce, dairy, pantry, etc.)
- 
-- **External API Integration (Spoonacular):**
-  - Recipe information lookup
-  - Nutritional information calculation
-  - Ingredient substitution recommendations
-  - Wine pairing suggestions
-  - Long-term caching strategy (nutritional data is stable)
-  - Required attribution backlinks
- 
+  - Nutritional information
+  - Recipe variations and links (components, variations, pairings)
+  - Ingredient categories (produce, dairy, pantry, and so on)
+
+- **Nutrition Data (D12, open):**
+  - Recommended source: USDA FoodData Central. It's free with a data.gov key, the data is public domain, and it allows 1,000 requests an hour. The per-ingredient data it provides is also what the local nutrition calculation needs.
+  - Spoonacular's terms allow caching its data for at most one hour, and require deleting it if you stop using the API, so it can't be the stored source (V1).
+  - Unit conversion from volume to weight, using a density per ingredient, so nutrition and shopping lists can add quantities up (F5)
+
+- **Spoonacular, for live extras only:**
+  - Ingredient substitution recommendations and wine pairing suggestions, fetched when needed and not stored
+  - Within its limits (150 points a day, 1 request a second), with the required attribution backlinks
+
 - **Feature Development:**
-  - Recipe scaling interface (intelligent scaling, not just multiplication)
+  - Recipe scaling that handles eggs, spices and other ingredients that don't scale linearly, with confirmation for unusual factors
   - Cooking timer implementation
   - Meal planning calendar
-  - Shopping list generator (organized by ingredient category)
-  - URL recipe import (stretch goal - scrape recipes from websites)
- 
-- **Recipe Scaling Considerations:**
-  - Simple multiplication for most ingredients
-  - Intelligent handling for eggs, spices, and items that don't scale linearly
-  - User confirmation for unusual scaling factors
- 
-**Spoonacular API Integration Strategy:**
- 
-For nutritional information and recipe analysis, the application will integrate with the Spoonacular API:
- 
-1. **API Usage Constraints**
-   - Hard limit of 150 points per day
-   - Rate limit of 1 request per second
-   - Backlink attribution requirement
- 
-2. **Long-Term Data Persistence**
-   - Store complete API responses with long expiration periods (90-180 days)
-   - Refresh only when recipe ingredients change or user explicitly requests
-   - Nutritional data is fundamentally stable and rarely needs updating
- 
-3. **Resilience Architecture**
-   - Local calculation fallback for basic nutritional values
-   - Clear visual indicators of data source (API vs. calculated)
-   - Graceful degradation when API limits are reached
- 
+  - Shopping list generator, grouped by ingredient category
+  - URL recipe import (stretch goal): read the schema.org Recipe data most recipe sites embed, and block private IP ranges so the Pi can't be used to probe the home network (M5)
+
+- **Still to resolve:** recipe links appear in both Phase 3 (technical spec) and Phase 6 (this document), and timers in Phases 3, 5 and 6 (M1). Settle each one's phase at the Phase 3 gate.
+
 **Technical Focus:**
-- Implementing complex data processing
-- Integrating with external systems within API limits
-- Building resilient systems with graceful fallbacks
-- Enhancing user experience with advanced features
+- Complex data processing
+- Integrating external data within each provider's terms and limits
+- Graceful fallbacks when an external service is unavailable
  
 ## Continuous Integration and Deployment
  
