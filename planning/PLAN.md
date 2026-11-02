@@ -3,8 +3,8 @@
 # Mise en place: hardening plan (Phase 1 to Phase 2)
 
 > **Status**
-> - Current step: **Step 4: One schema migration for Phase 1**
-> - Last updated: 2026-11-02 (Step 3 done: CI green twice)
+> - Current step: **Step 5: Update the API to match**
+> - Last updated: 2026-11-02 (Step 4 done: Phase 1 migration applied, no drift, seed runs)
 > - Blockers: none
 
 ## How to use this file
@@ -223,16 +223,16 @@ Notes:
 - **Check the search query with `EXPLAIN`.** A GIN trigram index speeds up `ILIKE` and the `%` operator. It doesn't help `ORDER BY similarity(...)` or a `similarity(...) > x` filter, and an index on `name` doesn't help a query on `lower(name)`. At personal scale the index is nice-to-have, so don't contort the query for it.
 - `sectionId` on RecipeIngredient waits for Phase 3.
 
-- [ ] Reset the dev database (ask first)
-- [ ] Update `schema.prisma` to the target models
-- [ ] Create the migration: `npx prisma migrate dev --name phase1_ingredient_model`
-- [ ] Run `migrate dev` again and confirm there's no drift
-- [ ] **Give the seed an entry point (A8).** Added 2026-10-27 from Step 2. Today `npm run seed` and `npx prisma db seed` exit without seeding, so "the seed runs" below can't pass.
+- [x] Reset the dev database (ask first). Not needed: the dev and test databases had no rows.
+- [x] Update `schema.prisma` to the target models
+- [x] Create the migration: `npx prisma migrate dev --name phase1_ingredient_model`
+- [x] Run `migrate dev` again and confirm there's no drift
+- [x] **Give the seed an entry point (A8).** Added 2026-10-27 from Step 2. Today `npm run seed` and `npx prisma db seed` exit without seeding, so "the seed runs" below can't pass.
   - Put the entry point in its own file, such as `prisma/seeds/run.ts`. It creates a Prisma client, calls `assertSafeDatabase()` from Step 3 (which allows `_test` and `_dev`), runs `seed()`, then disconnects.
   - Keep it out of `base-seed.ts`. The test helpers import that file, and code that runs on import would seed during every test run.
   - Point both `npm run seed` and the `prisma.seed` setting in package.json at the new file, using `tsx` for both. The current `node --loader ts-node/esm` prints deprecation warnings on Node 22.
-- [ ] Update the seed to use the new fields: ordered lines, a line with a null quantity, a line with a note, and a range
-- [ ] Check that the tests still compile. Many will fail until Step 5, and that's expected
+- [x] Update the seed to use the new fields: ordered lines, a line with a null quantity, a line with a note, and a range
+- [x] Check that the tests still compile. Many will fail until Step 5, and that's expected
 
 **Done when:** the migration is applied to both the dev and test databases, Prisma reports no drift, and the seed runs.
 
@@ -512,3 +512,29 @@ First, settle D7–D11. Then write the Phase 3 spec segments, taking in the desi
   - The dev database is already fresh (Postgres 17, migrations only, no rows), so Step 4's reset may not be needed.
 
   Next: Step 4.
+- **2026-11-02:** Step 4 done.
+  - **Reset:** not needed. Both databases had 0 rows and the same four migrations.
+  - **Migration:** `20261102111623_phase1_ingredient_model`.
+    - `migrate dev --name` stopped before writing anything. It wanted a yes to its unique-constraint warning, and the shell it ran in can't answer prompts.
+    - So the SQL came from `prisma migrate diff --from-schema-datasource` (the dev database) `--to-schema-datamodel`, and was read before it was applied. Then `migrate dev` applied it.
+    - A second `migrate dev` reported "Already in sync". That run also replays every migration into a shadow database, so the history and `schema.prisma` match.
+    - `migrate deploy` applied it to `miseenplace_test`. Both databases report 5 migrations, up to date.
+  - **Trigram indexes:** declared in `schema.prisma` with `map:`, so the migration has no `DROP INDEX` and they keep their names.
+  - **Seed:**
+    - `prisma/seeds/run.ts` is the entry point for `npm run seed` and `prisma db seed`, both through `tsx`. Both seeded `miseenplace_dev`. A URL ending in neither `_dev` nor `_test` is refused with exit code 1.
+    - Beef Chili now has 10 ordered lines instead of 8. Newly linked: smoked paprika as a 1–2 tsp range, and cayenne pepper "to taste" with no quantity. Cumin and kidney beans stay unlinked.
+    - The free-text units became a canonical unit plus a note: `clove` + "chopped", `can` + "drained", and a count with no unit + "diced".
+    - An unknown ingredient name in the seed now throws, instead of silently dropping the line.
+  - **Compile and tests:**
+    - The tests and the seed compile. `npx tsc --noEmit` has one error, in `src/routes/recipes.ts`, which doesn't set `orderIndex` yet. Lint is clean.
+    - `npm test`: 49 passed, 4 failed. The 4 are every recipe write with ingredients, all "Argument `orderIndex` is missing" → 500.
+    - Step 5.3 fixes both. CI would fail on this commit alone.
+  - **Search index (`EXPLAIN`, for Step 5.4):**
+    - With sequential scans turned off, the current query still scans the whole table. `word_similarity(...) > 0.3` can't use an index, and because it's ORed with the `ILIKE`, neither half does.
+    - `ILIKE` alone uses `recipe_name_trgm_idx`. So does the operator form `'beef' <% name OR name ILIKE ...`, as a BitmapOr over the index.
+    - At personal scale this is optional.
+  - **Seen, not acted on:**
+    - `prisma generate` warns that a generator with no `output` path is deprecated in Prisma 7. That belongs to the later upgrade (V5), not now (D3).
+    - `ts-node` is now unused. Only the old seed command used it.
+
+  Next: Step 5.

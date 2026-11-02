@@ -3,8 +3,10 @@
  * Base seed data for the mise-en-place recipe database.
  *
  * Seeds one complete recipe ("Beef Chili") with 12 ingredients and
- * 8 recipe-ingredient links. Used by tests to establish a known
- * starting state, and as sample data during local development.
+ * 10 ordered ingredient lines, covering a count with no unit, a quantity
+ * range, a "to taste" line with no quantity, and preparation notes.
+ * Used by tests to establish a known starting state, and as sample data
+ * during local development. Run it from the command line with `run.ts`.
  */
 
 import { PrismaClient } from '@prisma/client';
@@ -35,6 +37,32 @@ const BEEF_CHILI_INSTRUCTIONS = [
     '13. Turn up the heat to boil off remaining liquid.',
     '14. Stop when you have the desired consistency.',
 ].join('\n');
+
+/** One ingredient line as written in the seed. `ingredient` is a name from SEED_INGREDIENTS. */
+interface SeedLine {
+    ingredient: string;
+    quantity: number | null;
+    quantityMax?: number;
+    unit: string | null;
+    note?: string;
+}
+
+/**
+ * Beef Chili's ingredient lines, in the order the method uses them.
+ * Units are canonical symbols from the D2 list; a null unit means a count.
+ */
+const BEEF_CHILI_LINES: SeedLine[] = [
+    { ingredient: 'onion',          quantity: 1,    unit: null,    note: 'diced' },
+    { ingredient: 'red pepper',     quantity: 0.5,  unit: null,    note: 'diced' },
+    { ingredient: 'garlic',         quantity: 1,    unit: 'clove', note: 'chopped' },
+    { ingredient: 'lardons',        quantity: 100,  unit: 'g' },
+    { ingredient: 'smoked paprika', quantity: 1,    quantityMax: 2, unit: 'tsp' },
+    { ingredient: 'cayenne pepper', quantity: null, unit: null,    note: 'to taste' },
+    { ingredient: 'beef mince',     quantity: 500,  unit: 'g' },
+    { ingredient: 'tomato puree',   quantity: 2,    unit: 'tbsp' },
+    { ingredient: 'beef stock',     quantity: 1,    unit: null,    note: 'stock cube, made up with 400 ml boiling water' },
+    { ingredient: 'sweetcorn',      quantity: 1,    unit: 'can',   note: 'drained' },
+];
 
 /**
  * Seed the database with base data.
@@ -76,23 +104,24 @@ export async function seed(prisma: PrismaClient): Promise<void> {
         },
     });
 
-    // 4. Link ingredients to the recipe
-    const recipeIngredientsLinks = [
-        { recipeId: beefChili.id, ingredientId: idOf.get('beef mince'),   quantity: 500, unit: 'g' },
-        { recipeId: beefChili.id, ingredientId: idOf.get('lardons'),      quantity: 100, unit: 'g' },
-        { recipeId: beefChili.id, ingredientId: idOf.get('garlic'),       quantity: 1,   unit: 'clove - chopped' },
-        { recipeId: beefChili.id, ingredientId: idOf.get('sweetcorn'),    quantity: 1,   unit: 'tin' },
-        { recipeId: beefChili.id, ingredientId: idOf.get('tomato puree'), quantity: 2,   unit: 'tbsp' },
-        { recipeId: beefChili.id, ingredientId: idOf.get('onion'),        quantity: 1,   unit: 'Diced' },
-        { recipeId: beefChili.id, ingredientId: idOf.get('red pepper'),   quantity: 0.5, unit: 'Diced' },
-        { recipeId: beefChili.id, ingredientId: idOf.get('beef stock'),   quantity: 1,   unit: 'stock cube in 400ml of water' },
-    ];
+    // 4. Link ingredients to the recipe, numbering the lines in order.
+    // An unknown name throws rather than being skipped, so a typo here
+    // can't silently drop a line from the test data.
+    const lines = BEEF_CHILI_LINES.map((line, orderIndex) => {
+        const ingredientId = idOf.get(line.ingredient);
+        if (!ingredientId) {
+            throw new Error(`Seed line names an unknown ingredient: "${line.ingredient}"`);
+        }
+        return {
+            recipeId: beefChili.id,
+            ingredientId,
+            orderIndex,
+            quantity: line.quantity,
+            quantityMax: line.quantityMax ?? null,
+            unit: line.unit,
+            note: line.note ?? null,
+        };
+    });
 
-    // Type-predicate filter ensures only rows with resolved IDs reach Prisma
-    const validLinks = recipeIngredientsLinks.filter(
-        (link): link is { recipeId: string; ingredientId: string; quantity: number; unit: string } =>
-            link.ingredientId !== undefined
-    );
-
-    await prisma.recipeIngredient.createMany({ data: validLinks });
+    await prisma.recipeIngredient.createMany({ data: lines });
 }

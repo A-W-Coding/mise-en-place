@@ -4,9 +4,12 @@
 //
 // Core entities: Recipe, Ingredient, RecipeIngredient (join table).
 // - UUID primary keys for distributed / offline-first safety.
-// - Ingredient names are normalized (lowercase, trimmed) at the API layer.
+// - Ingredient names are normalized (lowercase, trimmed) at the API layer,
+//   and unique in the database.
 // - Cascade: deleting a Recipe removes its RecipeIngredient rows.
 // - Restrict: deleting an Ingredient fails if it is used in any recipe.
+// - The trigram (pg_trgm) indexes are declared here so Prisma doesn't see
+//   them as drift. `map:` keeps the names the original migration gave them.
 // ============================================================================
 
 generator client {
@@ -24,31 +27,44 @@ model Recipe {
   name         String
   description  String?
   servings     Int      @default(1)
-  prepTime     Int?
-  cookTime     Int?
+  prepTime     Int? // minutes
+  cookTime     Int? // minutes
   instructions String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   recipeIngredients RecipeIngredient[]
+
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "recipe_name_trgm_idx")
 }
 
-/// Join table linking a Recipe to an Ingredient with quantity and unit.
+/// One ingredient line in a recipe: which ingredient, how much, and how it's prepared.
+/// The same ingredient may appear on more than one line (butter for the base and the topping).
 model RecipeIngredient {
-  id           String @id @default(uuid())
+  id           String  @id @default(uuid())
   recipeId     String
   ingredientId String
-  quantity     Float  @default(0)
-  unit         String
+  orderIndex   Int // set by the server from the line's position in the array
+  quantity     Float? // null means "to taste" or unspecified
+  quantityMax  Float? // upper bound of a range, as in "2–3"
+  unit         String? // canonical symbol from the units module; null means a count
+  note         String? // preparation, e.g. "finely diced"
 
   recipe     Recipe     @relation(fields: [recipeId], references: [id], onDelete: Cascade)
   ingredient Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+
+  @@index([recipeId])
+  @@index([ingredientId])
 }
 
 /// A unique ingredient. Names are stored normalised (lowercase, trimmed).
 model Ingredient {
-  id   String @id @default(uuid())
-  name String
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   recipeIngredients RecipeIngredient[]
+
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "ingredient_name_trgm_idx")
 }

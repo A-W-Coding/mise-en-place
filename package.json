@@ -5,14 +5,14 @@
   "main": "index.js",
   "description": "Personal recipe management API — Phase 1 (Foundation)",
   "prisma": {
-    "seed": "node --loader ts-node/esm prisma/seeds/base-seed.ts"
+    "seed": "tsx prisma/seeds/run.ts"
   },
   "scripts": {
     "dev": "tsx src/server.ts",
     "build": "tsc",
     "start": "node dist/src/server.js",
     "test": "dotenv -o -e .env.test -- cross-env NODE_OPTIONS=--experimental-vm-modules jest --runInBand",
-    "seed": "tsx prisma/seeds/base-seed.ts",
+    "seed": "tsx prisma/seeds/run.ts",
     "lint": "eslint ."
   },
   "repository": {
