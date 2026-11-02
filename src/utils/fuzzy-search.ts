@@ -13,11 +13,18 @@
 
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../prisma/client.js';
+import type { Page } from '../schemas/list-query.js';
 
 /** A single fuzzy-match result with its computed similarity score. */
 export interface FuzzyMatch {
     id: string;
     similarity: number;
+}
+
+/** One page of fuzzy-match results, plus how many matched in total. */
+export interface FuzzyPage {
+    matches: FuzzyMatch[];
+    total: number;
 }
 
 /** Tables that support fuzzy name search. */
@@ -54,27 +61,40 @@ export function escapeLikePattern(term: string): string {
  * both misspellings and exact substrings are captured. ILIKE-only hits
  * receive a baseline similarity of 0.5 so they sort reasonably.
  *
+ * Results are ordered by similarity, then name, then id, so equal scores
+ * always come back in the same order and pages never overlap. The page is
+ * cut in SQL; a second query counts every match for `X-Total-Count`.
+ *
  * @param table      - Prisma model name (`'Recipe'` or `'Ingredient'`).
  * @param searchTerm - Search string from the client (will be lowercased).
+ * @param page       - `limit` and `offset` of the page to return.
  * @param threshold  - Minimum trigram similarity to qualify (default 0.3).
- * @returns Matched rows ordered by descending similarity.
+ * @returns One page of matches, best first, and the total number of matches.
  */
 export async function fuzzySearchByName(
     table: SearchableTable,
     searchTerm: string,
+    page: Page,
     threshold: number = DEFAULT_THRESHOLD,
-): Promise<FuzzyMatch[]> {
+): Promise<FuzzyPage> {
     const term = searchTerm.toLowerCase();
     const pattern = `%${escapeLikePattern(term)}%`;
+    const matchesTerm = Prisma.sql`word_similarity(${term}, name) > ${threshold} OR name ILIKE ${pattern}`;
 
-    return prisma.$queryRaw<FuzzyMatch[]>`
-        SELECT id,
-               GREATEST(
-                   word_similarity(${term}, name),
-                   CASE WHEN name ILIKE ${pattern} THEN 0.5 ELSE 0 END
-               ) AS similarity
-        FROM ${TABLES[table]}
-        WHERE word_similarity(${term}, name) > ${threshold}
-           OR name ILIKE ${pattern}
-        ORDER BY similarity DESC`;
+    const [matches, [{ total }]] = await Promise.all([
+        prisma.$queryRaw<FuzzyMatch[]>`
+            SELECT id,
+                   GREATEST(
+                       word_similarity(${term}, name),
+                       CASE WHEN name ILIKE ${pattern} THEN 0.5 ELSE 0 END
+                   ) AS similarity
+            FROM ${TABLES[table]}
+            WHERE ${matchesTerm}
+            ORDER BY similarity DESC, name, id
+            LIMIT ${page.limit} OFFSET ${page.offset}`,
+        prisma.$queryRaw<[{ total: number }]>`
+            SELECT count(*)::int AS total FROM ${TABLES[table]} WHERE ${matchesTerm}`,
+    ]);
+
+    return { matches, total };
 }

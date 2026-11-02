@@ -52,10 +52,15 @@ function toRecipeIngredientCreateData(lines: IngredientLine[]) {
 
 // ── GET /api/recipes ────────────────────────────────────────────────────────
 /**
- * List all recipes, optionally filtered by a fuzzy search term.
+ * List recipes one page at a time, optionally filtered by a fuzzy search term.
  *
  * Query params (see `listQuerySchema`):
  *  - `search` (string, optional): fuzzy-match against recipe names.
+ *  - `limit` (0–100, default 50) and `offset` (default 0): which page.
+ *
+ * Plain lists are ordered by name, then id. Search results are ordered by
+ * rank, then name, then id. The `X-Total-Count` header gives the number of
+ * recipes (or matches) across all pages (D6).
  *
  * @returns 200 with an array of Recipe objects (may be empty), or 400 for a bad query.
  */
@@ -63,15 +68,10 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
         const query = parseOr400(listQuerySchema, req.query, res);
         if (query === null) return;
-        const { search } = query;
+        const { search, limit, offset } = query;
 
         if (search) {
-            const matches = await fuzzySearchByName('Recipe', search);
-
-            if (matches.length === 0) {
-                res.status(200).json([]);
-                return;
-            }
+            const { matches, total } = await fuzzySearchByName('Recipe', search, { limit, offset });
 
             const ids = matches.map((m) => m.id);
             const recipes = await prisma.recipe.findMany({
@@ -81,12 +81,20 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 
             // Preserve similarity ranking from the fuzzy search
             const sorted = ids.map((id) => recipes.find((r) => r.id === id)).filter(Boolean);
-            res.status(200).json(sorted);
+            res.status(200).set('X-Total-Count', String(total)).json(sorted);
             return;
         }
 
-        const recipes = await prisma.recipe.findMany({ include: RECIPE_INCLUDE });
-        res.status(200).json(recipes);
+        const [recipes, total] = await Promise.all([
+            prisma.recipe.findMany({
+                include: RECIPE_INCLUDE,
+                orderBy: [{ name: 'asc' }, { id: 'asc' }],
+                take: limit,
+                skip: offset,
+            }),
+            prisma.recipe.count(),
+        ]);
+        res.status(200).set('X-Total-Count', String(total)).json(recipes);
     } catch (error) {
         next(error);
     }

@@ -20,10 +20,15 @@ const router = Router();
 
 // ── GET /api/ingredients ────────────────────────────────────────────────────
 /**
- * List all ingredients, optionally filtered by a fuzzy search term.
+ * List ingredients one page at a time, optionally filtered by a fuzzy search term.
  *
  * Query params (see `listQuerySchema`):
  *  - `search` (string, optional): fuzzy-match against ingredient names.
+ *  - `limit` (0–100, default 50) and `offset` (default 0): which page.
+ *
+ * Plain lists are ordered by name, then id. Search results are ordered by
+ * rank, then name, then id. The `X-Total-Count` header gives the number of
+ * ingredients (or matches) across all pages (D6).
  *
  * @returns 200 with an array of Ingredient objects (may be empty), or 400 for a bad query.
  */
@@ -31,15 +36,10 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
         const query = parseOr400(listQuerySchema, req.query, res);
         if (query === null) return;
-        const { search } = query;
+        const { search, limit, offset } = query;
 
         if (search) {
-            const matches = await fuzzySearchByName('Ingredient', search);
-
-            if (matches.length === 0) {
-                res.status(200).json([]);
-                return;
-            }
+            const { matches, total } = await fuzzySearchByName('Ingredient', search, { limit, offset });
 
             const ids = matches.map((m) => m.id);
             const ingredients = await prisma.ingredient.findMany({
@@ -48,12 +48,19 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 
             // Preserve similarity ranking from the fuzzy search
             const sorted = ids.map((id) => ingredients.find((i) => i.id === id)).filter(Boolean);
-            res.status(200).json(sorted);
+            res.status(200).set('X-Total-Count', String(total)).json(sorted);
             return;
         }
 
-        const ingredients = await prisma.ingredient.findMany();
-        res.status(200).json(ingredients);
+        const [ingredients, total] = await Promise.all([
+            prisma.ingredient.findMany({
+                orderBy: [{ name: 'asc' }, { id: 'asc' }],
+                take: limit,
+                skip: offset,
+            }),
+            prisma.ingredient.count(),
+        ]);
+        res.status(200).set('X-Total-Count', String(total)).json(ingredients);
     } catch (error) {
         next(error);
     }

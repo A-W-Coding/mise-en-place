@@ -285,9 +285,9 @@ General rules:
 - [x] Use raw SQL only through the tagged-template `$queryRaw`.
 
 ### 5.5 Pagination and ordering (A7, D6)
-- [ ] Accept `limit` (default 50, maximum 100) and `offset` (default 0). Both must be non-negative integers, or the request gets a 400.
-- [ ] Order plain lists by name, then id as a tie-break. Order search results by rank, then name, then id. For the ranked search, apply `LIMIT` and `OFFSET` in the SQL.
-- [ ] Use the response shape chosen in D6.
+- [x] Accept `limit` (default 50, maximum 100) and `offset` (default 0). Both must be non-negative integers, or the request gets a 400.
+- [x] Order plain lists by name, then id as a tie-break. Order search results by rank, then name, then id. For the ranked search, apply `LIMIT` and `OFFSET` in the SQL.
+- [x] Use the response shape chosen in D6.
 
 ### 5.6 Health check (A6)
 - [ ] Replace `GET /` with `GET /api/health`. It runs `SELECT 1` through Prisma and returns 200 `{ "status": "ok" }`. If the database is unreachable, it returns 503 `{ "status": "error" }` with no error detail in the body.
