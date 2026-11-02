@@ -82,23 +82,17 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
 // ── POST /api/ingredients ───────────────────────────────────────────────────
 /**
  * Create a new ingredient. The name is normalised (lowercased, trimmed).
- * Duplicate names are rejected with 409.
  *
- * @returns 201 with the created Ingredient, or 400/409 on validation failure.
+ * Duplicate names are rejected with 409 by the unique constraint on `name`
+ * (P2002, mapped in the error handler). Checking first with a query would
+ * race: two requests could both find no duplicate, then both insert.
+ *
+ * @returns 201 with the created Ingredient, 400 on validation failure, or 409 for a duplicate.
  */
 router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
         const body = parseOr400(ingredientBodySchema, req.body, res);
         if (body === null) return;
-
-        const existing = await prisma.ingredient.findFirst({
-            where: { name: body.name },
-        });
-
-        if (existing) {
-            res.status(409).json({ error: `Ingredient "${body.name}" already exists.` });
-            return;
-        }
 
         const ingredient = await prisma.ingredient.create({
             data: { name: body.name },
@@ -113,8 +107,9 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
 // ── PATCH /api/ingredients/:id ──────────────────────────────────────────────
 /**
  * Update an ingredient's name. The new name is normalised.
+ * Renaming to a name that's already taken returns 409 (P2002, as for POST).
  *
- * @returns 200 with the updated Ingredient, or 400/404 on failure.
+ * @returns 200 with the updated Ingredient, or 400/404/409 on failure.
  */
 router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => {
     try {

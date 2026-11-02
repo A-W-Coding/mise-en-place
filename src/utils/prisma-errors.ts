@@ -20,6 +20,7 @@
  * Common codes used in this project:
  *  - `P2025` — Record to update/delete not found.
  *  - `P2003` — Foreign key constraint violation.
+ *  - `P2002` — Unique constraint violation (mapped to 409 in the error handler).
  */
 export function isPrismaError(error: unknown, code: string): boolean {
     return (

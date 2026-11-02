@@ -7,13 +7,18 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
+import { isPrismaError } from '../utils/prisma-errors.js';
 
 /**
  * Catch-all error handler.
  *
- * Logs the full stack trace to the console and returns a generic
- * 500 response to the client. Individual routes should handle
- * expected errors (404, 409, etc.) before they reach this point.
+ * - A unique-constraint violation (Prisma P2002) becomes 409. It's mapped
+ *   here, once, so every route that writes a unique field gets it.
+ * - Anything else logs the full stack trace to the console and returns a
+ *   generic 500 response to the client.
+ *
+ * Individual routes should handle the other errors they expect (404, etc.)
+ * before they reach this point.
  */
 export function globalErrorHandler(
     err: Error,
@@ -21,6 +26,14 @@ export function globalErrorHandler(
     res: Response,
     _next: NextFunction,
 ): void {
+    if (isPrismaError(err, 'P2002')) {
+        // Prisma names the clashing fields in meta.target, e.g. ['name'].
+        const target = (err as { meta?: { target?: unknown } }).meta?.target;
+        const fields = Array.isArray(target) ? target.join(', ') : 'value';
+        res.status(409).json({ error: `That ${fields} already exists.` });
+        return;
+    }
+
     console.error(err.stack);
     res.status(500).json({ error: 'Internal server error' });
 }

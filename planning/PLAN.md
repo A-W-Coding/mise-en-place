@@ -265,7 +265,7 @@ General rules:
 - [x] Add a validation schema, or helper-based checks under D1, for every route.
 
 ### 5.2 Ingredient uniqueness (A1)
-- [ ] Remove the `findFirst` pre-check, which has a race condition, and let the unique constraint decide. Map P2002 to 409 for both POST and PATCH, ideally once, in the error handler.
+- [x] Remove the `findFirst` pre-check, which has a race condition, and let the unique constraint decide. Map P2002 to 409 for both POST and PATCH, ideally once, in the error handler.
 
 ### 5.3 Recipe writes
 - [ ] POST creates the recipe and its lines in a single nested write.
