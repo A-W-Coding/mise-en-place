@@ -12,8 +12,12 @@ import healthRouter from './routes/health.js';
 import ingredientsRouter from './routes/ingredients.js';
 import recipesRouter from './routes/recipes.js';
 import { globalErrorHandler } from './middleware/error-handler.js';
+import { corsPolicy } from './middleware/cors.js';
 
 const app = express();
+
+// ── CORS (allowed origins come from CORS_ORIGINS; none if unset) ────────────
+app.use(corsPolicy());
 
 // ── Body Parsing ────────────────────────────────────────────────────────────
 app.use(express.json());

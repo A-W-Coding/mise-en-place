@@ -293,8 +293,8 @@ General rules:
 - [x] Replace `GET /` with `GET /api/health`. It runs `SELECT 1` through Prisma and returns 200 `{ "status": "ok" }`. If the database is unreachable, it returns 503 `{ "status": "error" }` with no error detail in the body.
 
 ### 5.7 Errors and CORS (S1, A2)
-- [ ] Unknown errors return 500 with a generic message. Full details go only to the server logs, and no stack traces appear in responses.
-- [ ] Read the allowed CORS origins from an environment variable (`CORS_ORIGINS`, comma-separated). If it's unset, allow no cross-origin access. Note for Phase 3: if the UI and API share one origin (the same `ts.net` host), CORS isn't needed at all.
+- [x] Unknown errors return 500 with a generic message. Full details go only to the server logs, and no stack traces appear in responses.
+- [x] Read the allowed CORS origins from an environment variable (`CORS_ORIGINS`, comma-separated). If it's unset, allow no cross-origin access. Note for Phase 3: if the UI and API share one origin (the same `ts.net` host), CORS isn't needed at all.
 
 **Done when:** every existing test is updated and passing, and a manual curl of each endpoint behaves as specified.
 
