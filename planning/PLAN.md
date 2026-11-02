@@ -279,10 +279,10 @@ General rules:
 - [x] Optional, and ask me first: accept an ingredient `name` in a line and find-or-create it with `upsert` on the unique name. **Answered 2026-11-02: not now.** Revisit in Phase 3.
 
 ### 5.4 Search (A3)
-- [ ] `search` must be a single string, or the request gets a 400. Today `?search=a&search=b` causes a 500.
-- [ ] Trim the term, treat an empty term as no search, and cap it at 100 characters.
-- [ ] Escape `\`, `%` and `_` before building ILIKE patterns, so they match literally.
-- [ ] Use raw SQL only through the tagged-template `$queryRaw`.
+- [x] `search` must be a single string, or the request gets a 400. Today `?search=a&search=b` causes a 500.
+- [x] Trim the term, treat an empty term as no search, and cap it at 100 characters.
+- [x] Escape `\`, `%` and `_` before building ILIKE patterns, so they match literally.
+- [x] Use raw SQL only through the tagged-template `$queryRaw`.
 
 ### 5.5 Pagination and ordering (A7, D6)
 - [ ] Accept `limit` (default 50, maximum 100) and `offset` (default 0). Both must be non-negative integers, or the request gets a 400.

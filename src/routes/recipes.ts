@@ -16,6 +16,7 @@ import { isPrismaError } from '../utils/prisma-errors.js';
 import { fuzzySearchByName } from '../utils/fuzzy-search.js';
 import { parseOr400 } from '../utils/validation.js';
 import { createRecipeSchema, updateRecipeSchema, IngredientLine } from '../schemas/recipes.js';
+import { listQuerySchema } from '../schemas/list-query.js';
 
 const router = Router();
 
@@ -53,17 +54,19 @@ function toRecipeIngredientCreateData(lines: IngredientLine[]) {
 /**
  * List all recipes, optionally filtered by a fuzzy search term.
  *
- * Query params:
+ * Query params (see `listQuerySchema`):
  *  - `search` (string, optional): fuzzy-match against recipe names.
  *
- * @returns 200 with an array of Recipe objects (may be empty).
+ * @returns 200 with an array of Recipe objects (may be empty), or 400 for a bad query.
  */
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { search } = req.query;
+        const query = parseOr400(listQuerySchema, req.query, res);
+        if (query === null) return;
+        const { search } = query;
 
         if (search) {
-            const matches = await fuzzySearchByName('Recipe', search as string);
+            const matches = await fuzzySearchByName('Recipe', search);
 
             if (matches.length === 0) {
                 res.status(200).json([]);

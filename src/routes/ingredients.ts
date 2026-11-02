@@ -14,6 +14,7 @@ import { isPrismaError } from '../utils/prisma-errors.js';
 import { fuzzySearchByName } from '../utils/fuzzy-search.js';
 import { parseOr400 } from '../utils/validation.js';
 import { ingredientBodySchema } from '../schemas/ingredients.js';
+import { listQuerySchema } from '../schemas/list-query.js';
 
 const router = Router();
 
@@ -21,17 +22,19 @@ const router = Router();
 /**
  * List all ingredients, optionally filtered by a fuzzy search term.
  *
- * Query params:
+ * Query params (see `listQuerySchema`):
  *  - `search` (string, optional): fuzzy-match against ingredient names.
  *
- * @returns 200 with an array of Ingredient objects (may be empty).
+ * @returns 200 with an array of Ingredient objects (may be empty), or 400 for a bad query.
  */
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { search } = req.query;
+        const query = parseOr400(listQuerySchema, req.query, res);
+        if (query === null) return;
+        const { search } = query;
 
         if (search) {
-            const matches = await fuzzySearchByName('Ingredient', search as string);
+            const matches = await fuzzySearchByName('Ingredient', search);
 
             if (matches.length === 0) {
                 res.status(200).json([]);
