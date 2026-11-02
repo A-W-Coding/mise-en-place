@@ -3,9 +3,9 @@
 # Mise en place: hardening plan (Phase 1 to Phase 2)
 
 > **Status**
-> - Current step: **Step 3: Make the tests safe and reliable** (every task done locally; waiting on CI)
-> - Last updated: 2026-11-02 (`npm test` passes twice locally)
-> - Blockers: "CI is green twice in a row" needs the branch pushed to GitHub
+> - Current step: **Step 6: Fill in the missing tests**
+> - Last updated: 2026-11-02 (Step 5 done: tests pass, every endpoint checked with curl)
+> - Blockers: none
 
 ## How to use this file
 - Work through the steps in order. Each step gives a goal, why it matters, tasks as checkboxes, and a "done when" test.
@@ -51,7 +51,7 @@ The rule that reconciles them: **settle the spec first, then bring the code in l
 | D3 | Prisma version | **Pin the exact version already in use.** Upgrading is a separate task later (V5). On 27 Sept 2026, npm's `latest` tag for `prisma` pointed at `8.0.0-rc.17`, so an unpinned fresh install could pull a pre-release major | Step 1 | **Decided 2026-10-27: pin `prisma` and `@prisma/client` to exactly 6.6.0** |
 | D4 | Postgres version | **17**, in dev, CI and on the Pi, adopted now while dev data is disposable. 18 also works but moves the Docker data path (see the Step 3 note) | Step 1 | **Decided 2026-10-27: 17.** The dev data is disposable (one placeholder recipe) |
 | D5 | Move Tailscale into Phase 2 | **Yes.** The PWA needs HTTPS and a single origin (F1) | Before Step 7 | **Decided 2026-10-27: yes** |
-| D6 | List response shape for pagination | **Keep a plain array and add an `X-Total-Count` header**, which breaks nothing. The alternative is a `{ items, total, limit, offset }` envelope | Step 5 | Pending |
+| D6 | List response shape for pagination | **Keep a plain array and add an `X-Total-Count` header**, which breaks nothing. The alternative is a `{ items, total, limit, offset }` envelope | Step 5 | **Decided 2026-11-02: a plain array plus an `X-Total-Count` header** |
 | D7 | Electron | **Drop it or defer it.** An installed PWA already covers the desktop (V2) | Phase 3 gate | Deferred |
 | D8 | Sync design | **A full snapshot with an ETag first.** Add delta sync with tombstones only if it's ever needed (F2) | Phase 3 gate | Deferred |
 | D9 | Offline editing | **Read-only offline** to begin with (F3) | Phase 3 gate | Deferred |
@@ -223,16 +223,16 @@ Notes:
 - **Check the search query with `EXPLAIN`.** A GIN trigram index speeds up `ILIKE` and the `%` operator. It doesn't help `ORDER BY similarity(...)` or a `similarity(...) > x` filter, and an index on `name` doesn't help a query on `lower(name)`. At personal scale the index is nice-to-have, so don't contort the query for it.
 - `sectionId` on RecipeIngredient waits for Phase 3.
 
-- [ ] Reset the dev database (ask first)
-- [ ] Update `schema.prisma` to the target models
-- [ ] Create the migration: `npx prisma migrate dev --name phase1_ingredient_model`
-- [ ] Run `migrate dev` again and confirm there's no drift
-- [ ] **Give the seed an entry point (A8).** Added 2026-10-27 from Step 2. Today `npm run seed` and `npx prisma db seed` exit without seeding, so "the seed runs" below can't pass.
+- [x] Reset the dev database (ask first). Not needed: the dev and test databases had no rows.
+- [x] Update `schema.prisma` to the target models
+- [x] Create the migration: `npx prisma migrate dev --name phase1_ingredient_model`
+- [x] Run `migrate dev` again and confirm there's no drift
+- [x] **Give the seed an entry point (A8).** Added 2026-10-27 from Step 2. Today `npm run seed` and `npx prisma db seed` exit without seeding, so "the seed runs" below can't pass.
   - Put the entry point in its own file, such as `prisma/seeds/run.ts`. It creates a Prisma client, calls `assertSafeDatabase()` from Step 3 (which allows `_test` and `_dev`), runs `seed()`, then disconnects.
   - Keep it out of `base-seed.ts`. The test helpers import that file, and code that runs on import would seed during every test run.
   - Point both `npm run seed` and the `prisma.seed` setting in package.json at the new file, using `tsx` for both. The current `node --loader ts-node/esm` prints deprecation warnings on Node 22.
-- [ ] Update the seed to use the new fields: ordered lines, a line with a null quantity, a line with a note, and a range
-- [ ] Check that the tests still compile. Many will fail until Step 5, and that's expected
+- [x] Update the seed to use the new fields: ordered lines, a line with a null quantity, a line with a note, and a range
+- [x] Check that the tests still compile. Many will fail until Step 5, and that's expected
 
 **Done when:** the migration is applied to both the dev and test databases, Prisma reports no drift, and the seed runs.
 
@@ -261,40 +261,40 @@ General rules:
 - The server sets `orderIndex` from each line's position in the array. Clients never send it.
 - A validation failure returns 400 with a message per field, using the existing error-response shape.
 
-- [ ] Put the units in their own module, such as `src/units.ts`, with a `canonicaliseUnit()` function. Write it so Phase 3's client can reuse it and Phase 6 can add conversion factors (F5).
-- [ ] Add a validation schema, or helper-based checks under D1, for every route.
+- [x] Put the units in their own module, such as `src/units.ts`, with a `canonicaliseUnit()` function. Write it so Phase 3's client can reuse it and Phase 6 can add conversion factors (F5).
+- [x] Add a validation schema, or helper-based checks under D1, for every route.
 
 ### 5.2 Ingredient uniqueness (A1)
-- [ ] Remove the `findFirst` pre-check, which has a race condition, and let the unique constraint decide. Map P2002 to 409 for both POST and PATCH, ideally once, in the error handler.
+- [x] Remove the `findFirst` pre-check, which has a race condition, and let the unique constraint decide. Map P2002 to 409 for both POST and PATCH, ideally once, in the error handler.
 
 ### 5.3 Recipe writes
-- [ ] POST creates the recipe and its lines in a single nested write.
-- [ ] PATCH handles `ingredients` like this:
+- [x] POST creates the recipe and its lines in a single nested write.
+- [x] PATCH handles `ingredients` like this:
   - Absent: the lines are left untouched.
   - Present: **the whole list is replaced**, using `deleteMany` plus `create` in the same nested update, which Prisma runs atomically.
   - An empty array: all lines are removed.
-- [ ] Set `updatedAt: new Date()` explicitly on the recipe in every PATCH. The timestamp must change even when only the lines change, and `@updatedAt` can't be relied on for relation-only changes.
-- [ ] An unknown ingredient id in the body returns 400, not 404. Which Prisma error you get depends on the write style: P2003 for a raw `ingredientId`, P2025 for `connect`. Map whichever you use, or check the ids with a single `findMany` beforehand.
-- [ ] Return lines sorted with `orderBy: { orderIndex: 'asc' }`.
-- [ ] Optional, and ask me first: accept an ingredient `name` in a line and find-or-create it with `upsert` on the unique name.
+- [x] Set `updatedAt: new Date()` explicitly on the recipe in every PATCH. The timestamp must change even when only the lines change, and `@updatedAt` can't be relied on for relation-only changes.
+- [x] An unknown ingredient id in the body returns 400, not 404. Which Prisma error you get depends on the write style: P2003 for a raw `ingredientId`, P2025 for `connect`. Map whichever you use, or check the ids with a single `findMany` beforehand.
+- [x] Return lines sorted with `orderBy: { orderIndex: 'asc' }`.
+- [x] Optional, and ask me first: accept an ingredient `name` in a line and find-or-create it with `upsert` on the unique name. **Answered 2026-11-02: not now.** Revisit in Phase 3.
 
 ### 5.4 Search (A3)
-- [ ] `search` must be a single string, or the request gets a 400. Today `?search=a&search=b` causes a 500.
-- [ ] Trim the term, treat an empty term as no search, and cap it at 100 characters.
-- [ ] Escape `\`, `%` and `_` before building ILIKE patterns, so they match literally.
-- [ ] Use raw SQL only through the tagged-template `$queryRaw`.
+- [x] `search` must be a single string, or the request gets a 400. Today `?search=a&search=b` causes a 500.
+- [x] Trim the term, treat an empty term as no search, and cap it at 100 characters.
+- [x] Escape `\`, `%` and `_` before building ILIKE patterns, so they match literally.
+- [x] Use raw SQL only through the tagged-template `$queryRaw`.
 
 ### 5.5 Pagination and ordering (A7, D6)
-- [ ] Accept `limit` (default 50, maximum 100) and `offset` (default 0). Both must be non-negative integers, or the request gets a 400.
-- [ ] Order plain lists by name, then id as a tie-break. Order search results by rank, then name, then id. For the ranked search, apply `LIMIT` and `OFFSET` in the SQL.
-- [ ] Use the response shape chosen in D6.
+- [x] Accept `limit` (default 50, maximum 100) and `offset` (default 0). Both must be non-negative integers, or the request gets a 400.
+- [x] Order plain lists by name, then id as a tie-break. Order search results by rank, then name, then id. For the ranked search, apply `LIMIT` and `OFFSET` in the SQL.
+- [x] Use the response shape chosen in D6.
 
 ### 5.6 Health check (A6)
-- [ ] Replace `GET /` with `GET /api/health`. It runs `SELECT 1` through Prisma and returns 200 `{ "status": "ok" }`. If the database is unreachable, it returns 503 `{ "status": "error" }` with no error detail in the body.
+- [x] Replace `GET /` with `GET /api/health`. It runs `SELECT 1` through Prisma and returns 200 `{ "status": "ok" }`. If the database is unreachable, it returns 503 `{ "status": "error" }` with no error detail in the body.
 
 ### 5.7 Errors and CORS (S1, A2)
-- [ ] Unknown errors return 500 with a generic message. Full details go only to the server logs, and no stack traces appear in responses.
-- [ ] Read the allowed CORS origins from an environment variable (`CORS_ORIGINS`, comma-separated). If it's unset, allow no cross-origin access. Note for Phase 3: if the UI and API share one origin (the same `ts.net` host), CORS isn't needed at all.
+- [x] Unknown errors return 500 with a generic message. Full details go only to the server logs, and no stack traces appear in responses.
+- [x] Read the allowed CORS origins from an environment variable (`CORS_ORIGINS`, comma-separated). If it's unset, allow no cross-origin access. Note for Phase 3: if the UI and API share one origin (the same `ts.net` host), CORS isn't needed at all.
 
 **Done when:** every existing test is updated and passing, and a manual curl of each endpoint behaves as specified.
 
@@ -508,3 +508,61 @@ First, settle D7–D11. Then write the Phase 3 spec segments, taking in the desi
     - CI also runs `npx tsc --noEmit`, because ts-jest only transpiles (`isolatedModules`) and type errors never fail the tests.
     - `engines.node` is `^22.13.0`, ESLint 10's minimum.
   - Not needed: the pg_trgm task, because Step 2 found the migration.
+- **2026-11-02:** Step 3 done. CI passed twice in a row: run #3 on pull request #1, then run #4 on `main` after the merge. Runs #1 and #2 were the old SQLite workflow failing.
+  - The dev database is already fresh (Postgres 17, migrations only, no rows), so Step 4's reset may not be needed.
+
+  Next: Step 4.
+- **2026-11-02:** Step 4 done.
+  - **Reset:** not needed. Both databases had 0 rows and the same four migrations.
+  - **Migration:** `20261102111623_phase1_ingredient_model`.
+    - `migrate dev --name` stopped before writing anything. It wanted a yes to its unique-constraint warning, and the shell it ran in can't answer prompts.
+    - So the SQL came from `prisma migrate diff --from-schema-datasource` (the dev database) `--to-schema-datamodel`, and was read before it was applied. Then `migrate dev` applied it.
+    - A second `migrate dev` reported "Already in sync". That run also replays every migration into a shadow database, so the history and `schema.prisma` match.
+    - `migrate deploy` applied it to `miseenplace_test`. Both databases report 5 migrations, up to date.
+  - **Trigram indexes:** declared in `schema.prisma` with `map:`, so the migration has no `DROP INDEX` and they keep their names.
+  - **Seed:**
+    - `prisma/seeds/run.ts` is the entry point for `npm run seed` and `prisma db seed`, both through `tsx`. Both seeded `miseenplace_dev`. A URL ending in neither `_dev` nor `_test` is refused with exit code 1.
+    - Beef Chili now has 10 ordered lines instead of 8. Newly linked: smoked paprika as a 1–2 tsp range, and cayenne pepper "to taste" with no quantity. Cumin and kidney beans stay unlinked.
+    - The free-text units became a canonical unit plus a note: `clove` + "chopped", `can` + "drained", and a count with no unit + "diced".
+    - An unknown ingredient name in the seed now throws, instead of silently dropping the line.
+  - **Compile and tests:**
+    - The tests and the seed compile. `npx tsc --noEmit` has one error, in `src/routes/recipes.ts`, which doesn't set `orderIndex` yet. Lint is clean.
+    - `npm test`: 49 passed, 4 failed. The 4 are every recipe write with ingredients, all "Argument `orderIndex` is missing" → 500.
+    - Step 5.3 fixes both. CI would fail on this commit alone.
+  - **Search index (`EXPLAIN`, for Step 5.4):**
+    - With sequential scans turned off, the current query still scans the whole table. `word_similarity(...) > 0.3` can't use an index, and because it's ORed with the `ILIKE`, neither half does.
+    - `ILIKE` alone uses `recipe_name_trgm_idx`. So does the operator form `'beef' <% name OR name ILIKE ...`, as a BitmapOr over the index.
+    - At personal scale this is optional.
+  - **Seen, not acted on:**
+    - `prisma generate` warns that a generator with no `output` path is deprecated in Prisma 7. That belongs to the later upgrade (V5), not now (D3).
+    - `ts-node` is now unused. Only the old seed command used it.
+
+  Next: Step 5.
+- **2026-11-02:** Step 5 done, in seven commits (one per sub-section). Tests, type-check and lint passed after each.
+  - **Answers:** D6 is a plain array plus `X-Total-Count`. The optional name lookup in 5.3: not now.
+  - **Choices:**
+    - The recipe PATCH schema is written out, not derived with `.partial()`. In Zod 4 a default still applies inside an optional field, so `.partial()` would reset `servings` to 1 on every PATCH (checked).
+    - Query strings are strict, like bodies: a misspelt `?serach=` is a 400, not an unfiltered list.
+    - A search term over 100 characters, or a `limit` over 100, gets a 400 rather than being silently cut. `limit=0` is allowed and returns only the total. `offset` is capped at 2^53 − 1, the largest whole number JavaScript holds exactly; Prisma and Postgres both accept it.
+    - P2002 → 409 lives in the error handler, with the message "That name already exists."
+    - Express's own client errors keep their status: malformed JSON is a 400 and an oversized body a 413. Malformed JSON gets a plain message, because the parser's own one quotes the body back.
+    - CORS uses the `cors` package. With `CORS_ORIGINS` unset it runs with `origin: false` and sends no CORS headers. A disallowed origin still gets `Vary` and `Access-Control-Expose-Headers`, which do nothing without `Access-Control-Allow-Origin`.
+  - **Tests:** one existing test changed. Its `whole` unit isn't on the D2 list, so that line became a count with no unit. 53 tests passed twice in a row, with 84.6% statement coverage.
+  - **Manual curl** against the dev server (`miseenplace_dev`, with `CORS_ORIGINS=http://localhost:5173`). Everything behaved as specified:
+    - **Health:** 200 `{ "status": "ok" }`. With the database unreachable, 503 `{ "status": "error" }`, and a list returned a plain 500, with details only in the log. `GET /` is gone (404).
+    - **Lists:** ordered by name. `limit`, `offset` and `X-Total-Count` work. `limit=101`, `-1` and `1.5`, `offset=abc`, a repeated parameter and an unknown parameter each got a 400.
+    - **Search:** `?search=a&search=b` is a 400. A blank term lists everything, and 101 characters is a 400. `%` and `_` match literally.
+    - **Ingredients:** `"  Shallot  "` is stored as `shallot`. A duplicate POST, or a rename to a taken name, is a 409. An unknown field or malformed JSON is a 400. Deleting an in-use ingredient is a 409.
+    - **Recipes:**
+      - Lines come back in order, with units canonicalised (`Grams` → `g`, `" Tbsp. "` → `tbsp`). A count, a range and a "to taste" line all come back unchanged.
+      - A body with many mistakes got one message per field. An unknown ingredient id is a 400.
+      - A PATCH with only `ingredients` moved `updatedAt`, a PATCH without them left the lines alone, and `ingredients: []` removed them.
+    - **CORS:** the allowed origin gets `Access-Control-Allow-Origin` and can read `X-Total-Count`, and its preflight returns 204. Any other origin gets no `Allow-Origin`.
+    - The run deleted everything it created, so dev is back to the seed.
+  - **Seen, not acted on:**
+    - Unknown routes return Express's HTML "Cannot GET" page, not JSON.
+    - When a line has a type error, Zod skips that line's range check until the error is fixed, so a client may see the `quantityMax` message on a second attempt.
+    - `npm audit --omit=dev` reports 4 advisories (1 critical, 2 high, 1 moderate), all in Express 5's own dependencies: `body-parser`, `path-to-regexp`, `proxy-addr` and `qs`. `npm audit fix` would update the lockfile. Not done, because no step covers dependency updates yet.
+  - CI hasn't run on Steps 4 and 5 yet: the branch isn't pushed.
+
+  Next: Step 6.

@@ -12,30 +12,34 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '../../prisma/client.js';
 import { isPrismaError } from '../utils/prisma-errors.js';
 import { fuzzySearchByName } from '../utils/fuzzy-search.js';
-import { validateRequiredString } from '../utils/validation.js';
+import { parseOr400 } from '../utils/validation.js';
+import { ingredientBodySchema } from '../schemas/ingredients.js';
+import { listQuerySchema } from '../schemas/list-query.js';
 
 const router = Router();
 
 // ── GET /api/ingredients ────────────────────────────────────────────────────
 /**
- * List all ingredients, optionally filtered by a fuzzy search term.
+ * List ingredients one page at a time, optionally filtered by a fuzzy search term.
  *
- * Query params:
+ * Query params (see `listQuerySchema`):
  *  - `search` (string, optional): fuzzy-match against ingredient names.
+ *  - `limit` (0–100, default 50) and `offset` (default 0): which page.
  *
- * @returns 200 with an array of Ingredient objects (may be empty).
+ * Plain lists are ordered by name, then id. Search results are ordered by
+ * rank, then name, then id. The `X-Total-Count` header gives the number of
+ * ingredients (or matches) across all pages (D6).
+ *
+ * @returns 200 with an array of Ingredient objects (may be empty), or 400 for a bad query.
  */
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { search } = req.query;
+        const query = parseOr400(listQuerySchema, req.query, res);
+        if (query === null) return;
+        const { search, limit, offset } = query;
 
         if (search) {
-            const matches = await fuzzySearchByName('Ingredient', search as string);
-
-            if (matches.length === 0) {
-                res.status(200).json([]);
-                return;
-            }
+            const { matches, total } = await fuzzySearchByName('Ingredient', search, { limit, offset });
 
             const ids = matches.map((m) => m.id);
             const ingredients = await prisma.ingredient.findMany({
@@ -44,12 +48,19 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 
             // Preserve similarity ranking from the fuzzy search
             const sorted = ids.map((id) => ingredients.find((i) => i.id === id)).filter(Boolean);
-            res.status(200).json(sorted);
+            res.status(200).set('X-Total-Count', String(total)).json(sorted);
             return;
         }
 
-        const ingredients = await prisma.ingredient.findMany();
-        res.status(200).json(ingredients);
+        const [ingredients, total] = await Promise.all([
+            prisma.ingredient.findMany({
+                orderBy: [{ name: 'asc' }, { id: 'asc' }],
+                take: limit,
+                skip: offset,
+            }),
+            prisma.ingredient.count(),
+        ]);
+        res.status(200).set('X-Total-Count', String(total)).json(ingredients);
     } catch (error) {
         next(error);
     }
@@ -81,28 +92,20 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
 // ── POST /api/ingredients ───────────────────────────────────────────────────
 /**
  * Create a new ingredient. The name is normalised (lowercased, trimmed).
- * Duplicate names are rejected with 409.
  *
- * @returns 201 with the created Ingredient, or 400/409 on validation failure.
+ * Duplicate names are rejected with 409 by the unique constraint on `name`
+ * (P2002, mapped in the error handler). Checking first with a query would
+ * race: two requests could both find no duplicate, then both insert.
+ *
+ * @returns 201 with the created Ingredient, 400 on validation failure, or 409 for a duplicate.
  */
 router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const name = validateRequiredString(req.body.name, 'Ingredient name', res);
-        if (name === null) return;
-
-        const normalised = name.toLowerCase();
-
-        const existing = await prisma.ingredient.findFirst({
-            where: { name: normalised },
-        });
-
-        if (existing) {
-            res.status(409).json({ error: `Ingredient "${normalised}" already exists.` });
-            return;
-        }
+        const body = parseOr400(ingredientBodySchema, req.body, res);
+        if (body === null) return;
 
         const ingredient = await prisma.ingredient.create({
-            data: { name: normalised },
+            data: { name: body.name },
         });
 
         res.status(201).json(ingredient);
@@ -114,17 +117,18 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
 // ── PATCH /api/ingredients/:id ──────────────────────────────────────────────
 /**
  * Update an ingredient's name. The new name is normalised.
+ * Renaming to a name that's already taken returns 409 (P2002, as for POST).
  *
- * @returns 200 with the updated Ingredient, or 400/404 on failure.
+ * @returns 200 with the updated Ingredient, or 400/404/409 on failure.
  */
 router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const name = validateRequiredString(req.body.name, 'Ingredient name', res);
-        if (name === null) return;
+        const body = parseOr400(ingredientBodySchema, req.body, res);
+        if (body === null) return;
 
         const ingredient = await prisma.ingredient.update({
             where: { id: req.params.id },
-            data: { name: name.toLowerCase() },
+            data: { name: body.name },
         });
 
         res.status(200).json(ingredient);

@@ -5,14 +5,14 @@
   "main": "index.js",
   "description": "Personal recipe management API — Phase 1 (Foundation)",
   "prisma": {
-    "seed": "node --loader ts-node/esm prisma/seeds/base-seed.ts"
+    "seed": "tsx prisma/seeds/run.ts"
   },
   "scripts": {
     "dev": "tsx src/server.ts",
     "build": "tsc",
     "start": "node dist/src/server.js",
     "test": "dotenv -o -e .env.test -- cross-env NODE_OPTIONS=--experimental-vm-modules jest --runInBand",
-    "seed": "tsx prisma/seeds/base-seed.ts",
+    "seed": "tsx prisma/seeds/run.ts",
     "lint": "eslint ."
   },
   "repository": {
@@ -28,6 +28,7 @@
   "homepage": "https://github.com/AWhite-Code/mise-en-place#readme",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/cors": "^2.8.19",
     "@types/express": "^5.0.1",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.13.11",
@@ -46,8 +47,10 @@
   },
   "dependencies": {
     "@prisma/client": "6.6.0",
+    "cors": "^2.8.6",
     "dotenv": "^16.4.7",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "zod": "^4.6.7"
   },
   "engines": {
     "node": "^22.13.0"
