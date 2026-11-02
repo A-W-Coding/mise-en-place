@@ -20,7 +20,7 @@ npm ci
 # 2. Configure: copy the template, then change the password in both places
 cp .env.example .env
 
-# 3. Start PostgreSQL (only the db service; see the note below)
+# 3. Start PostgreSQL
 docker compose up -d db
 
 # 4. Apply the migrations to the dev database
@@ -34,7 +34,7 @@ npm run dev
 curl http://localhost:3000/api/health      # {"status":"ok"}
 ```
 
-Use `docker compose up -d db`, not plain `docker compose up -d`. The Compose file also defines an `api` service for deployment, and without a service name Compose builds and starts that too.
+`docker-compose.yml` is for development only: PostgreSQL, reachable from this machine alone. The Pi uses `docker-compose.prod.yml` (see [Deployment](#deployment)).
 
 ### The test database
 
@@ -132,30 +132,37 @@ curl -X POST http://localhost:3000/api/ingredients \
      -H "Content-Type: application/json" -d '{"name": " Shallot "}'     # stored as "shallot"
 ```
 
+## Deployment
+
+From Phase 2 the API runs on a Raspberry Pi, in Docker, on `127.0.0.1:3000` only. `tailscale serve` publishes it over HTTPS to your own devices, and the database has no published port. `scripts/deploy.sh` backs up, pulls `main`, builds, migrates and waits for the health check; `scripts/backup.sh` runs daily from cron. [`docs/deployment.md`](docs/deployment.md) covers the setup, from the operating system to the restore test.
+
 ## Project structure
 
 ```
 src/
-  app.ts            The Express app: CORS, JSON parsing, routes, error handler (tests import it)
-  server.ts         Loads .env and starts listening
-  units.ts          The canonical unit list and canonicaliseUnit()
-  routes/           health, recipes, ingredients
-  schemas/          Zod schemas for every request body and list query
-  middleware/       CORS policy and the error handler
-  utils/            Validation, fuzzy search, Prisma error helpers
+  app.ts                 The Express app: CORS, JSON parsing, routes, error handler (tests import it)
+  server.ts              Loads .env and starts listening
+  units.ts               The canonical unit list and canonicaliseUnit()
+  routes/                health, recipes, ingredients
+  schemas/               Zod schemas for every request body and list query
+  middleware/            CORS policy and the error handler
+  utils/                 Validation, fuzzy search, Prisma error helpers
 prisma/
-  schema.prisma     The database schema
-  migrations/       SQL migrations, applied in order
-  client.ts         The shared PrismaClient
-  seeds/            The sample data (base-seed.ts) and its command-line entry point (run.ts)
-  utils/            The database guard and the test reset helpers
+  schema.prisma          The database schema
+  migrations/            SQL migrations, applied in order
+  client.ts              The shared PrismaClient
+  seeds/                 The sample data (base-seed.ts) and its command-line entry point (run.ts)
+  utils/                 The database guard and the test reset helpers
 tests/
-  *.test.ts         Integration and unit tests
-  helpers/          Jest global setup and per-test lifecycle
-docker/initdb/      Creates the test database on a fresh volume
-docs/               API reference, ERD, architecture
-planning/           The hardening plan, code audit, design review and specs
-scripts/            CI helpers
+  *.test.ts              Integration and unit tests
+  helpers/               Jest global setup and per-test lifecycle
+docker/initdb/           Creates the test database on a fresh volume
+docker-compose.yml       PostgreSQL for development
+docker-compose.prod.yml  The Pi: the API and PostgreSQL
+Dockerfile               The API's production image
+docs/                    API reference, ERD, architecture, deployment
+planning/                The hardening plan, code audit, design review and specs
+scripts/                 Deploy, backup and restore-check scripts for the Pi, and a CI helper
 ```
 
 ## Documentation
@@ -163,4 +170,5 @@ scripts/            CI helpers
 - [`docs/api.md`](docs/api.md): the API reference
 - [`docs/erd.md`](docs/erd.md): the database schema as an entity-relationship diagram
 - [`docs/architecture.md`](docs/architecture.md): how the pieces connect, now and from Phase 2
+- [`docs/deployment.md`](docs/deployment.md): setting up the Pi, deploying, backups and restores
 - [`planning/`](planning): the hardening plan, the code audit, the design review, and the technical and design specs

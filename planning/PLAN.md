@@ -3,9 +3,9 @@
 # Mise en place: hardening plan (Phase 1 to Phase 2)
 
 > **Status**
-> - Current step: **Step 8: Phase 2, the Pi with Tailscale** (not started)
-> - Last updated: 2026-11-02 (Step 7 done: the spec segments are in the specs)
-> - Blockers: none
+> - Current step: **Step 8: Phase 2, the Pi with Tailscale** (the repo side is done and tested locally; the Pi itself is next)
+> - Last updated: 2026-11-02 (Step 8: Compose file, Dockerfile, scripts and runbook)
+> - Blockers: setting up the Pi by following `docs/deployment.md` (you); choosing where the encrypted off-Pi copy goes (8.7)
 
 ## How to use this file
 - Work through the steps in order. Each step gives a goal, why it matters, tasks as checkboxes, and a "done when" test.
@@ -360,26 +360,26 @@ Later-phase segments wait until just before their phase (see the Backlog).
 - [ ] Run `tailscale serve --bg 3000`. It serves `https://<name>.<tailnet>.ts.net` and forwards to `127.0.0.1:3000`, and it keeps running across reboots
 
 ### 8.3 Production Compose file
-- [ ] `api` service:
+- [x] `api` service:
   - `ports: ["127.0.0.1:3000:3000"]`, so only the Pi itself can reach it
   - `restart: unless-stopped`
   - wait for the database with `depends_on` → `db` → `condition: service_healthy`
   - a healthcheck that calls `/api/health`
   - environment variables from a `.env` file on the Pi, never from git
-- [ ] `db` service:
+- [x] `db` service:
   - **no `ports:` entry at all**, since the API reaches it over the Compose network
   - a named volume, `restart: unless-stopped` and a `pg_isready` healthcheck
   - the same image version as dev (D4)
-- [ ] In scripts, use `docker compose exec` and `docker compose run` with service names, rather than relying on `container_name`
+- [x] In scripts, use `docker compose exec` and `docker compose run` with service names, rather than relying on `container_name`
 
 ### 8.4 Dockerfile
-- [ ] Use a multi-stage build, and run the app as the non-root `node` user
-- [ ] Base it on a Debian "slim" Node image rather than Alpine, and install `openssl` in it, because Prisma needs it
-- [ ] Make the Prisma CLI available in the runtime image, because the deploy script runs `prisma migrate deploy` from it. Either move `prisma` into `dependencies` or add a dedicated migration stage
+- [x] Use a multi-stage build, and run the app as the non-root `node` user
+- [x] Base it on a Debian "slim" Node image rather than Alpine, and install `openssl` in it, because Prisma needs it
+- [x] Make the Prisma CLI available in the runtime image, because the deploy script runs `prisma migrate deploy` from it. Either move `prisma` into `dependencies` or add a dedicated migration stage
 - [ ] Build the image on the Pi, where it's natively arm64. If you ever build it on another machine for the Pi, add the arm64 target to `binaryTargets` (Prisma 6)
 
 ### 8.5 Optional: check the Tailscale identity (S1)
-- [ ] Add middleware that returns 403 unless the `Tailscale-User-Login` header equals the `ALLOWED_TAILSCALE_LOGIN` environment variable.
+- [x] Add middleware that returns 403 unless the `Tailscale-User-Login` header equals the `ALLOWED_TAILSCALE_LOGIN` environment variable. **Answered 2026-11-02: not now.** Tailscale already limits access to your own devices; revisit before sharing the Pi with anyone.
   - Exempt `/api/health`, because the deploy script calls it locally without the header.
   - This is only safe because the API listens on 127.0.0.1 alone. Anyone who could reach the port directly could forge the header.
 
@@ -425,13 +425,13 @@ docker compose logs --tail=100 api >&2
 exit 1
 ```
 
-- [ ] Write `scripts/deploy.sh` from the sketch, and test it twice
+- [ ] Write `scripts/deploy.sh` from the sketch, and test it twice. Written, and run twice against a local copy of the production stack; tick once it has run twice on the Pi
 
 ### 8.7 Backups (V4)
-- [ ] Add a daily cron job that runs `pg_dump -Fc` through `docker compose exec -T`, saves the dump to the SSD and keeps 7 days of dumps (spec §6.2). Put the commands in a script, `scripts/backup.sh`, rather than in the crontab line itself
+- [ ] Add a daily cron job that runs `pg_dump -Fc` through `docker compose exec -T`, saves the dump to the SSD and keeps 7 days of dumps (spec §6.2). Put the commands in a script, `scripts/backup.sh`, rather than in the crontab line itself. The script is written and tested locally; the cron line is in `docs/deployment.md`
 - [ ] Keep an encrypted copy off the Pi, for example with restic or rclone's crypt backend, on another machine or in cloud storage
 - [ ] Back up the images directory as well, once Phase 3 adds images
-- [ ] **Test a restore:** restore a dump into a scratch database, for example with `pg_restore -d miseenplace_restore_check`, and compare row counts with the live database
+- [ ] **Test a restore:** restore a dump into a scratch database, for example with `pg_restore -d miseenplace_restore_check`, and compare row counts with the live database. `scripts/restore-check.sh` does this, and passed locally
 
 **Done when:**
 - [ ] A phone connected to Tailscale gets a 200 from `https://<name>.<tailnet>.ts.net/api/health`
@@ -629,3 +629,40 @@ First, settle D7–D11. Then write the Phase 3 spec segments, taking in the desi
     - The "System Architecture" intro still lists Electron, which D7 may drop.
 
   Next: Step 8, when you're ready.
+- **2026-11-02:** Step 8: the repo side is done and tested on a local copy of the production stack. The Pi itself is next.
+  - Step 7's CI passed: run #9 on the pull request and run #10 on the merge into `main`.
+  - **8.5 answered: not now.** Tailscale already limits access to your own devices. Revisit before sharing the Pi with anyone.
+  - **`docker-compose.prod.yml` (8.3):**
+    - It has its own project name, `miseenplace-prod`, so it can never share containers or the volume with the dev stack on one machine.
+    - `db` has no ports. `api` is on 127.0.0.1:3000, with `restart: unless-stopped`, and waits for a healthy `db`. Its healthcheck uses Node's `fetch`, because the slim image has no curl.
+    - `init: true` puts a small init process in front of Node as PID 1. Node as PID 1 ignores SIGTERM, so every stop would otherwise wait 10 s and then kill it.
+    - `${POSTGRES_USER:?}` and the others make Compose refuse to start if `.env` is missing a value, instead of starting with an empty password.
+  - **`docker-compose.yml`** lost its `api` service. It published port 3000 on every interface, and plain `docker compose up -d` started it. The dev file is now PostgreSQL only.
+  - **`Dockerfile` (8.4):**
+    - It runs as `node`, sets `NODE_ENV=production`, and its CMD only starts the server. Migrations moved to `deploy.sh`.
+    - `prisma` moved from devDependencies to dependencies, still exactly 6.6.0. The lockfile only lost its dev flags; no version changed.
+    - Before this, the runtime image had no Prisma CLI, so its `npx prisma migrate deploy` would have downloaded whatever npm's latest Prisma was. `deploy.sh` now uses `npx --no`, which fails instead (D3).
+    - `.dockerignore` now also leaves out `planning/`, `scripts/`, `coverage/`, `.claude/`, local notes and every `.env.*`.
+  - **`scripts/deploy.sh` (8.6)** follows the sketch, with three changes:
+    - It starts the database first, so the first deploy works too.
+    - The pre-deploy backup goes through `backup.sh`.
+    - The body is a function. Bash reads a script as it runs, and `git pull` can rewrite this file mid-run; wrapping it in a function makes bash read all of it first.
+  - **`scripts/backup.sh` (8.7):**
+    - It writes to a `.partial` file and keeps it only if it's non-empty and `pg_restore -f /dev/null` can read all of it.
+    - Then it removes dumps older than `KEEP_DAYS` (7), so a failing backup never deletes the good ones.
+  - **`scripts/restore-check.sh`** restores the newest dump into `miseenplace_restore_check`, compares the row counts of the three tables and `_prisma_migrations` with the live database, and drops the scratch database.
+  - **`.gitattributes`** keeps the scripts' line endings LF on Windows checkouts, and git records them as executable.
+  - **`docs/deployment.md`:** the Pi runbook, from the operating system to the done-when checks, plus day-to-day commands and a real restore. The README links to it.
+  - **Tested locally,** with Docker Desktop and a throwaway project, `miseenplace-prodcheck`:
+    - Deploy run twice: first on an empty database (all 5 migrations), then as an update (rebuild, no pending migrations, API recreated). Data survived.
+    - Inside the container: user `node`, `NODE_ENV=production`, PID 1 `docker-init`. Ports: `127.0.0.1:3000` for the API, none for the database.
+    - Backup, then restore check: passed (1 recipe, 3 ingredients, 2 lines, 5 migrations).
+    - A truncated dump fails both the backup check and the restore check.
+    - With the database stopped, the backup fails and leaves no file.
+    - Pruning removed a dump dated 8 days ago and kept one from 6 days ago.
+    - The real restore in the runbook (`pg_restore --clean --if-exists`) undid a later insert, and search still worked afterwards.
+  - Type-check and lint pass. Only `package.json` and the lockfile changed outside Docker and the scripts, so the tests weren't rerun locally; CI runs them, with a fresh `npm ci`, on the pull request.
+  - **Left over from the local test:** the stack is stopped, but its volume, `miseenplace-prodcheck_pgdata`, and the `miseenplace-api` image are still on this PC. Deleting the volume needs your OK.
+  - **Still to do, on the Pi:** 8.1, 8.2, the first deploy, the cron job, the off-Pi copy, and the done-when checks. Then technical spec §6.2 and §6.3 get the new deploy setup.
+
+  Next: set up the Pi by following `docs/deployment.md`.
