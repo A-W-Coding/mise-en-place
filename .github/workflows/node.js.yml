@@ -1,7 +1,8 @@
 # CI workflow — mise-en-place
 # Runs on push to main/develop* and on PRs to main.
 # Starts a throwaway PostgreSQL service, then installs, generates the Prisma
-# client, lints, type-checks and runs the tests with coverage.
+# client, lints, type-checks and runs the tests with coverage, then puts the
+# coverage totals on the run's summary page.
 
 name: CI
 
@@ -59,3 +60,9 @@ jobs:
 
       - name: Test with coverage
         run: npm test -- --coverage
+
+      # Put the coverage totals on the run's summary page, even if a test
+      # failed. No threshold yet: set one once coverage settles (Step 6).
+      - name: Coverage summary
+        if: ${{ !cancelled() && hashFiles('coverage/coverage-summary.json') != '' }}
+        run: node scripts/coverage-summary.js >> "$GITHUB_STEP_SUMMARY"

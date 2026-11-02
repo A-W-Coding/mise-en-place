@@ -65,6 +65,45 @@ describe('Fuzzy Search', () => {
             expect(response.body.length).toBeGreaterThanOrEqual(2);
             expect(response.body[0].name).toBe('onion'); // Exact match ranks first
         });
+
+        test('should match % and _ literally, not as wildcards', async () => {
+            await prisma.ingredient.create({ data: { name: '100% rye flour' } });
+
+            // Unescaped, '%' would match every name and '_' any single character.
+            const percent = await request.get('/api/ingredients?search=%25');
+            const underscore = await request.get('/api/ingredients?search=_');
+
+            expect(percent.status).toBe(200);
+            expect(percent.body.map((i: { name: string }) => i.name)).toEqual(['100% rye flour']);
+            expect(underscore.status).toBe(200);
+            expect(underscore.body).toEqual([]);
+        });
+    });
+
+    // ── Search parameter rules (both endpoints) ─────────────────────────────
+
+    describe.each(['/api/ingredients', '/api/recipes'])('search parameter on %s', (path) => {
+        test('should return 400 when search is repeated', async () => {
+            const response = await request.get(`${path}?search=a&search=b`);
+
+            expect(response.status).toBe(400);
+            expect(response.body.fields).toEqual({ search: 'Must be a single string.' });
+        });
+
+        test('should return 400 for a term over 100 characters', async () => {
+            const response = await request.get(`${path}?search=${'x'.repeat(101)}`);
+
+            expect(response.status).toBe(400);
+            expect(response.body.fields.search).toContain('100');
+        });
+
+        test('should treat a blank term as no search', async () => {
+            const all = await request.get(path);
+            const blank = await request.get(`${path}?search=%20%20`);
+
+            expect(blank.status).toBe(200);
+            expect(blank.body).toEqual(all.body);
+        });
     });
 
     // ── Recipe Search ───────────────────────────────────────────────────────

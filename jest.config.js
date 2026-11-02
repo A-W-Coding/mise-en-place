@@ -8,6 +8,9 @@ export default {
     globalSetup: '<rootDir>/tests/helpers/global-setup.ts',
     // Database-backed tests can be slow in CI or on the Pi.
     testTimeout: 15_000,
+    // With --coverage: a table in the terminal, an HTML report in
+    // coverage/lcov-report/, and totals for scripts/coverage-summary.js (CI).
+    coverageReporters: ['text', 'lcov', 'json-summary'],
     extensionsToTreatAsEsm: ['.ts'],
     moduleNameMapper: {
         '^(\\.{1,2}/.*)\\.js$': '$1',

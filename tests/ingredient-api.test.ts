@@ -3,14 +3,15 @@
  * Integration tests for the Ingredient API endpoints.
  *
  * Covers GET (list, by-id, search), POST (create with normalisation,
- * duplicate rejection), PATCH (rename), and DELETE (standalone,
- * not-found, in-use restriction).
+ * duplicate rejection, validation), PATCH (rename, duplicate rejection),
+ * and DELETE (standalone, not-found, in-use restriction).
  */
 
 import supertest from 'supertest';
 import { randomUUID } from 'crypto';
 import { app } from '../src/app.js';
 import { prisma } from '../prisma/client.js';
+import { cleanDatabase } from '../prisma/utils/db-utils.js';
 import { setupTestLifecycle } from './helpers/test-lifecycle.js';
 
 const request = supertest(app);
@@ -84,6 +85,53 @@ describe('Ingredient API', () => {
             expect(response.status).toBe(409);
             expect(response.body.error).toContain('already exists');
         });
+
+        test('should store " Onion " as "onion"', async () => {
+            await cleanDatabase(); // the seed already has "onion"
+
+            const response = await request.post('/api/ingredients').send({ name: '  Onion  ' });
+
+            expect(response.status).toBe(201);
+            expect(response.body.name).toBe('onion');
+        });
+
+        test('should return one 201 and one 409 for two simultaneous POSTs of the same new name', async () => {
+            // Sent together, so neither request can see the other's row first.
+            // Only the unique constraint can stop the second one (A1).
+            const responses = await Promise.all([
+                request.post('/api/ingredients').send({ name: 'Shallot' }),
+                request.post('/api/ingredients').send({ name: ' shallot ' }),
+            ]);
+
+            expect(responses.map((r) => r.status).sort()).toEqual([201, 409]);
+            expect(await prisma.ingredient.count({ where: { name: 'shallot' } })).toBe(1);
+        });
+
+        test('should return 400 for an unknown field', async () => {
+            const response = await request
+                .post('/api/ingredients')
+                .send({ name: 'leek', id: randomUUID() });
+
+            expect(response.status).toBe(400);
+            expect(response.body.fields).toEqual({ id: 'Unknown field.' });
+        });
+
+        test('should return 400 for a name over 100 characters', async () => {
+            const response = await request.post('/api/ingredients').send({ name: 'x'.repeat(101) });
+
+            expect(response.status).toBe(400);
+            expect(response.body.fields.name).toContain('100');
+        });
+
+        test('should return 400 for malformed JSON', async () => {
+            const response = await request
+                .post('/api/ingredients')
+                .set('Content-Type', 'application/json')
+                .send('{"name": ');
+
+            expect(response.status).toBe(400);
+            expect(response.body.error).toBe('The request body is not valid JSON.');
+        });
     });
 
     // ── PATCH ───────────────────────────────────────────────────────────────
@@ -117,6 +165,20 @@ describe('Ingredient API', () => {
                 .send({ name: '' });
 
             expect(response.status).toBe(400);
+        });
+
+        test('should return 409 when renaming to a name that already exists', async () => {
+            const garlic = await prisma.ingredient.findUniqueOrThrow({ where: { name: 'garlic' } });
+
+            const response = await request
+                .patch(`/api/ingredients/${garlic.id}`)
+                .send({ name: ' Onion ' });
+
+            expect(response.status).toBe(409);
+            expect(response.body.error).toContain('already exists');
+
+            const unchanged = await prisma.ingredient.findUniqueOrThrow({ where: { id: garlic.id } });
+            expect(unchanged.name).toBe('garlic');
         });
     });
 
