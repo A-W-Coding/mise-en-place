@@ -51,7 +51,7 @@ The rule that reconciles them: **settle the spec first, then bring the code in l
 | D3 | Prisma version | **Pin the exact version already in use.** Upgrading is a separate task later (V5). On 27 Sept 2026, npm's `latest` tag for `prisma` pointed at `8.0.0-rc.17`, so an unpinned fresh install could pull a pre-release major | Step 1 | **Decided 2026-10-27: pin `prisma` and `@prisma/client` to exactly 6.6.0** |
 | D4 | Postgres version | **17**, in dev, CI and on the Pi, adopted now while dev data is disposable. 18 also works but moves the Docker data path (see the Step 3 note) | Step 1 | **Decided 2026-10-27: 17.** The dev data is disposable (one placeholder recipe) |
 | D5 | Move Tailscale into Phase 2 | **Yes.** The PWA needs HTTPS and a single origin (F1) | Before Step 7 | **Decided 2026-10-27: yes** |
-| D6 | List response shape for pagination | **Keep a plain array and add an `X-Total-Count` header**, which breaks nothing. The alternative is a `{ items, total, limit, offset }` envelope | Step 5 | Pending |
+| D6 | List response shape for pagination | **Keep a plain array and add an `X-Total-Count` header**, which breaks nothing. The alternative is a `{ items, total, limit, offset }` envelope | Step 5 | **Decided 2026-11-02: a plain array plus an `X-Total-Count` header** |
 | D7 | Electron | **Drop it or defer it.** An installed PWA already covers the desktop (V2) | Phase 3 gate | Deferred |
 | D8 | Sync design | **A full snapshot with an ETag first.** Add delta sync with tombstones only if it's ever needed (F2) | Phase 3 gate | Deferred |
 | D9 | Offline editing | **Read-only offline** to begin with (F3) | Phase 3 gate | Deferred |
@@ -261,8 +261,8 @@ General rules:
 - The server sets `orderIndex` from each line's position in the array. Clients never send it.
 - A validation failure returns 400 with a message per field, using the existing error-response shape.
 
-- [ ] Put the units in their own module, such as `src/units.ts`, with a `canonicaliseUnit()` function. Write it so Phase 3's client can reuse it and Phase 6 can add conversion factors (F5).
-- [ ] Add a validation schema, or helper-based checks under D1, for every route.
+- [x] Put the units in their own module, such as `src/units.ts`, with a `canonicaliseUnit()` function. Write it so Phase 3's client can reuse it and Phase 6 can add conversion factors (F5).
+- [x] Add a validation schema, or helper-based checks under D1, for every route.
 
 ### 5.2 Ingredient uniqueness (A1)
 - [ ] Remove the `findFirst` pre-check, which has a race condition, and let the unique constraint decide. Map P2002 to 409 for both POST and PATCH, ideally once, in the error handler.
@@ -276,7 +276,7 @@ General rules:
 - [ ] Set `updatedAt: new Date()` explicitly on the recipe in every PATCH. The timestamp must change even when only the lines change, and `@updatedAt` can't be relied on for relation-only changes.
 - [ ] An unknown ingredient id in the body returns 400, not 404. Which Prisma error you get depends on the write style: P2003 for a raw `ingredientId`, P2025 for `connect`. Map whichever you use, or check the ids with a single `findMany` beforehand.
 - [ ] Return lines sorted with `orderBy: { orderIndex: 'asc' }`.
-- [ ] Optional, and ask me first: accept an ingredient `name` in a line and find-or-create it with `upsert` on the unique name.
+- [x] Optional, and ask me first: accept an ingredient `name` in a line and find-or-create it with `upsert` on the unique name. **Answered 2026-11-02: not now.** Revisit in Phase 3.
 
 ### 5.4 Search (A3)
 - [ ] `search` must be a single string, or the request gets a 400. Today `?search=a&search=b` causes a 500.

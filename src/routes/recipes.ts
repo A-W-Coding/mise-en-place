@@ -14,7 +14,8 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '../../prisma/client.js';
 import { isPrismaError } from '../utils/prisma-errors.js';
 import { fuzzySearchByName } from '../utils/fuzzy-search.js';
-import { validateRequiredString } from '../utils/validation.js';
+import { parseOr400 } from '../utils/validation.js';
+import { createRecipeSchema, updateRecipeSchema, IngredientLine } from '../schemas/recipes.js';
 
 const router = Router();
 
@@ -29,24 +30,21 @@ const RECIPE_INCLUDE = {
     },
 } as const;
 
-/** Shape of an ingredient entry in POST / PATCH request bodies. */
-interface IngredientInput {
-    ingredientId: string;
-    quantity: number;
-    unit: string;
-}
-
 /**
- * Map a client-supplied ingredient array into Prisma `create` data.
+ * Map validated ingredient lines into Prisma `create` data.
+ * `orderIndex` comes from each line's position in the array.
  *
- * @param ingredients - Raw ingredient entries from the request body.
+ * @param lines - Ingredient lines parsed by `ingredientLineSchema`.
  * @returns Array suitable for `recipeIngredients.create`.
  */
-function toRecipeIngredientCreateData(ingredients: IngredientInput[]) {
-    return ingredients.map((ing) => ({
-        ingredientId: ing.ingredientId,
-        quantity: ing.quantity ?? 0,
-        unit: ing.unit,
+function toRecipeIngredientCreateData(lines: IngredientLine[]) {
+    return lines.map((line, orderIndex) => ({
+        ingredientId: line.ingredientId,
+        orderIndex,
+        quantity: line.quantity ?? null,
+        quantityMax: line.quantityMax ?? null,
+        unit: line.unit,
+        note: line.note ?? null,
     }));
 }
 
@@ -118,33 +116,26 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
 /**
  * Create a new recipe, optionally with ingredient associations.
  *
- * Body:
+ * Body (see `createRecipeSchema`):
  *  - `name` (string, required)
  *  - `description`, `servings`, `prepTime`, `cookTime`, `instructions` (optional)
- *  - `ingredients` (array of `{ ingredientId, quantity, unit }`, optional)
+ *  - `ingredients` (array of `{ ingredientId, quantity, quantityMax, unit, note }`, optional)
  *
  * @returns 201 with the created Recipe, or 400 on validation failure.
  */
 router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { description, servings, prepTime, cookTime, instructions, ingredients } = req.body;
+        const body = parseOr400(createRecipeSchema, req.body, res);
+        if (body === null) return;
 
-        const name = validateRequiredString(req.body.name, 'Recipe name', res);
-        if (name === null) return;
+        // Spreading is safe here: the strict schema has already rejected
+        // any field that isn't on its allowlist.
+        const { ingredients = [], ...fields } = body;
 
         const recipe = await prisma.recipe.create({
             data: {
-                name,
-                description: description ?? null,
-                servings: servings ?? 1,
-                prepTime: prepTime ?? null,
-                cookTime: cookTime ?? null,
-                instructions: instructions ?? null,
-                recipeIngredients: {
-                    create: Array.isArray(ingredients)
-                        ? toRecipeIngredientCreateData(ingredients)
-                        : [],
-                },
+                ...fields,
+                recipeIngredients: { create: toRecipeIngredientCreateData(ingredients) },
             },
             include: RECIPE_INCLUDE,
         });
@@ -170,33 +161,24 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
  */
 router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { name, description, servings, prepTime, cookTime, instructions, ingredients } = req.body;
+        const body = parseOr400(updateRecipeSchema, req.body, res);
+        if (body === null) return;
 
-        // Build update payload from provided fields only
-        const updateData: Record<string, unknown> = {};
-
-        if (name !== undefined) {
-            const validated = validateRequiredString(name, 'Recipe name', res);
-            if (validated === null) return;
-            updateData.name = validated;
-        }
-        if (description !== undefined) updateData.description = description;
-        if (servings !== undefined) updateData.servings = servings;
-        if (prepTime !== undefined) updateData.prepTime = prepTime;
-        if (cookTime !== undefined) updateData.cookTime = cookTime;
-        if (instructions !== undefined) updateData.instructions = instructions;
-
-        // Replace all ingredient associations when a new array is provided
-        if (Array.isArray(ingredients)) {
-            updateData.recipeIngredients = {
-                deleteMany: {},
-                create: toRecipeIngredientCreateData(ingredients),
-            };
-        }
+        // Fields absent from the body are undefined, which Prisma leaves unchanged.
+        const { ingredients, ...fields } = body;
 
         const recipe = await prisma.recipe.update({
             where: { id: req.params.id },
-            data: updateData,
+            data: {
+                ...fields,
+                // Replace all ingredient lines when a new array is provided
+                ...(ingredients && {
+                    recipeIngredients: {
+                        deleteMany: {},
+                        create: toRecipeIngredientCreateData(ingredients),
+                    },
+                }),
+            },
             include: RECIPE_INCLUDE,
         });
 

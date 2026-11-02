@@ -12,7 +12,8 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '../../prisma/client.js';
 import { isPrismaError } from '../utils/prisma-errors.js';
 import { fuzzySearchByName } from '../utils/fuzzy-search.js';
-import { validateRequiredString } from '../utils/validation.js';
+import { parseOr400 } from '../utils/validation.js';
+import { ingredientBodySchema } from '../schemas/ingredients.js';
 
 const router = Router();
 
@@ -87,22 +88,20 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
  */
 router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const name = validateRequiredString(req.body.name, 'Ingredient name', res);
-        if (name === null) return;
-
-        const normalised = name.toLowerCase();
+        const body = parseOr400(ingredientBodySchema, req.body, res);
+        if (body === null) return;
 
         const existing = await prisma.ingredient.findFirst({
-            where: { name: normalised },
+            where: { name: body.name },
         });
 
         if (existing) {
-            res.status(409).json({ error: `Ingredient "${normalised}" already exists.` });
+            res.status(409).json({ error: `Ingredient "${body.name}" already exists.` });
             return;
         }
 
         const ingredient = await prisma.ingredient.create({
-            data: { name: normalised },
+            data: { name: body.name },
         });
 
         res.status(201).json(ingredient);
@@ -119,12 +118,12 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
  */
 router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const name = validateRequiredString(req.body.name, 'Ingredient name', res);
-        if (name === null) return;
+        const body = parseOr400(ingredientBodySchema, req.body, res);
+        if (body === null) return;
 
         const ingredient = await prisma.ingredient.update({
             where: { id: req.params.id },
-            data: { name: name.toLowerCase() },
+            data: { name: body.name },
         });
 
         res.status(200).json(ingredient);
