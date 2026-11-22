@@ -14,10 +14,12 @@ Steps 1–6 are a one-time setup. After that, deploying is one command (see [Day
 
 ## What you need
 
-- A Raspberry Pi with 64-bit support (Pi 4 or 5), and an SSD to boot from. PostgreSQL on an SD card is the likeliest way to lose data.
+- A Raspberry Pi with 64-bit support (Pi 4 or 5), and an SSD to boot from. PostgreSQL on an SD card is the likeliest way to lose data. You can start on the SD card and move later: see [Moving to an SSD](#moving-to-an-ssd).
 - A Tailscale account, and the Tailscale app on your phone, signed in to the same account.
 
 ## 1. Operating system
+
+Starting on the SD card: do the same with the SD card in place of the SSD, skip step 2, and expect `/dev/mmcblk0p2` in step 3.
 
 1. In Raspberry Pi Imager, choose **Raspberry Pi OS Lite (64-bit)** and write it to the SSD. In the OS customisation screen, set a hostname, a username and password, your Wi-Fi if needed, and turn on SSH (a public key is better than a password).
 2. Boot the Pi from the SSD with no SD card inserted. Recent bootloaders try USB and NVMe on their own. If yours doesn't, follow the Raspberry Pi documentation on boot order.
@@ -153,3 +155,36 @@ docker compose exec -T db sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB
   < /srv/miseenplace/backups/<file>.dump
 docker compose start api
 ```
+
+## Moving to an SSD
+
+Everything on the Pi is in git, in `.env` or in the database, so moving from the SD card to an SSD is a fresh install plus a restore. The SD card stays untouched, as a fallback.
+
+1. On the Pi, take a backup and note the file name it prints:
+   ```bash
+   ~/mise-en-place/scripts/backup.sh pre-ssd
+   ```
+   Copy that dump to your PC with a USB stick, or with `scp`, which Windows has built in:
+   ```bash
+   scp <user>@<pi-lan-ip>:/srv/miseenplace/backups/pre-ssd-<stamp>.dump .
+   ```
+2. Shut the Pi down with `sudo poweroff`, take the SD card out and keep it.
+3. In the Tailscale admin console, under **Machines**, remove the old Pi. The new install can then take the same name, so the `https://<name>.<tailnet>.ts.net` address stays the same.
+4. Follow sections 1–4 on the SSD. Give `.env` a new password: `--no-owner` below makes the new database user the owner of everything restored.
+5. Before the first deploy, create the backups folder on the Pi:
+   ```bash
+   sudo mkdir -p /srv/miseenplace/backups
+   sudo chown "$USER": /srv/miseenplace/backups
+   ```
+   Copy the dump back from your PC. If `scp` warns that the host key has changed, that's the fresh install: run `ssh-keygen -R <pi-lan-ip>` and try again.
+   ```bash
+   scp pre-ssd-<stamp>.dump <user>@<pi-lan-ip>:/srv/miseenplace/backups/
+   ```
+   Then restore it into the new, empty database on the Pi:
+   ```bash
+   cd ~/mise-en-place
+   docker compose up -d --wait db
+   docker compose exec -T db sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --exit-on-error' \
+     < /srv/miseenplace/backups/pre-ssd-<stamp>.dump
+   ```
+6. Carry on with sections 5 and 6, then the checks. `deploy.sh` applies any migrations newer than the dump.
