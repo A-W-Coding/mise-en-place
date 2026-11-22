@@ -3,9 +3,9 @@
 # Mise en place: hardening plan (Phase 1 to Phase 2)
 
 > **Status**
-> - Current step: **Step 8: Phase 2, the Pi with Tailscale**. The done-when checks all pass (2026-11-22). Still open: the SSD (8.1) and the off-Pi copy (8.7: Backblaze B2 with restic; the script is written, the account and the Pi setup are next). After Step 8 comes the Phase 3 gate
-> - Last updated: 2026-11-22 (Step 8: the off-Pi copy goes to Backblaze B2; `scripts/offsite.sh` and runbook section 7)
-> - Blockers: the SSD for 8.1, about a month away; the Backblaze account and the Pi setup for 8.7 (you)
+> - Current step: **Step 8: Phase 2, the Pi with Tailscale**. The done-when checks all pass (2026-11-22). Still open: the SSD (8.1, about a month away); images backups (8.7) wait for Phase 3. After Step 8 comes the Phase 3 gate, which can start while the SSD is on its way
+> - Last updated: 2026-11-22 (Step 8: the off-site copy to Backblaze B2 is live, and a restore from it passed)
+> - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
 - Work through the steps in order. Each step gives a goal, why it matters, tasks as checkboxes, and a "done when" test.
@@ -431,7 +431,7 @@ exit 1
 
 ### 8.7 Backups (V4)
 - [x] Add a daily cron job that runs `pg_dump -Fc` through `docker compose exec -T`, saves the dump to the SSD and keeps 7 days of dumps (spec §6.2). Put the commands in a script, `scripts/backup.sh`, rather than in the crontab line itself. The script is written and tested locally; the cron line is in `docs/deployment.md`. The line was added to the Pi's crontab on 2026-11-22 (03:30 daily); its first run is on 2026-11-23
-- [ ] Keep an encrypted copy off the Pi, for example with restic or rclone's crypt backend, on another machine or in cloud storage. **Answered 2026-11-22: Backblaze B2, with restic.** `scripts/offsite.sh` and section 7 of `docs/deployment.md`; tick once the first copy is in B2 and a restore from it has passed
+- [x] Keep an encrypted copy off the Pi, for example with restic or rclone's crypt backend, on another machine or in cloud storage. **Answered 2026-11-22: Backblaze B2, with restic.** `scripts/offsite.sh` and section 7 of `docs/deployment.md`. The first copy went up on 2026-11-22, and a restore from it passed the restore check
 - [ ] Back up the images directory as well, once Phase 3 adds images
 - [x] **Test a restore:** restore a dump into a scratch database, for example with `pg_restore -d miseenplace_restore_check`, and compare row counts with the live database. `scripts/restore-check.sh` does this. It passed locally, and on the Pi on 2026-11-22
 
@@ -752,3 +752,20 @@ First, settle D7–D11. Then write the Phase 3 spec segments, taking in the desi
     - In the cron line, a failed backup skips the copy.
 
   Next: set up B2 and the Pi from section 7 of the runbook, including the test restore from B2, then tick 8.7. After that, the Phase 3 gate.
+- **2026-11-22:** Step 8: the off-site copy is live, and a restore from it passed (8.7 ticked).
+  - PR #8's CI passed: run #17 on the pull request and run #18 on the merge into `main`.
+  - **Backblaze:**
+    - The first bucket's name had capitals. Backblaze's bucket docs say buckets used through the S3-compatible API must follow S3's naming rules, which allow lowercase only, and a bucket can't be renamed. So it was replaced by a lowercase one before first use, and the runbook now says to use lowercase.
+    - The Pi's key is limited to that bucket, with Read and Write.
+      - "Allow listing all bucket names" is ticked, because B2's S3-compatible API needs it for a key limited to one bucket.
+      - It has no file name prefix and no duration. A duration would make the key expire, and the nightly copy would quietly stop.
+      - The runbook now lists these options.
+  - **On the Pi:**
+    - restic is installed. Its settings are in `~/.config/miseenplace/restic.env`, with a copy in your password manager on your main PC.
+    - `init` and the first copy worked. The snapshot shows the host as `miseenplace`, the fixed name from `offsite.sh`.
+    - The cron line now runs `backup.sh && offsite.sh` at 03:30, and `crontab -l` shows it once.
+    - **Test restore from B2:** `scripts/offsite.sh restore latest` brought the backups folder back. `restore-check.sh` then passed on its newest dump, `pre-deploy-20261122-202542.dump`: 0 recipes, 0 ingredients, 0 lines and 5 migrations, the same as the live database, which started fresh.
+  - **Step 8 now:** every box is ticked except the SSD (8.1, about a month away) and the images backups, which wait for Phase 3.
+  - **To check on 2026-11-23:** after the 03:30 run, `~/miseenplace-backup.log` should show `Backed up to …` and restic's `snapshot … saved`.
+
+  Next: the SSD when it arrives, following "Moving to an SSD" in `docs/deployment.md`. Meanwhile, the Phase 3 gate (D7–D11) can start, if you want.
