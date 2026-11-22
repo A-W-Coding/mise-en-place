@@ -772,7 +772,8 @@ The web client is a React single-page app, installable as a PWA, and the only us
   - A small button adds a timer, with a length and an optional label. Several can run at once.
   - Running timers are small chips at the edge of the screen, and never cover the recipe.
   - A timer that finishes plays a sound, vibrates where supported, and grows until it's dismissed.
-  - Each counts from its end time rather than counting ticks, so it stays right if the screen locks. If you've switched to another app when it ends, it rings when you come back.
+  - Each counts from its end time rather than counting ticks, so it stays right if the screen locks.
+  - A timer must alert at zero even when another app is open. A web page can't do that by itself on Android, because the browser pauses it soon after you switch away. How it's done is decision D14.
   - In 3b, a step with a `timerSeconds` gets a small button beside it that starts that timer.
 - **Printing:** a print stylesheet reduces a recipe to its ingredients and method, without navigation or buttons.
 

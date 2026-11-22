@@ -5,7 +5,7 @@
 > **Status**
 > - Current step: **Step 9: shared code and API changes for the client**, the first of Phase 3a's Steps 9–14 (written 2026-11-22). The Phase 3 gate is done. Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
 > - Last updated: 2026-11-22 (Phase 3a: Steps 9–14 written; cooking mode is a keep-the-screen-on switch with small timers; D13 partly answered)
-> - Blockers: the UI mockups and the rest of D13 before Step 10 (together); the SSD for 8.1, about a month away
+> - Blockers: the UI mockups and the rest of D13 before Step 10 (together); D14 before Step 13 (you); the SSD for 8.1, about a month away
 
 ## How to use this file
 - Work through the steps in order. Each step gives a goal, why it matters, tasks as checkboxes, and a "done when" test.
@@ -59,6 +59,7 @@ The rule that reconciles them: **settle the spec first, then bring the code in l
 | D11 | Image upload rules | Allowed types, size and pixel caps, re-encoding (S4) | Phase 3 gate | **Decided 2026-11-22:** JPEG, PNG and WebP, recognised from the contents (SVG, GIF and HEIC rejected). At most 15 MB and 50 megapixels, checked before decoding. Each image is turned upright, then re-encoded with sharp to WebP at 2000 px on the long side, plus a 400 px thumbnail, with all metadata stripped. The original isn't kept. Server-generated filenames, 10 images per recipe, stored in a Docker volume that's backed up with the database |
 | D12 | Nutrition data source | **USDA FoodData Central** as the primary source. Use Spoonacular only for live, uncached extras (V1) | Phase 6 | Deferred |
 | D13 | Styling | **Plain CSS with CSS Modules**, built into Vite. Nothing new to learn or upgrade, styles are scoped to each component, and CSS custom properties hold the sizes and colours cooking mode and printing override. Alternatives: Tailwind (utility classes in the markup, quick once learned) or a component library such as Mantine (ready-made forms and dialogs, but heavier and opinionated) | Step 10 | **Partly answered 2026-11-22: plain CSS**, with no Tailwind or component library. Whether to use CSS Modules or plain stylesheets is decided after the UI mockups, before Step 10 |
+| D14 | Timer alerts when the app isn't on screen | **Web Push from the Pi.** On Android, Firefox pauses a page soon after you switch away, so the page alone can't ring at zero. Instead, the app tells the Pi when a timer starts, and at zero the Pi sends a push, which the phone shows as a notification with sound and vibration, whatever app is open. It needs notification permission (asked once, at the first timer), VAPID keys in the Pi's `.env`, a small table of running timers so a restart can't lose one (3a's only schema change), and a connection at that moment. The push travels encrypted through Mozilla's push service. Firefox for Android has had push bugs with installed apps, so the first task would be a quick test on your phone. Alternative: timers ring only while the app is on screen, which cooking mode keeps it, and background alerts wait for Phase 5, which already lists push | Step 13 | Deferred |
 
 ## Revised phase map
 | Phase | Original | Proposed |
@@ -569,7 +570,8 @@ Before starting: make the UI mockups together (the recipe list, recipe page, edi
   - a small button adds one, with a length and an optional label, and several can run at once
   - running timers are small chips at the edge of the screen, and never cover the recipe
   - one that finishes plays a sound, vibrates where supported, and grows until dismissed
-  - each works from its end time rather than counting ticks, so it stays right if the screen locks. If you've switched to another app, it rings when you come back
+  - each works from its end time rather than counting ticks, so it stays right if the screen locks
+  - ringing at zero while another app is open follows D14
 - [ ] Component tests for the timers, with fake timers. Playwright: turn cooking mode on and off, and run two timers at once
 
 ### 13.2 Printing
@@ -989,5 +991,6 @@ Before starting: make the UI mockups together (the recipe list, recipe page, edi
   - **Timers: several at once, in 3a,** moved from Phase 5. They're for mid-length waits such as "stir every 15 minutes", not short steps or the oven, which has its own. Most recipes won't need one, so they stay small: a button to add one with an optional label, and small chips at the edge of the screen that never cover the recipe.
   - In 3b, a step with a timer gets a small button beside it.
   - Updated to match: technical spec §3.4 and §5.6, the design spec's Phase 3a, 3b, 5 and 6 (the M1 note), and Steps 13 and 14.
+  - **D14 added: timer alerts when the app isn't on screen.** A timer must ring at zero whatever app is open, and a web page can't do that alone on Android. Recommended: Web Push from the Pi. It's needed before Step 13.
 
   Next: Step 9. The mockups can happen any time before Step 10.
