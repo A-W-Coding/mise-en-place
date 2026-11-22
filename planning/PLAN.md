@@ -3,7 +3,7 @@
 # Mise en place: hardening plan (Phase 1 to Phase 2)
 
 > **Status**
-> - Current step: **Step 8: Phase 2, the Pi with Tailscale**. The done-when checks all pass (2026-11-22). Still open: four quick confirmations on the Pi, the SSD (8.1) and the encrypted off-Pi copy (8.7). After Step 8 comes the Phase 3 gate
+> - Current step: **Step 8: Phase 2, the Pi with Tailscale**. The done-when checks all pass (2026-11-22). Still open: unattended upgrades and the backup cron line on the Pi, the SSD (8.1) and the encrypted off-Pi copy (8.7). After Step 8 comes the Phase 3 gate
 > - Last updated: 2026-11-22 (Step 8: the Pi switched over, all four checks pass, specs updated)
 > - Blockers: the SSD for 8.1, about a month away; choosing where the encrypted off-Pi copy goes (8.7)
 
@@ -350,15 +350,15 @@ Later-phase segments wait until just before their phase (see the Backlog).
 
 ### 8.1 Pi and operating system (V4)
 - [ ] Install 64-bit Raspberry Pi OS (Lite is fine), booting from an SSD rather than an SD card. **On the SD card for now (2026-11-22):** the SSD is about a month away. "Moving to an SSD" in `docs/deployment.md` covers the move; tick this once the Pi boots from the SSD
-- [ ] Install Docker Engine with the Compose plugin, and turn on unattended security updates. Docker is in (`get-docker.sh`, Docker's own package repository); unattended upgrades still need confirming on the Pi
+- [ ] Install Docker Engine with the Compose plugin, and turn on unattended security updates. Docker is in (`get-docker.sh`, Docker's own package repository). Unattended upgrades weren't installed, because section 1 step 4 of the runbook was skipped; that's next
 
 ### 8.2 Tailscale (F1, S1)
 - [x] Install Tailscale, sign in, and give the machine a bland name. The name ends up in public certificate-transparency logs as `<name>.<tailnet>.ts.net`. It's `kitchen-pi`
-- [ ] In the Tailscale admin console:
+- [x] In the Tailscale admin console:
   - **Disable key expiry** for the Pi. By default, device keys expire after 180 days and the device drops off your tailnet.
   - Turn on MagicDNS and **HTTPS certificates**.
 
-  MagicDNS and HTTPS work, because the phone reaches the `ts.net` address over HTTPS. Key expiry still needs confirming
+  MagicDNS and HTTPS work, because the phone reaches the `ts.net` address over HTTPS, and `kitchen-pi` shows **Expiry disabled**. The phone keeps its key expiry, which is right for a device that can be lost
 - [x] Run `tailscale serve --bg 3000`. It serves `https://<name>.<tailnet>.ts.net` and forwards to `127.0.0.1:3000`, and it keeps running across reboots. Funnel is off: the status says "tailnet only"
 
 ### 8.3 Production Compose file
@@ -427,10 +427,10 @@ docker compose logs --tail=100 api >&2
 exit 1
 ```
 
-- [ ] Write `scripts/deploy.sh` from the sketch, and test it twice. Written, and run twice against a local copy of the production stack. On the Pi it has run once, the first deploy; tick after a second run
+- [x] Write `scripts/deploy.sh` from the sketch, and test it twice. Written, and run twice against a local copy of the production stack. On the Pi, the first deploy and a second run on 2026-11-22 both ended `Deploy OK`
 
 ### 8.7 Backups (V4)
-- [ ] Add a daily cron job that runs `pg_dump -Fc` through `docker compose exec -T`, saves the dump to the SSD and keeps 7 days of dumps (spec §6.2). Put the commands in a script, `scripts/backup.sh`, rather than in the crontab line itself. The script is written and tested locally; the cron line is in `docs/deployment.md`. The line on the Pi still needs confirming with `crontab -l`
+- [ ] Add a daily cron job that runs `pg_dump -Fc` through `docker compose exec -T`, saves the dump to the SSD and keeps 7 days of dumps (spec §6.2). Put the commands in a script, `scripts/backup.sh`, rather than in the crontab line itself. The script is written and tested locally; the cron line is in `docs/deployment.md`. The line didn't show up in the Pi's crontab; adding it is next
 - [ ] Keep an encrypted copy off the Pi, for example with restic or rclone's crypt backend, on another machine or in cloud storage
 - [ ] Back up the images directory as well, once Phase 3 adds images
 - [x] **Test a restore:** restore a dump into a scratch database, for example with `pg_restore -d miseenplace_restore_check`, and compare row counts with the live database. `scripts/restore-check.sh` does this. It passed locally, and on the Pi on 2026-11-22
@@ -701,11 +701,11 @@ First, settle D7–D11. Then write the Phase 3 spec segments, taking in the desi
     3. ✅ After `sudo reboot`, both services came back healthy on their own, `ss` showed the same, and the phone check passed again.
     4. ✅ `scripts/backup.sh` then `scripts/restore-check.sh`: passed.
   - **Ticked:** 8.2's name and `serve`, 8.4's build on the Pi, 8.7's restore test, and the four done-when boxes.
-  - **To confirm on the Pi, then tick:**
-    - unattended upgrades (8.1)
-    - key expiry (8.2)
-    - the cron line (8.7)
-    - a second `deploy.sh` run (8.6)
+  - **Checked on the Pi afterwards:**
+    - ✅ A second `deploy.sh` run ended `Deploy OK` (8.6 ticked).
+    - ✅ `kitchen-pi` shows **Expiry disabled** (8.2 ticked). The phone keeps its expiry, which is right for a device that can be lost.
+    - ❌ `unattended-upgrades` isn't installed, because section 1 step 4 of the runbook was skipped (8.1).
+    - ❌ The backup cron line didn't show up: the crontab's last line was blank (8.7).
   - **Specs:**
     - Technical spec:
       - §6.2 now describes the real setup: the Compose file, `tailscale serve`, `deploy.sh` and the backups.
@@ -723,4 +723,4 @@ First, settle D7–D11. Then write the Phase 3 spec segments, taking in the desi
     - the three old scripts in your home folder
   - You may want to archive `AWhite-Code/mise-en-place` on GitHub, so nothing pulls from it by mistake again.
 
-  Next: the four confirmations, then choosing where the off-Pi copy goes (8.7). After that, the Phase 3 gate.
+  Next: install unattended upgrades and add the cron line, then choose where the off-Pi copy goes (8.7). After that, the Phase 3 gate.
