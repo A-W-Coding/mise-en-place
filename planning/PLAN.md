@@ -3,8 +3,8 @@
 # Mise en place: hardening plan (Phase 1 to Phase 2)
 
 > **Status**
-> - Current step: **Step 8: Phase 2, the Pi with Tailscale**. The done-when checks all pass (2026-11-22). Still open: the SSD (8.1, about a month away); images backups (8.7) wait for Phase 3. After Step 8 comes the Phase 3 gate, which can start while the SSD is on its way
-> - Last updated: 2026-11-22 (Step 8: the off-site copy to Backblaze B2 is live, and a restore from it passed)
+> - Current step: **Phase 3 gate**. D7–D11 are settled (2026-11-22); next come the Phase 3 spec segments. Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
+> - Last updated: 2026-11-22 (Phase 3 gate: D7–D11 settled, all as recommended)
 > - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
@@ -52,11 +52,11 @@ The rule that reconciles them: **settle the spec first, then bring the code in l
 | D4 | Postgres version | **17**, in dev, CI and on the Pi, adopted now while dev data is disposable. 18 also works but moves the Docker data path (see the Step 3 note) | Step 1 | **Decided 2026-10-27: 17.** The dev data is disposable (one placeholder recipe) |
 | D5 | Move Tailscale into Phase 2 | **Yes.** The PWA needs HTTPS and a single origin (F1) | Before Step 7 | **Decided 2026-10-27: yes** |
 | D6 | List response shape for pagination | **Keep a plain array and add an `X-Total-Count` header**, which breaks nothing. The alternative is a `{ items, total, limit, offset }` envelope | Step 5 | **Decided 2026-11-02: a plain array plus an `X-Total-Count` header** |
-| D7 | Electron | **Drop it or defer it.** An installed PWA already covers the desktop (V2) | Phase 3 gate | Deferred |
-| D8 | Sync design | **A full snapshot with an ETag first.** Add delta sync with tombstones only if it's ever needed (F2) | Phase 3 gate | Deferred |
-| D9 | Offline editing | **Read-only offline** to begin with (F3) | Phase 3 gate | Deferred |
-| D10 | Split Phase 3 | **Yes, into three:** 3a is the UI plus cooking mode on the Phase 1 schema; 3b is structured instructions, images and tags; 3c is offline support (V3) | Phase 3 gate | Deferred |
-| D11 | Image upload rules | Allowed types, size and pixel caps, re-encoding (S4) | Phase 3 gate | Deferred |
+| D7 | Electron | **Drop it or defer it.** An installed PWA already covers the desktop (V2) | Phase 3 gate | **Decided 2026-11-22: drop it.** The installed PWA is the desktop app; Electron can come back if a real need appears |
+| D8 | Sync design | **A full snapshot with an ETag first.** Add delta sync with tombstones only if it's ever needed (F2) | Phase 3 gate | **Decided 2026-11-22: a full snapshot with an ETag.** Delta sync only if it's ever needed |
+| D9 | Offline editing | **Read-only offline** to begin with (F3) | Phase 3 gate | **Decided 2026-11-22: read-only offline.** Editing waits for a connection |
+| D10 | Split Phase 3 | **Yes, into three:** 3a is the UI plus cooking mode on the Phase 1 schema; 3b is structured instructions, images and tags; 3c is offline support (V3) | Phase 3 gate | **Decided 2026-11-22: three parts, as recommended.** 3b also takes sections, equipment and the missing endpoints (F6) |
+| D11 | Image upload rules | Allowed types, size and pixel caps, re-encoding (S4) | Phase 3 gate | **Decided 2026-11-22:** JPEG, PNG and WebP, recognised from the contents (SVG, GIF and HEIC rejected). At most 15 MB and 50 megapixels, checked before decoding. Each image is turned upright, then re-encoded with sharp to WebP at 2000 px on the long side, plus a 400 px thumbnail, with all metadata stripped. The original isn't kept. Server-generated filenames, 10 images per recipe, stored in a Docker volume that's backed up with the database |
 | D12 | Nutrition data source | **USDA FoodData Central** as the primary source. Use Spoonacular only for live, uncached extras (V1) | Phase 6 | Deferred |
 
 ## Revised phase map
@@ -64,7 +64,7 @@ The rule that reconciles them: **settle the spec first, then bring the code in l
 |---|---|---|
 | 1 | Backend API | Backend API **plus hardening** (Steps 1–7 below) |
 | 2 | Pi on the home network | The Pi **plus Tailscale HTTPS** from day one (Step 8) |
-| 3 | Desktop UI (a very large phase) | The UI, gated by D7–D11 and probably split into 3a, 3b and 3c |
+| 3 | Desktop UI (a very large phase) | The UI, gated by D7–D11 and split into 3a, 3b and 3c (D10) |
 | 4 | Global access via Tailscale | Hardening and monitoring, since Tailscale is already done |
 | 5 | Mobile polish | Unchanged |
 | 6 | Enhanced features | Unchanged, except nutrition comes from USDA FoodData Central (D12) |
@@ -442,7 +442,7 @@ exit 1
 - [x] A restore test has passed
 
 ## Phase 3 gate (before any UI code)
-First, settle D7–D11. Then write the Phase 3 spec segments, taking in the design-review items that apply to Phase 3:
+First, settle D7–D11 (**done 2026-11-22**, all as recommended). Then write the Phase 3 spec segments, taking in the design-review items that apply to Phase 3:
 - F1: a single HTTPS origin
 - F2: the gaps in timestamp-based sync
 - F3: edit conflicts, and client-generated ids for offline creation
@@ -769,3 +769,16 @@ First, settle D7–D11. Then write the Phase 3 spec segments, taking in the desi
   - **To check on 2026-11-23:** after the 03:30 run, `~/miseenplace-backup.log` should show `Backed up to …` and restic's `snapshot … saved`.
 
   Next: the SSD when it arrives, following "Moving to an SSD" in `docs/deployment.md`. Meanwhile, the Phase 3 gate (D7–D11) can start, if you want.
+- **2026-11-22:** Phase 3 gate: D7–D11 settled, all as recommended.
+  - PR #9's CI passed: run #19 on the pull request and run #20 on the merge into `main`.
+  - **D7, Electron: dropped.** An installed PWA opens in its own window and works offline, from one codebase and one deploy. Electron would add packaging, signing and updates, and a desktop build could fall behind the API.
+  - **D8: a full snapshot with an ETag.** `GET /api/sync` returns everything, with a fingerprint of the response, and a 304 when nothing has changed. It can't miss a child edit or a delete, which timestamp-based delta sync can (F2). A personal collection is a few hundred KB at most.
+  - **D9: read-only offline.** Reading and cooking mode work offline, and editing waits for a connection, so two devices can't conflict (F3). It fits the main use, reading on a phone while cooking.
+  - **D10: three parts,** each a step of its own:
+    - 3a: the UI and cooking mode, on the Phase 1 schema. A usable app at the end of it.
+    - 3b: structured instructions and sections, images, tags and equipment, and the missing endpoints (F6, F7).
+    - 3c: offline support, following D8 and D9.
+  - **D11: the image rules in the Decisions table.** Re-encoding with sharp strips the GPS data phones embed (S4). HEIC is rejected because sharp's standard build can't read it; iPhones normally send JPEG from Safari.
+  - The specs still describe these decisions as open; the Phase 3 spec segments will bring them in.
+
+  Next: draft the Phase 3 spec segments.
