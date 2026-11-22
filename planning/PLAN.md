@@ -3,9 +3,9 @@
 # Mise en place: hardening plan (Phase 1 to Phase 2)
 
 > **Status**
-> - Current step: **Step 8: Phase 2, the Pi with Tailscale** (the repo side is done; next, the Pi switches over from its September setup, on the SD card for now)
-> - Last updated: 2026-11-22 (Step 8: what's on the Pi, the SD card for now, log rotation, moving to an SSD)
-> - Blockers: the switch-over on the Pi (you); the SSD for 8.1, about a month away; choosing where the encrypted off-Pi copy goes (8.7)
+> - Current step: **Step 8: Phase 2, the Pi with Tailscale**. The done-when checks all pass (2026-11-22). Still open: four quick confirmations on the Pi, the SSD (8.1) and the encrypted off-Pi copy (8.7). After Step 8 comes the Phase 3 gate
+> - Last updated: 2026-11-22 (Step 8: the Pi switched over, all four checks pass, specs updated)
+> - Blockers: the SSD for 8.1, about a month away; choosing where the encrypted off-Pi copy goes (8.7)
 
 ## How to use this file
 - Work through the steps in order. Each step gives a goal, why it matters, tasks as checkboxes, and a "done when" test.
@@ -350,14 +350,16 @@ Later-phase segments wait until just before their phase (see the Backlog).
 
 ### 8.1 Pi and operating system (V4)
 - [ ] Install 64-bit Raspberry Pi OS (Lite is fine), booting from an SSD rather than an SD card. **On the SD card for now (2026-11-22):** the SSD is about a month away. "Moving to an SSD" in `docs/deployment.md` covers the move; tick this once the Pi boots from the SSD
-- [ ] Install Docker Engine with the Compose plugin, and turn on unattended security updates
+- [ ] Install Docker Engine with the Compose plugin, and turn on unattended security updates. Docker is in (`get-docker.sh`, Docker's own package repository); unattended upgrades still need confirming on the Pi
 
 ### 8.2 Tailscale (F1, S1)
-- [ ] Install Tailscale, sign in, and give the machine a bland name. The name ends up in public certificate-transparency logs as `<name>.<tailnet>.ts.net`
+- [x] Install Tailscale, sign in, and give the machine a bland name. The name ends up in public certificate-transparency logs as `<name>.<tailnet>.ts.net`. It's `kitchen-pi`
 - [ ] In the Tailscale admin console:
   - **Disable key expiry** for the Pi. By default, device keys expire after 180 days and the device drops off your tailnet.
   - Turn on MagicDNS and **HTTPS certificates**.
-- [ ] Run `tailscale serve --bg 3000`. It serves `https://<name>.<tailnet>.ts.net` and forwards to `127.0.0.1:3000`, and it keeps running across reboots
+
+  MagicDNS and HTTPS work, because the phone reaches the `ts.net` address over HTTPS. Key expiry still needs confirming
+- [x] Run `tailscale serve --bg 3000`. It serves `https://<name>.<tailnet>.ts.net` and forwards to `127.0.0.1:3000`, and it keeps running across reboots. Funnel is off: the status says "tailnet only"
 
 ### 8.3 Production Compose file
 - [x] `api` service:
@@ -376,7 +378,7 @@ Later-phase segments wait until just before their phase (see the Backlog).
 - [x] Use a multi-stage build, and run the app as the non-root `node` user
 - [x] Base it on a Debian "slim" Node image rather than Alpine, and install `openssl` in it, because Prisma needs it
 - [x] Make the Prisma CLI available in the runtime image, because the deploy script runs `prisma migrate deploy` from it. Either move `prisma` into `dependencies` or add a dedicated migration stage
-- [ ] Build the image on the Pi, where it's natively arm64. If you ever build it on another machine for the Pi, add the arm64 target to `binaryTargets` (Prisma 6)
+- [x] Build the image on the Pi, where it's natively arm64. If you ever build it on another machine for the Pi, add the arm64 target to `binaryTargets` (Prisma 6)
 
 ### 8.5 Optional: check the Tailscale identity (S1)
 - [x] Add middleware that returns 403 unless the `Tailscale-User-Login` header equals the `ALLOWED_TAILSCALE_LOGIN` environment variable. **Answered 2026-11-02: not now.** Tailscale already limits access to your own devices; revisit before sharing the Pi with anyone.
@@ -425,19 +427,19 @@ docker compose logs --tail=100 api >&2
 exit 1
 ```
 
-- [ ] Write `scripts/deploy.sh` from the sketch, and test it twice. Written, and run twice against a local copy of the production stack; tick once it has run twice on the Pi
+- [ ] Write `scripts/deploy.sh` from the sketch, and test it twice. Written, and run twice against a local copy of the production stack. On the Pi it has run once, the first deploy; tick after a second run
 
 ### 8.7 Backups (V4)
-- [ ] Add a daily cron job that runs `pg_dump -Fc` through `docker compose exec -T`, saves the dump to the SSD and keeps 7 days of dumps (spec §6.2). Put the commands in a script, `scripts/backup.sh`, rather than in the crontab line itself. The script is written and tested locally; the cron line is in `docs/deployment.md`
+- [ ] Add a daily cron job that runs `pg_dump -Fc` through `docker compose exec -T`, saves the dump to the SSD and keeps 7 days of dumps (spec §6.2). Put the commands in a script, `scripts/backup.sh`, rather than in the crontab line itself. The script is written and tested locally; the cron line is in `docs/deployment.md`. The line on the Pi still needs confirming with `crontab -l`
 - [ ] Keep an encrypted copy off the Pi, for example with restic or rclone's crypt backend, on another machine or in cloud storage
 - [ ] Back up the images directory as well, once Phase 3 adds images
-- [ ] **Test a restore:** restore a dump into a scratch database, for example with `pg_restore -d miseenplace_restore_check`, and compare row counts with the live database. `scripts/restore-check.sh` does this, and passed locally
+- [x] **Test a restore:** restore a dump into a scratch database, for example with `pg_restore -d miseenplace_restore_check`, and compare row counts with the live database. `scripts/restore-check.sh` does this. It passed locally, and on the Pi on 2026-11-22
 
 **Done when:**
-- [ ] A phone connected to Tailscale gets a 200 from `https://<name>.<tailnet>.ts.net/api/health`
-- [ ] From another device on the home network, `http://<pi-lan-ip>:3000` and port 5432 on the Pi both refuse connections
-- [ ] After the Pi reboots, everything comes back without intervention
-- [ ] A restore test has passed
+- [x] A phone connected to Tailscale gets a 200 from `https://<name>.<tailnet>.ts.net/api/health`
+- [x] From another device on the home network, `http://<pi-lan-ip>:3000` and port 5432 on the Pi both refuse connections
+- [x] After the Pi reboots, everything comes back without intervention
+- [x] A restore test has passed
 
 ## Phase 3 gate (before any UI code)
 First, settle D7–D11. Then write the Phase 3 spec segments, taking in the design-review items that apply to Phase 3:
@@ -681,3 +683,44 @@ First, settle D7–D11. Then write the Phase 3 spec segments, taking in the desi
   - **`docs/deployment.md`:** a note on starting from the SD card, and a new section, "Moving to an SSD": back up, copy the dump to your PC, install on the SSD from sections 1–4, restore into the empty database, then deploy. The SD card stays untouched as a fallback.
 
   Next: the switch-over on the Pi, then the runbook from section 3.
+- **2026-11-22:** Step 8: the Pi is switched over, and all four done-when checks pass.
+  - PR #6's CI passed: run #13 on the pull request and run #14 on the merge into `main`.
+  - **Switch-over:**
+    1. Rebooted, so your session picked up the `docker` group.
+    2. Removed the two old cron lines.
+    3. Took down the old stack without `-v`, so its volume stays.
+    4. Stashed the September edits.
+    5. Kept the old `.env` as `.env.september`.
+  - **Two snags:**
+    - The Pi's `origin` was the original repo, `AWhite-Code/mise-en-place`, which stopped at `ff2d9f7` (3 Mar). This repo, `A-W-Coding/mise-en-place`, was created on the evening of 16 Sep, after the Pi had been set up from the old one, so `git pull` said "Already up to date". `git remote set-url` fixed it, and the pull then fast-forwarded to `e725aeb`.
+    - `docker compose config -q` only warned about unset variables. The production file stops with an error when a value is missing, so the warnings meant Compose had found no usable `.env` and fallen back to the dev file. Rewriting `.env` in one go, with the password generated inside the file, fixed it. Section 4 of `docs/deployment.md` now writes it that way.
+  - **Tailscale:** the Pi is `kitchen-pi`. HTTPS certificates are on and Funnel is off, so `tailscale serve status` shows `https://kitchen-pi.<tailnet>.ts.net (tailnet only)` forwarding to `http://127.0.0.1:3000`.
+  - **Checks:**
+    1. ✅ The phone, on Tailscale, gets `{"status":"ok"}` from `/api/health`.
+    2. ✅ From your PC over the home network, ports 3000 and 5432 are closed. Ping and SSH both reach the Pi, so the test is real. IPv6 couldn't be tested from the PC, because even SSH didn't answer there. Instead, `ss -tln` on the Pi shows the only listener on either port is `127.0.0.1:3000`.
+    3. ✅ After `sudo reboot`, both services came back healthy on their own, `ss` showed the same, and the phone check passed again.
+    4. ✅ `scripts/backup.sh` then `scripts/restore-check.sh`: passed.
+  - **Ticked:** 8.2's name and `serve`, 8.4's build on the Pi, 8.7's restore test, and the four done-when boxes.
+  - **To confirm on the Pi, then tick:**
+    - unattended upgrades (8.1)
+    - key expiry (8.2)
+    - the cron line (8.7)
+    - a second `deploy.sh` run (8.6)
+  - **Specs:**
+    - Technical spec:
+      - §6.2 now describes the real setup: the Compose file, `tailscale serve`, `deploy.sh` and the backups.
+      - §6.3 and §2.4 describe Phase 4 as hardening and monitoring, since remote access arrived in Phase 2. The conclusion matches.
+      - §6.1 no longer mentions the dev file's old `api` service.
+    - Design spec: Phase 2 is marked as running, with its success criteria met and the SSD and off-Pi copy still open.
+  - **Still open in Step 8:**
+    - the SSD (8.1, about a month away)
+    - the encrypted off-Pi copy (8.7, which needs your choice of where)
+    - backups of the images directory, which wait for Phase 3
+  - **Left on the Pi until the SSD move:**
+    - the old volume `mise-en-place_postgres-data`
+    - `~/backups` and `~/backups-before-step8`
+    - `.env.september` and the stash
+    - the three old scripts in your home folder
+  - You may want to archive `AWhite-Code/mise-en-place` on GitHub, so nothing pulls from it by mistake again.
+
+  Next: the four confirmations, then choosing where the off-Pi copy goes (8.7). After that, the Phase 3 gate.

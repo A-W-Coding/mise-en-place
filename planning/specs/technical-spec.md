@@ -344,17 +344,12 @@ Phase 3 expands the schema to support the desktop user interface with structured
    - Support colored tags for visual organization
    - Allow filtering and searching by tags
  
-### 2.4 Phase 4: Pi Deployment (Global Access)
- 
-Phase 4 focuses on remote access rather than schema changes.
- 
-**Infrastructure Focus:**
-- VPN configuration (Tailscale or similar)
-- Security hardening
-- Performance optimization for remote access
- 
+### 2.4 Phase 4: Hardening and Monitoring
+
+Remote access moved into Phase 2, so Phase 4 is about keeping the running system healthy: alerts, dependency updates and the Prisma upgrade (§6.3).
+
 No schema changes in this phase.
- 
+
 ### 2.5 Phase 5: Mobile UI
  
 Phase 5 may introduce minor schema additions to support mobile-specific features.
@@ -842,7 +837,7 @@ volumes:
 - **A named volume**, not `./postgres-data` in the repository, so a `git clean` can never delete the database.
 - **Two databases, one container.** On first start with an empty volume, Postgres creates `POSTGRES_DB` (`miseenplace_dev`) and runs `docker/initdb/`, which creates `miseenplace_test`.
 
-The Compose file also defines an `api` service built from the `Dockerfile`. It isn't used in development, and `docker compose up -d` without a service name would build and start it, so development starts only `db`. Step 8 reworks the `api` service for the Pi.
+This file is for development only. The Pi runs the production file, `docker-compose.prod.yml` (§6.2).
 
 **Configuration:** `.env` (git-ignored; `.env.example` is the template) sets `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` and `DATABASE_URL` for development. `.env.test` sets only `DATABASE_URL`, pointing at the test database. Database names must end in `_dev` and `_test`, or the seed and the test reset refuse to run (§5.3).
 
@@ -855,55 +850,42 @@ The Compose file also defines an `api` service built from the `Dockerfile`. It i
 
 After changing `schema.prisma`, create a migration with `npx prisma migrate dev --name <name>`. If it offers to reset the database, say no and find out why first.
  
-### 6.2 Phase 2: Pi Deployment (Local)
- 
-**Infrastructure:**
-- Docker on Raspberry Pi
-- PostgreSQL container
-- Node.js API container
-- Persistent volumes for data
- 
-**Deployment Script:**
-```bash
-#!/bin/bash
-# Deploy to Raspberry Pi
- 
-# Create backup
-docker exec recipe-db pg_dump -U $POSTGRES_USER $POSTGRES_DB > backup.sql
- 
-# Pull latest code
-git pull origin main
- 
-# Rebuild and restart
-docker-compose down
-docker-compose build
-docker-compose up -d
- 
-# Run migrations
-docker exec recipe-api npx prisma migrate deploy
- 
-# Verify health
-curl http://localhost:3000/api/health
-```
- 
-**Backup Strategy:**
-- Automated daily backups via cron
-- Backup rotation (keep last 7 days)
-- Store backups on separate storage
- 
-### 6.3 Phase 4: Global Access
- 
-**VPN Configuration:**
-- Tailscale or similar mesh VPN
-- No port forwarding required
-- Automatic key management
-- Mobile device support
- 
-**Security Considerations:**
-- VPN-only access (no public exposure)
-- Database credentials in environment variables
-- Regular dependency updates
- 
+### 6.2 Phase 2: Pi Deployment with Tailscale
+
+The API runs on a Raspberry Pi in Docker and is reachable only from the user's own devices, over Tailscale with HTTPS. `docs/deployment.md` is the runbook, from installing the operating system to the restore test.
+
+**Infrastructure** (`docker-compose.prod.yml`, Compose project `miseenplace-prod`):
+- `db`: `postgres:17`, the same version as development (D4), with a named volume and a `pg_isready` healthcheck. It has **no published port**: the API reaches it over the Compose network (S2).
+- `api`: built on the Pi from the `Dockerfile`, so it's natively arm64. It runs as the non-root `node` user, is published on `127.0.0.1:3000` only, and has a healthcheck on `/api/health`.
+- Both use `restart: unless-stopped`, so they come back after a reboot, and Docker's `local` log driver, which keeps about 100 MB of logs per container.
+- `tailscale serve --bg 3000` publishes `https://<name>.<tailnet>.ts.net` to the tailnet only and forwards it to `127.0.0.1:3000`. Tailscale issues the certificate. Funnel, which would publish to the internet, stays off.
+- `.env` on the Pi, never in git, sets `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` and `COMPOSE_FILE=docker-compose.prod.yml`. The database name has no `_dev` or `_test` suffix and the image sets `NODE_ENV=production`, so the seed and the test reset both refuse to touch it (§5.3).
+
+**Deploying** (`scripts/deploy.sh`, run by hand on the Pi):
+1. Start the database and wait until it's healthy
+2. Back up with `scripts/backup.sh`, and stop if that fails (T3)
+3. `git pull --ff-only origin main`
+4. Build the new API image while the old one keeps serving
+5. Run `prisma migrate deploy` from the new image. The Prisma CLI is a production dependency, pinned by D3
+6. Start the new version, then retry `/api/health` for up to a minute. If it never passes, print the API logs and fail
+
+Nothing pulls from GitHub on its own, so every migration runs while someone is watching.
+
+**Backups (V4):**
+- `scripts/backup.sh` runs daily from cron. It writes a `pg_dump -Fc` dump to `/srv/miseenplace/backups`, outside the repository, and keeps it only if `pg_restore` can read all of it. Only then does it remove dumps older than 7 days, so a failing backup never deletes the good ones.
+- `scripts/restore-check.sh` restores the newest dump into a scratch database and compares its row counts with the live database.
+- Still to come: an encrypted copy off the Pi, and backups of the images directory once Phase 3 adds images.
+
+**Storage:** the Pi should boot from an SSD, because PostgreSQL on an SD card is the likeliest way to lose data. "Moving to an SSD" in `docs/deployment.md` covers moving an install that started on an SD card.
+
+### 6.3 Phase 4: Hardening and Monitoring
+
+Remote access arrived with the Pi in Phase 2 (§6.2): Tailscale only, with no port forwarding and nothing exposed to the internet. Phase 4 makes the running system easier to keep healthy:
+- Uptime and disk-space alerts
+- Dependency updates as pull requests that CI tests (Dependabot or Renovate), including GitHub Actions versions
+- The Prisma upgrade, as its own task after reading that version's upgrade guide (V5)
+- Optionally, an API check that requests come from the expected Tailscale user (S1)
+
 ### 6.4 Continuous Integration
 
 **GitHub Actions Workflow** (`.github/workflows/node.js.yml`):
@@ -1026,9 +1008,9 @@ When implementing soft delete:
 This technical specification outlines the implementation plan for the Recipe App across six development phases. The approach prioritizes:
  
 1. **Working Software First** - Phase 1 delivers a complete, testable API
-2. **Incremental Deployment** - Pi deployment in Phase 2 establishes the production environment early
+2. **Incremental Deployment** - Pi deployment in Phase 2 establishes the production environment early, with Tailscale HTTPS from day one
 3. **User Interface** - Phases 3 and 5 add desktop and mobile interfaces
-4. **Global Access** - Phase 4 enables secure remote access
+4. **Hardening** - Phase 4 adds alerts, monitoring and dependency updates
 5. **Enhanced Features** - Phase 6 adds advanced functionality
  
 The schema evolves to support each phase's requirements while maintaining backward compatibility. Testing ensures reliability at each stage, and the deployment strategy balances automation with simplicity appropriate for a personal project.
