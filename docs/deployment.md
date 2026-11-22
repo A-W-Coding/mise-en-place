@@ -123,8 +123,12 @@ Section 7 adds an encrypted copy off the Pi.
 The backups folder is on the same disk as the database, so one dead SD card or SSD would take both. `scripts/offsite.sh` keeps an encrypted copy in Backblaze B2 with restic. restic encrypts on the Pi, so B2 only ever holds encrypted data.
 
 1. **Account:** sign up for B2 Cloud Storage at <https://www.backblaze.com/sign-up/cloud-storage>. When it asks for a region, choose **EU Central**. The first 10 GB are free, and the dumps are far smaller than that.
-2. **Bucket:** under **Buckets**, create one with a unique name, for example `miseenplace-` plus a few random characters. Make its files **Private**, and leave Object Lock off. Note its **Endpoint**, such as `s3.eu-central-003.backblazeb2.com`.
-3. **Key for the Pi:** under **Application Keys**, add a key named after the Pi, allowed into that bucket only, with **Read and Write** access. If the form offers **Allow List All Bucket Names**, tick it: B2's S3-compatible API needs it. Backblaze shows the key once, so keep the page open until step 5. The account's master key doesn't work with the S3-compatible API.
+2. **Bucket:** under **Buckets**, create one with a unique name, for example `miseenplace-` plus a few random characters. Use **lowercase letters only**: buckets used through B2's S3-compatible API must follow S3's naming rules, and a bucket can't be renamed later. Make its files **Private**, and leave Object Lock off. Note its **Endpoint**, such as `s3.eu-central-003.backblazeb2.com`.
+3. **Key for the Pi:** under **Application Keys**, add a key named after the Pi, allowed into that bucket only, with **Read and Write** access.
+   - Tick **Allow listing all bucket names including bucket creation dates**: B2's S3-compatible API needs it for a key limited to one bucket.
+   - Leave the file name prefix and the duration empty. A key with a duration expires, and the nightly copy would quietly stop.
+
+   Backblaze shows the key once, so keep the page open until step 5. The account's master key doesn't work with the S3-compatible API.
 4. **restic on the Pi:**
    ```bash
    sudo apt install -y restic
