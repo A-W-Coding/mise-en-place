@@ -874,7 +874,8 @@ Nothing pulls from GitHub on its own, so every migration runs while someone is w
 **Backups (V4):**
 - `scripts/backup.sh` runs daily from cron. It writes a `pg_dump -Fc` dump to `/srv/miseenplace/backups`, outside the repository, and keeps it only if `pg_restore` can read all of it. Only then does it remove dumps older than 7 days, so a failing backup never deletes the good ones.
 - `scripts/restore-check.sh` restores the newest dump into a scratch database and compares its row counts with the live database.
-- Still to come: an encrypted copy off the Pi, and backups of the images directory once Phase 3 adds images.
+- `scripts/offsite.sh` runs straight after it and keeps an encrypted copy of the backups folder in Backblaze B2, with restic over B2's S3-compatible API. It keeps 7 daily, 4 weekly and 6 monthly snapshots, and on Sundays checks a random tenth of the stored data. restic encrypts on the Pi. Its settings file, with the password, is also kept off the Pi, or the copy couldn't be decrypted.
+- Still to come: backups of the images directory once Phase 3 adds images.
 
 **Storage:** the Pi should boot from an SSD, because PostgreSQL on an SD card is the likeliest way to lose data. "Moving to an SSD" in `docs/deployment.md` covers moving an install that started on an SD card.
 

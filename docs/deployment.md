@@ -2,7 +2,7 @@
 
 How the API runs on the Pi from Phase 2: in Docker, listening on `127.0.0.1:3000` only, published to your own devices by `tailscale serve` over HTTPS. The database has no published port. [`architecture.md`](architecture.md) has the diagram.
 
-Steps 1–6 are a one-time setup. After that, deploying is one command (see [Day to day](#day-to-day)).
+Sections 1–7 are a one-time setup. After that, deploying is one command (see [Day to day](#day-to-day)).
 
 | File | What it does |
 |---|---|
@@ -11,6 +11,7 @@ Steps 1–6 are a one-time setup. After that, deploying is one command (see [Day
 | `scripts/deploy.sh` | Backs up, pulls `main`, builds, migrates, restarts, and waits for the health check |
 | `scripts/backup.sh` | Dumps the database into the backups folder, checks the dump, and removes dumps older than 7 days |
 | `scripts/restore-check.sh` | Restores a dump into a scratch database and compares row counts with the live one |
+| `scripts/offsite.sh` | Keeps an encrypted copy of the backups folder in Backblaze B2, with restic |
 
 ## What you need
 
@@ -115,7 +116,60 @@ scripts/backup.sh
 scripts/restore-check.sh
 ```
 
-An encrypted copy off the Pi is still to be set up (Step 8.7 in [`planning/PLAN.md`](../planning/PLAN.md)).
+Section 7 adds an encrypted copy off the Pi.
+
+## 7. Off-site copy
+
+The backups folder is on the same disk as the database, so one dead SD card or SSD would take both. `scripts/offsite.sh` keeps an encrypted copy in Backblaze B2 with restic. restic encrypts on the Pi, so B2 only ever holds encrypted data.
+
+1. **Account:** sign up for B2 Cloud Storage at <https://www.backblaze.com/sign-up/cloud-storage>. When it asks for a region, choose **EU Central**. The first 10 GB are free, and the dumps are far smaller than that.
+2. **Bucket:** under **Buckets**, create one with a unique name, for example `miseenplace-` plus a few random characters. Make its files **Private**, and leave Object Lock off. Note its **Endpoint**, such as `s3.eu-central-003.backblazeb2.com`.
+3. **Key for the Pi:** under **Application Keys**, add a key named after the Pi, allowed into that bucket only, with **Read and Write** access. If the form offers **Allow List All Bucket Names**, tick it: B2's S3-compatible API needs it. Backblaze shows the key once, so keep the page open until step 5. The account's master key doesn't work with the S3-compatible API.
+4. **restic on the Pi:**
+   ```bash
+   sudo apt install -y restic
+   restic version
+   ```
+5. **Settings,** in a file only you can read. This writes a generated restic password and placeholders for the rest:
+   ```bash
+   mkdir -p ~/.config/miseenplace
+   cat > ~/.config/miseenplace/restic.env <<EOF
+   RESTIC_REPOSITORY=s3:https://<endpoint>/<bucket>/miseenplace
+   AWS_DEFAULT_REGION=<region>
+   AWS_ACCESS_KEY_ID=<keyID>
+   AWS_SECRET_ACCESS_KEY=<applicationKey>
+   RESTIC_PASSWORD=$(openssl rand -hex 32)
+   EOF
+   chmod 600 ~/.config/miseenplace/restic.env
+   nano ~/.config/miseenplace/restic.env
+   ```
+   In nano, replace the four placeholders in angle brackets:
+   - the endpoint and bucket name from step 2
+   - the region, which is the middle of the endpoint: `eu-central-003` in `s3.eu-central-003.backblazeb2.com`
+   - the key ID and key from step 3
+
+   Typing them in nano rather than on the command line keeps the key out of your shell history.
+6. **Save the whole file in your password manager,** for example as a secure note (`cat ~/.config/miseenplace/restic.env` shows it). Without `RESTIC_PASSWORD`, nobody can decrypt the copy, you included. With the file, a new install can reach it.
+7. **Create the repository and make the first copy:**
+   ```bash
+   cd ~/mise-en-place
+   scripts/offsite.sh init
+   scripts/offsite.sh
+   scripts/offsite.sh snapshots
+   ```
+8. **Every night, straight after the backup:** this replaces section 6's cron line with one that runs both, and copies only if the backup succeeded:
+   ```bash
+   (crontab -l | grep -v scripts/backup.sh; echo '30 3 * * * ($HOME/mise-en-place/scripts/backup.sh && $HOME/mise-en-place/scripts/offsite.sh) >> $HOME/miseenplace-backup.log 2>&1') | crontab -
+   ```
+9. **Test a restore from B2.** restic recreates the full path under the target folder:
+   ```bash
+   scripts/offsite.sh restore latest --target /tmp/offsite-restore
+   ls -t /tmp/offsite-restore/srv/miseenplace/backups
+   scripts/restore-check.sh /tmp/offsite-restore/srv/miseenplace/backups/<newest>.dump
+   rm -rf /tmp/offsite-restore
+   ```
+
+Each night it keeps 7 daily, 4 weekly and 6 monthly snapshots. On Sundays it also downloads a random tenth of the stored data and checks it.
 
 ## Checks
 
@@ -142,6 +196,8 @@ All of these run in `~/mise-en-place` on the Pi:
 | API logs | `docker compose logs -f api` |
 | Back up now | `scripts/backup.sh` |
 | Check the newest backup restores | `scripts/restore-check.sh` |
+| Copy the backups to B2 now | `scripts/offsite.sh` |
+| List the copies in B2 | `scripts/offsite.sh snapshots` |
 
 Backups go to `/srv/miseenplace/backups`. Set `BACKUP_DIR` to use another folder, and `KEEP_DAYS` to keep dumps for longer than 7 days.
 
@@ -149,7 +205,7 @@ Never run `docker compose down -v`: `-v` deletes the database volume.
 
 ### Restoring for real
 
-This replaces everything in the live database with the dump. Take a fresh backup first, then:
+This replaces everything in the live database with the dump. Take a fresh backup first. If the dumps on the Pi are gone, fetch one from B2 first (section 7, step 9). Then:
 
 ```bash
 docker compose stop api
@@ -162,11 +218,12 @@ docker compose start api
 
 Everything on the Pi is in git, in `.env` or in the database, so moving from the SD card to an SSD is a fresh install plus a restore. The SD card stays untouched, as a fallback.
 
-1. On the Pi, take a backup and note the file name it prints:
+1. On the Pi, take a backup and note the file name it prints, then send it to B2:
    ```bash
    ~/mise-en-place/scripts/backup.sh pre-ssd
+   ~/mise-en-place/scripts/offsite.sh
    ```
-   Copy that dump to your PC with a USB stick, or with `scp`, which Windows has built in:
+   Without the off-site copy, copy the dump to your PC instead, with a USB stick or with `scp`, which Windows has built in:
    ```bash
    scp <user>@<pi-lan-ip>:/srv/miseenplace/backups/pre-ssd-<stamp>.dump .
    ```
@@ -178,7 +235,12 @@ Everything on the Pi is in git, in `.env` or in the database, so moving from the
    sudo mkdir -p /srv/miseenplace/backups
    sudo chown "$USER": /srv/miseenplace/backups
    ```
-   Copy the dump back from your PC. If `scp` warns that the host key has changed, that's the fresh install: run `ssh-keygen -R <pi-lan-ip>` and try again.
+   Fetch the dump from B2. First install restic and write `~/.config/miseenplace/restic.env` from your password manager, as in section 7, steps 4–6. Don't generate a new password: only the saved one can decrypt the copy.
+   ```bash
+   ~/mise-en-place/scripts/offsite.sh restore latest --target /tmp/offsite-restore
+   cp /tmp/offsite-restore/srv/miseenplace/backups/pre-ssd-<stamp>.dump /srv/miseenplace/backups/
+   ```
+   Without the off-site copy, copy the dump back from your PC. If `scp` warns that the host key has changed, that's the fresh install: run `ssh-keygen -R <pi-lan-ip>` and try again.
    ```bash
    scp pre-ssd-<stamp>.dump <user>@<pi-lan-ip>:/srv/miseenplace/backups/
    ```
@@ -189,4 +251,4 @@ Everything on the Pi is in git, in `.env` or in the database, so moving from the
    docker compose exec -T db sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --exit-on-error' \
      < /srv/miseenplace/backups/pre-ssd-<stamp>.dump
    ```
-6. Carry on with sections 5 and 6, then the checks. `deploy.sh` applies any migrations newer than the dump.
+6. Carry on with sections 5 and 6, then section 7 from step 8: the repository already exists. Then run the checks. `deploy.sh` applies any migrations newer than the dump.

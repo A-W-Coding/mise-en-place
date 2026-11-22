@@ -134,7 +134,7 @@ curl -X POST http://localhost:3000/api/ingredients \
 
 ## Deployment
 
-From Phase 2 the API runs on a Raspberry Pi, in Docker, on `127.0.0.1:3000` only. `tailscale serve` publishes it over HTTPS to your own devices, and the database has no published port. `scripts/deploy.sh` backs up, pulls `main`, builds, migrates and waits for the health check; `scripts/backup.sh` runs daily from cron. [`docs/deployment.md`](docs/deployment.md) covers the setup, from the operating system to the restore test.
+From Phase 2 the API runs on a Raspberry Pi, in Docker, on `127.0.0.1:3000` only. `tailscale serve` publishes it over HTTPS to your own devices, and the database has no published port. `scripts/deploy.sh` backs up, pulls `main`, builds, migrates and waits for the health check; `scripts/backup.sh` runs daily from cron, and `scripts/offsite.sh` then keeps an encrypted copy in Backblaze B2. [`docs/deployment.md`](docs/deployment.md) covers the setup, from the operating system to the restore test.
 
 ## Project structure
 
@@ -162,7 +162,7 @@ docker-compose.prod.yml  The Pi: the API and PostgreSQL
 Dockerfile               The API's production image
 docs/                    API reference, ERD, architecture, deployment
 planning/                The hardening plan, code audit, design review and specs
-scripts/                 Deploy, backup and restore-check scripts for the Pi, and a CI helper
+scripts/                 Deploy, backup, off-site and restore-check scripts for the Pi, and a CI helper
 ```
 
 ## Documentation
