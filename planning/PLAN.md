@@ -4,8 +4,8 @@
 
 > **Status**
 > - Current step: **Step 9: shared code and API changes for the client**, the first of Phase 3a's Steps 9–14 (written 2026-11-22). The Phase 3 gate is done. Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
-> - Last updated: 2026-11-22 (Phase 3a: Steps 9–14 written, and D13 added)
-> - Blockers: D13 (styling) before Step 10 (you); the SSD for 8.1, about a month away
+> - Last updated: 2026-11-22 (Phase 3a: Steps 9–14 written; cooking mode shows the whole recipe; D13 partly answered)
+> - Blockers: the UI mockups and the rest of D13 before Step 10 (together); the SSD for 8.1, about a month away
 
 ## How to use this file
 - Work through the steps in order. Each step gives a goal, why it matters, tasks as checkboxes, and a "done when" test.
@@ -58,7 +58,7 @@ The rule that reconciles them: **settle the spec first, then bring the code in l
 | D10 | Split Phase 3 | **Yes, into three:** 3a is the UI plus cooking mode on the Phase 1 schema; 3b is structured instructions, images and tags; 3c is offline support (V3) | Phase 3 gate | **Decided 2026-11-22: three parts, as recommended.** 3b also takes sections, equipment and the missing endpoints (F6) |
 | D11 | Image upload rules | Allowed types, size and pixel caps, re-encoding (S4) | Phase 3 gate | **Decided 2026-11-22:** JPEG, PNG and WebP, recognised from the contents (SVG, GIF and HEIC rejected). At most 15 MB and 50 megapixels, checked before decoding. Each image is turned upright, then re-encoded with sharp to WebP at 2000 px on the long side, plus a 400 px thumbnail, with all metadata stripped. The original isn't kept. Server-generated filenames, 10 images per recipe, stored in a Docker volume that's backed up with the database |
 | D12 | Nutrition data source | **USDA FoodData Central** as the primary source. Use Spoonacular only for live, uncached extras (V1) | Phase 6 | Deferred |
-| D13 | Styling | **Plain CSS with CSS Modules**, built into Vite. Nothing new to learn or upgrade, styles are scoped to each component, and CSS custom properties hold the sizes and colours cooking mode and printing override. Alternatives: Tailwind (utility classes in the markup, quick once learned) or a component library such as Mantine (ready-made forms and dialogs, but heavier and opinionated) | Step 10 | Deferred |
+| D13 | Styling | **Plain CSS with CSS Modules**, built into Vite. Nothing new to learn or upgrade, styles are scoped to each component, and CSS custom properties hold the sizes and colours cooking mode and printing override. Alternatives: Tailwind (utility classes in the markup, quick once learned) or a component library such as Mantine (ready-made forms and dialogs, but heavier and opinionated) | Step 10 | **Partly answered 2026-11-22: plain CSS**, with no Tailwind or component library. Whether to use CSS Modules or plain stylesheets is decided after the UI mockups, before Step 10 |
 
 ## Revised phase map
 | Phase | Original | Proposed |
@@ -489,7 +489,7 @@ Phase 3a builds the web client on the Phase 1 schema (D10). The specs are the re
 
 **Why:** setting up the build, serving, CI and Playwright once, before any screens, means each feature step only adds its own code and tests.
 
-Before starting: answer D13 (styling).
+Before starting: make the UI mockups together (the recipe list, recipe page, editor and cooking mode, at phone and laptop sizes), then settle the rest of D13: CSS Modules, or plain stylesheets.
 
 ### 10.1 The client
 - [ ] Create `web/` with Vite, React and TypeScript in strict mode, with its own `package.json` and lockfile (§3.4). Keep the API's `tsc` and ESLint away from `web/`: the root `tsconfig.json` has no `include` or `exclude` yet, so it would try to compile the client
@@ -558,16 +558,17 @@ Before starting: answer D13 (styling).
 **Done when:** the tests pass in CI.
 
 ## Step 13: Cooking mode, printing and installing
-**Goal:** the phone can follow a recipe with the screen kept on, recipes print cleanly, and the app installs from Firefox on Android.
+**Goal:** the phone shows a whole recipe, readable at a glance with messy hands, with the screen kept on and a timer to hand; recipes print cleanly; and the app installs from Firefox on Android.
 
 **Why:** these are what make it a kitchen app rather than a website, and the install is what later carries offline reading (3c).
 
 ### 13.1 Cooking mode
-- [ ] One step at a time, in large text, with big Next and Back buttons. The steps are the non-empty lines of `instructions` (§3.4)
-- [ ] The ingredients a tap away, without losing your place
+- [ ] The whole recipe on one screen, like the print sheet but in larger text: nothing to tap to move on, and the steps ahead always in view. On a phone, the ingredients come first, then the method; on a wider screen, they sit side by side. The steps are the non-empty lines of `instructions` (§3.4)
+- [ ] Tapping a step or an ingredient dims it, to help keep your place. Nothing depends on it
+- [ ] A text-size control, remembered on each device
 - [ ] Screen Wake Lock while cooking mode is open, taken again whenever the page becomes visible. If the API is missing, a note says the screen may sleep
-- [ ] A basic countdown timer, one at a time: set minutes, then start, pause and cancel. At zero, a sound and, where supported, a vibration. It keeps correct time with the screen locked or the app in the background, by working from the end time rather than counting ticks
-- [ ] Component tests with fake timers. Playwright: step through a recipe and start a timer
+- [ ] A basic countdown timer, one at a time, pinned on screen while you scroll: set minutes, then start, pause and cancel. At zero, a sound and, where supported, a vibration. It keeps correct time with the screen locked or the app in the background, by working from the end time rather than counting ticks
+- [ ] Component tests for the timer, with fake timers. Playwright: open cooking mode, check every step is on screen, and start a timer
 
 ### 13.2 Printing
 - [ ] A print stylesheet: the recipe's name, ingredients and method, without navigation or buttons. Checked in the print preview of Firefox and Chromium
@@ -975,3 +976,9 @@ Before starting: answer D13 (styling).
   - **D13 added: styling.** Recommended: plain CSS with CSS Modules. It's needed before Step 10.
 
   Next: Step 9, once you've looked over the steps.
+- **2026-11-22:** Phase 3a: your review of Steps 9–14.
+  - **Cooking mode shows the whole recipe.** It's like the print sheet but in larger text, with ingredients then method on a phone, and side by side on a wider screen. Hands are messy while cooking, and you need to see the steps ahead, so it's about keeping the screen on and timers rather than tapping through steps. Optional aids: tap a step or ingredient to dim it, and a text-size control.
+  - The one-step-at-a-time view becomes optional, in Phase 5. Technical spec §3.4 and §5.6, the design spec's Phase 3a and Phase 5, and Step 13 are updated to match.
+  - **D13 partly answered: plain CSS**, with no Tailwind or component library. Whether to use CSS Modules or plain stylesheets is decided after UI mockups made together, before Step 10.
+
+  Next: Step 9. The mockups can happen any time before Step 10.

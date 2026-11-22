@@ -216,7 +216,7 @@ On the Phase 1 schema, with no new tables.
 - A React app served from the Pi's HTTPS address, installable as a PWA
 - Recipe list with search, recipe view, create, edit and delete, and ingredient management
 - Quantities shown and typed as fractions, using the same units module as the API (F5)
-- Cooking mode: large text, one step at a time, the screen kept awake, and a basic timer
+- Cooking mode: the whole recipe in large text on one screen, so messy hands needn't tap through steps and the steps ahead stay in view, with the screen kept awake and a basic timer pinned on screen
 - Print stylesheet
 - Protection against saving over an edit made on another device (F3)
 - Devices kept in step without background syncing: each refreshes when the app opens, comes back to the front or reconnects, and after its own saves, with a Refresh button for any other time
@@ -297,7 +297,7 @@ This phase refines the mobile experience. Since the React app is already respons
 - **Cooking Mode Enhancements:**
   - Voice control exploration (stretch goal)
   - Multiple concurrent timers
-  - Improved step navigation
+  - An optional one-step-at-a-time view, alongside the full-recipe view
   - Wake lock improvements
 
 - **Mobile-Specific Features:**
