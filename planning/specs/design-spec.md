@@ -200,7 +200,7 @@ This phase deploys the API to the Raspberry Pi and makes it reachable from the u
 - After a reboot, everything comes back without intervention
 - A restore from backup has been tested
 
-**Still open:** booting from the SSD (the Pi runs from its SD card until the SSD arrives) and the encrypted copy off the Pi.
+**Still open:** booting from the SSD (the Pi runs from its SD card until the SSD arrives).
 
 ### Phase 3: User Interface
 
