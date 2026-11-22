@@ -3,7 +3,7 @@
 # Mise en place: hardening plan (Phase 1 to Phase 2)
 
 > **Status**
-> - Current step: **Step 8: Phase 2, the Pi with Tailscale**. The done-when checks all pass (2026-11-22). Still open: unattended upgrades and the backup cron line on the Pi, the SSD (8.1) and the encrypted off-Pi copy (8.7). After Step 8 comes the Phase 3 gate
+> - Current step: **Step 8: Phase 2, the Pi with Tailscale**. The done-when checks all pass (2026-11-22). Still open: the SSD (8.1) and the encrypted off-Pi copy (8.7). After Step 8 comes the Phase 3 gate
 > - Last updated: 2026-11-22 (Step 8: the Pi switched over, all four checks pass, specs updated)
 > - Blockers: the SSD for 8.1, about a month away; choosing where the encrypted off-Pi copy goes (8.7)
 
@@ -350,7 +350,7 @@ Later-phase segments wait until just before their phase (see the Backlog).
 
 ### 8.1 Pi and operating system (V4)
 - [ ] Install 64-bit Raspberry Pi OS (Lite is fine), booting from an SSD rather than an SD card. **On the SD card for now (2026-11-22):** the SSD is about a month away. "Moving to an SSD" in `docs/deployment.md` covers the move; tick this once the Pi boots from the SSD
-- [ ] Install Docker Engine with the Compose plugin, and turn on unattended security updates. Docker is in (`get-docker.sh`, Docker's own package repository). Unattended upgrades weren't installed, because section 1 step 4 of the runbook was skipped; that's next
+- [x] Install Docker Engine with the Compose plugin, and turn on unattended security updates. Docker is in (`get-docker.sh`, Docker's own package repository). Unattended upgrades were installed and enabled on 2026-11-22, after section 1 step 4 of the runbook had been skipped. They don't update Docker or reboot the Pi, so run `sudo apt full-upgrade` by hand now and then
 
 ### 8.2 Tailscale (F1, S1)
 - [x] Install Tailscale, sign in, and give the machine a bland name. The name ends up in public certificate-transparency logs as `<name>.<tailnet>.ts.net`. It's `kitchen-pi`
@@ -430,7 +430,7 @@ exit 1
 - [x] Write `scripts/deploy.sh` from the sketch, and test it twice. Written, and run twice against a local copy of the production stack. On the Pi, the first deploy and a second run on 2026-11-22 both ended `Deploy OK`
 
 ### 8.7 Backups (V4)
-- [ ] Add a daily cron job that runs `pg_dump -Fc` through `docker compose exec -T`, saves the dump to the SSD and keeps 7 days of dumps (spec §6.2). Put the commands in a script, `scripts/backup.sh`, rather than in the crontab line itself. The script is written and tested locally; the cron line is in `docs/deployment.md`. The line didn't show up in the Pi's crontab; adding it is next
+- [x] Add a daily cron job that runs `pg_dump -Fc` through `docker compose exec -T`, saves the dump to the SSD and keeps 7 days of dumps (spec §6.2). Put the commands in a script, `scripts/backup.sh`, rather than in the crontab line itself. The script is written and tested locally; the cron line is in `docs/deployment.md`. The line was added to the Pi's crontab on 2026-11-22 (03:30 daily); its first run is on 2026-11-23
 - [ ] Keep an encrypted copy off the Pi, for example with restic or rclone's crypt backend, on another machine or in cloud storage
 - [ ] Back up the images directory as well, once Phase 3 adds images
 - [x] **Test a restore:** restore a dump into a scratch database, for example with `pg_restore -d miseenplace_restore_check`, and compare row counts with the live database. `scripts/restore-check.sh` does this. It passed locally, and on the Pi on 2026-11-22
@@ -704,8 +704,8 @@ First, settle D7–D11. Then write the Phase 3 spec segments, taking in the desi
   - **Checked on the Pi afterwards:**
     - ✅ A second `deploy.sh` run ended `Deploy OK` (8.6 ticked).
     - ✅ `kitchen-pi` shows **Expiry disabled** (8.2 ticked). The phone keeps its expiry, which is right for a device that can be lost.
-    - ❌ `unattended-upgrades` isn't installed, because section 1 step 4 of the runbook was skipped (8.1).
-    - ❌ The backup cron line didn't show up: the crontab's last line was blank (8.7).
+    - ❌ `unattended-upgrades` wasn't installed, because section 1 step 4 of the runbook was skipped. You then installed and enabled it (8.1 ticked).
+    - ❌ The backup cron line didn't show up: the crontab's last line was blank. You then added it (8.7 ticked). Its first run is at 03:30 on 2026-11-23; check for a `daily-…dump` in the backups folder and `Backed up to …` in `~/miseenplace-backup.log`.
   - **Specs:**
     - Technical spec:
       - §6.2 now describes the real setup: the Compose file, `tailscale serve`, `deploy.sh` and the backups.
@@ -723,4 +723,4 @@ First, settle D7–D11. Then write the Phase 3 spec segments, taking in the desi
     - the three old scripts in your home folder
   - You may want to archive `AWhite-Code/mise-en-place` on GitHub, so nothing pulls from it by mistake again.
 
-  Next: install unattended upgrades and add the cron line, then choose where the off-Pi copy goes (8.7). After that, the Phase 3 gate.
+  Next: check the first cron backup on 2026-11-23, then choose where the off-Pi copy goes (8.7). After that, the Phase 3 gate.
