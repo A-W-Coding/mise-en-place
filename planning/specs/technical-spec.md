@@ -767,7 +767,13 @@ The web client is a React single-page app, installable as a PWA, and the only us
 - **Recipe:** ingredients and method, servings and times, with buttons for cooking mode, editing and printing.
 - **Recipe editor:** creates and edits. The ingredient picker searches as you type, and can create a missing ingredient on the spot. Units come from the shared list. The API's `fields` errors appear next to their inputs. Saving sends `If-Match`, and a 412 offers to reload the recipe.
 - **Ingredients:** list, search, rename and delete. A delete refused with 409 says the ingredient is in use.
-- **Cooking mode:** the whole recipe on one screen, like the printed sheet but in larger text. Hands are often messy while cooking, so nothing needs a tap to move on, and the steps ahead are always in view. On a phone the ingredients come first, then the method; on a wider screen they sit side by side. Tapping a step or an ingredient dims it, to help keep your place, but nothing depends on it. A text-size control is remembered on each device. The Screen Wake Lock API keeps the screen on (Firefox 126 and later, and Chromium), and the lock is taken again whenever the page becomes visible. Where the API is missing, cooking mode says the screen may sleep, rather than failing silently. A basic countdown timer stays pinned on screen while you scroll, and runs one timer at a time. In 3a the steps come from the `instructions` text, one per non-empty line; in 3b they come from the structured steps, and a step with a timer gets a button that starts it. A one-step-at-a-time view is optional, and waits for Phase 5.
+- **Cooking mode:** a switch on the recipe page that keeps the screen on, and at heart that's all it is. The page itself doesn't change: the whole recipe stays readable and scrollable, so cooking takes no more taps than reading. The Screen Wake Lock API keeps the screen on (Firefox 126 and later, and Chromium) until the switch is turned off or you leave the recipe, and the lock is taken again whenever the page becomes visible. Where the API is missing, the switch says the screen may sleep, rather than failing silently. A one-step-at-a-time view is optional, and waits for Phase 5.
+- **Timers:** for mid-length waits such as "stir every 15 minutes", not for short steps, or for the oven, which has its own. Most recipes won't need one, so they stay small and out of the way:
+  - A small button adds a timer, with a length and an optional label. Several can run at once.
+  - Running timers are small chips at the edge of the screen, and never cover the recipe.
+  - A timer that finishes plays a sound, vibrates where supported, and grows until it's dismissed.
+  - Each counts from its end time rather than counting ticks, so it stays right if the screen locks. If you've switched to another app when it ends, it rings when you come back.
+  - In 3b, a step with a `timerSeconds` gets a small button beside it that starts that timer.
 - **Printing:** a print stylesheet reduces a recipe to its ingredients and method, without navigation or buttons.
 
 3b adds the section, step, tag, equipment and image editors, and tag filtering on the list.
@@ -957,13 +963,13 @@ Phase 3 adds tests at three levels:
    - 3c: the snapshot, its ETag and the 304, and that a deleted recipe is missing from the next snapshot
 2. **Unit and component tests:**
    - `shared/quantity.ts`: formatting and parsing, as `test.each` tables, in the Jest suite beside the units tests, since it needs no browser
-   - Client components with logic, in Vitest with Testing Library: the ingredient-line editor, mapping the API's `fields` errors onto inputs, and cooking mode's timer, with fake timers
+   - Client components with logic, in Vitest with Testing Library: the ingredient-line editor, mapping the API's `fields` errors onto inputs, and the timers, with fake timers
    - The offline store (3c): with the network down, a snapshot fetched 60 days earlier is still served; a failed or partial refresh leaves it untouched; only a complete new snapshot replaces it
 3. **End-to-end tests** (Playwright):
    - Against the built client served by the real API, with a `_test` database reset to the base seed before each test (§5.3)
    - Every flow in Firefox and Chromium, at a phone size and a desktop size. Firefox because it's the phone's browser, and phone sizes because the phone is the main device
-   - 3a: find a recipe by search; create one with lines and a new ingredient; edit it; get the 412 prompt when it changed elsewhere; delete it; open cooking mode, check every step is on screen, and start a timer. With two browser contexts standing in for the laptop and the phone, a recipe added in one appears in the other when it returns to the foreground or presses Refresh
-   - 3b: upload an image and make it the main one; edit sections, steps, tags and equipment; start a step's timer in cooking mode
+   - 3a: find a recipe by search; create one with lines and a new ingredient; edit it; get the 412 prompt when it changed elsewhere; delete it; turn cooking mode on and off; run two timers at once, and dismiss one when it finishes. With two browser contexts standing in for the laptop and the phone, a recipe added in one appears in the other when it returns to the foreground or presses Refresh
+   - 3b: upload an image and make it the main one; edit sections, steps, tags and equipment; start a step's timer from its button
    - 3c: load the app, go offline (`context.setOffline(true)`), and check that recipes still open and editing is disabled. Then reload the page while still offline, which is a fresh start from the stored copy rather than the open tab, and check again. Come back online, and see a change made elsewhere arrive. Make a refresh fail by blocking `/api/sync`, unblock it, and check the retry gets the new snapshot without a restart
 
 CI runs the client's lint, type-check and unit tests, then the Playwright tests in Firefox and Chromium against the PostgreSQL service, alongside the API's tests. Playwright's Firefox is the desktop build of the same engine as Firefox for Android, so a few things, such as the install prompt and wake lock, are also checked by hand on the phone at the end of 3a and 3c.

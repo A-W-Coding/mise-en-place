@@ -216,7 +216,8 @@ On the Phase 1 schema, with no new tables.
 - A React app served from the Pi's HTTPS address, installable as a PWA
 - Recipe list with search, recipe view, create, edit and delete, and ingredient management
 - Quantities shown and typed as fractions, using the same units module as the API (F5)
-- Cooking mode: the whole recipe in large text on one screen, so messy hands needn't tap through steps and the steps ahead stay in view, with the screen kept awake and a basic timer pinned on screen
+- Cooking mode: a switch on the recipe page that keeps the screen on, so the recipe can be read and scrolled while cooking with no extra taps
+- Small, unobtrusive timers for mid-length waits, several at once if needed
 - Print stylesheet
 - Protection against saving over an edit made on another device (F3)
 - Devices kept in step without background syncing: each refreshes when the app opens, comes back to the front or reconnects, and after its own saves, with a Refresh button for any other time
@@ -241,7 +242,7 @@ On the Phase 1 schema, with no new tables.
 **Success Criteria:**
 - A recipe with sections, steps, timers, images, tags and equipment can be created and edited from the phone
 - A phone photo uploads with its GPS data removed
-- Cooking mode offers each step's timer
+- A step with a timer starts it with one tap
 
 #### Phase 3c: Offline Reading
 
@@ -296,7 +297,6 @@ This phase refines the mobile experience. Since the React app is already respons
 
 - **Cooking Mode Enhancements:**
   - Voice control exploration (stretch goal)
-  - Multiple concurrent timers
   - An optional one-step-at-a-time view, alongside the full-recipe view
   - Wake lock improvements
 
@@ -339,7 +339,7 @@ The final phase adds features that turn the application from a recipe manager in
   - Shopping list generator, grouped by ingredient category
   - URL recipe import (stretch goal): read the schema.org Recipe data most recipe sites embed, and block private IP ranges so the Pi can't be used to probe the home network (M5)
 
-- **Settled at the Phase 3 gate (M1):** recipe links are built here, in Phase 6, and the Phase 3 schema no longer has them. Timers come in three steps: a basic timer in cooking mode (3a), a timer on each step (3b), and several at once (Phase 5).
+- **Settled at the Phase 3 gate (M1):** recipe links are built here, in Phase 6, and the Phase 3 schema no longer has them. Timers come in two steps: quick timers added while cooking, several at once (3a), and timers set on steps (3b).
 
 **Technical Focus:**
 - Complex data processing
