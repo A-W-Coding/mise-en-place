@@ -64,22 +64,24 @@ systemctl is-enabled docker         # enabled, so containers come back after a r
 ```bash
 git clone https://github.com/A-W-Coding/mise-en-place.git ~/mise-en-place
 cd ~/mise-en-place
-openssl rand -hex 24                # a password; copy it into .env below
-nano .env
-chmod 600 .env
 ```
 
-`.env` on the Pi (never committed):
+Then write `.env`, which is never committed. This generates the password inside the file, so it never appears on screen and there's nothing to copy wrong:
 
 ```bash
+cat > .env <<EOF
 POSTGRES_USER=miseenplace
-POSTGRES_PASSWORD=<the hex string from openssl>
+POSTGRES_PASSWORD=$(openssl rand -hex 24)
 POSTGRES_DB=miseenplace
-# Plain `docker compose ...` in this folder then uses the production file
+# docker compose in this folder uses the production file
 COMPOSE_FILE=docker-compose.prod.yml
+EOF
+chmod 600 .env
+docker compose config -q            # prints nothing if .env is right
 ```
 
-- Use a hex password: it goes into the database URL, where characters such as `@`, `/` or `:` would break it.
+- If `config -q` warns that variables aren't set, Compose didn't find `.env` and fell back to the development file. Check that you're in `~/mise-en-place`.
+- The password is hex because it goes into the database URL, where characters such as `@`, `/` or `:` would break it.
 - `POSTGRES_DB` has no `_dev` or `_test` suffix, so the seed and the test reset refuse to touch it. The image also sets `NODE_ENV=production`, which they refuse as well.
 - `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` only take effect when the database volume is first created. Changing them later doesn't change the database.
 - Leave `CORS_ORIGINS` unset. The Phase 3 UI will be served from the same `ts.net` address, so it won't need CORS.

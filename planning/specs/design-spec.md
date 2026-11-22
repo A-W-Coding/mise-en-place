@@ -166,7 +166,7 @@ This phase established the core infrastructure, database schema and a fully func
 - Tests pass consistently, locally and in CI
 - The API can be exercised with curl, Supertest or similar tools
 
-### Phase 2: Pi Deployment with Tailscale HTTPS — next
+### Phase 2: Pi Deployment with Tailscale HTTPS — running
 
 This phase deploys the API to the Raspberry Pi and makes it reachable from the user's devices over Tailscale, with HTTPS from day one. Setting up HTTPS now means the network setup doesn't have to be redone for the Phase 3 PWA, which needs a secure context for its service worker, installation and wake lock (F1).
 
@@ -194,11 +194,13 @@ This phase deploys the API to the Raspberry Pi and makes it reachable from the u
 - Resource limits of the Raspberry Pi
 - Reliability: everything comes back after a reboot
 
-**Success Criteria:**
+**Success Criteria (all met):**
 - A phone on the tailnet gets a 200 from `https://<name>.<tailnet>.ts.net/api/health`
 - From the home network, the Pi's port 3000 and port 5432 both refuse connections
 - After a reboot, everything comes back without intervention
 - A restore from backup has been tested
+
+**Still open:** booting from the SSD (the Pi runs from its SD card until the SSD arrives) and the encrypted copy off the Pi.
 
 ### Phase 3: User Interface
 
