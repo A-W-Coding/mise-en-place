@@ -1,12 +1,12 @@
 # API reference
 
-The mise-en-place API as of Phase 1. The design behind it is in the technical spec, §3 (`planning/specs/technical-spec.md`).
+The mise-en-place API as of Phase 1, plus Phase 3a's JSON 404s and recipe ETags. The design behind it is in the technical spec, §3 (`planning/specs/technical-spec.md`).
 
 - [Conventions](#conventions)
 - [Objects](#objects): Recipe, ingredient line, Ingredient
 - [Lists, search and pagination](#lists-search-and-pagination)
 - [Health](#health)
-- [Recipes](#recipes)
+- [Recipes](#recipes), including [ETags and `If-Match`](#etags-and-if-match)
 - [Ingredients](#ingredients)
 - [Units](#units)
 - [Errors](#errors)
@@ -20,7 +20,7 @@ The mise-en-place API as of Phase 1. The design behind it is in the technical sp
 - **Unknown fields are rejected.** Every body and list query is checked against a strict schema, so a field the endpoint doesn't accept, including server-owned ones like `id`, `createdAt` and `orderIndex`, is a 400.
 - **Numbers must be JSON numbers.** `"2"` is rejected where `2` is expected.
 - **No authentication.** Access is controlled by the network: localhost in development, Tailscale from Phase 2.
-- **CORS:** browsers may call the API from another origin only if it's listed in `CORS_ORIGINS` (comma-separated). By default no other origin is allowed. Allowed origins can also read the `X-Total-Count` header.
+- **CORS:** browsers may call the API from another origin only if it's listed in `CORS_ORIGINS` (comma-separated). By default no other origin is allowed. Allowed origins can also read the `X-Total-Count` and `ETag` headers.
 
 ## Objects
 
@@ -154,7 +154,7 @@ Lists recipes, each with its lines. Takes `search`, `limit` and `offset` (see [L
 
 ### `GET /api/recipes/:id`
 
-**Responses:** 200 with the [Recipe](#recipe); 404 `{ "error": "Recipe not found." }`.
+**Responses:** 200 with the [Recipe](#recipe) and its [`ETag`](#etags-and-if-match); 404 `{ "error": "Recipe not found." }`.
 
 ### `POST /api/recipes`
 
@@ -197,7 +197,7 @@ Content-Type: application/json
 The second line is stored with `"unit": "clove"`, and the lines get `orderIndex` 0, 1 and 2.
 
 **Responses:**
-- 201 with the created [Recipe](#recipe)
+- 201 with the created [Recipe](#recipe) and its [`ETag`](#etags-and-if-match)
 - 400 `{ "error": "Validation failed.", "fields": { … } }` for a rule above
 - 400 `{ "error": "One or more ingredient IDs are invalid." }` when an `ingredientId` is a valid UUID but no such ingredient exists
 
@@ -215,13 +215,38 @@ Changes only the fields in the body; the rules are the same as for POST, but eve
 
 There's no way to change a single line: send the whole list.
 
-**Responses:** 200 with the updated [Recipe](#recipe); 400 as for POST; 404 `{ "error": "Recipe not found." }`.
+Send `If-Match` to make sure you're not overwriting a change made elsewhere (see [ETags and `If-Match`](#etags-and-if-match)).
+
+**Responses:** 200 with the updated [Recipe](#recipe) and its new `ETag`; 400 as for POST; 404 `{ "error": "Recipe not found." }`; 412 `{ "error": "The recipe has changed since it was loaded." }`.
 
 ### `DELETE /api/recipes/:id`
 
-Deletes the recipe and its lines. The ingredients themselves are kept.
+Deletes the recipe and its lines. The ingredients themselves are kept. Takes `If-Match`, like PATCH.
 
-**Responses:** 200 `{ "message": "Recipe deleted successfully." }`; 404 `{ "error": "Recipe not found." }`.
+**Responses:** 200 `{ "message": "Recipe deleted successfully." }`; 404 `{ "error": "Recipe not found." }`; 412 when `If-Match` is out of date.
+
+### ETags and `If-Match`
+
+A recipe's `ETag` changes whenever the recipe does, including when only its lines change. `GET`, `POST` and `PATCH` return it for a single recipe.
+
+To avoid overwriting an edit made on another device, send the ETag you last saw back in `If-Match` on `PATCH` or `DELETE`:
+
+```http
+PATCH /api/recipes/7d0f3a5e-1c2b-4e8a-9f61-2b7c4d9e8a10
+If-Match: "1763836800123"
+Content-Type: application/json
+
+{ "servings": 4 }
+```
+
+| `If-Match` | Effect |
+|---|---|
+| Not sent | No check: the write always goes ahead |
+| The current ETag (or a list containing it) | The write goes ahead |
+| `*` | The write goes ahead if the recipe exists |
+| Anything else, including a weak ETag (`W/"…"`) | 412, and nothing changes |
+
+A recipe that doesn't exist is still a 404, whatever `If-Match` says. Treat the ETag as opaque: its format may change.
 
 ## Ingredients
 
@@ -284,7 +309,7 @@ A line's `unit` must be one of these symbols or aliases. Matching ignores case, 
 | `bunch` | bunches | other |
 | `handful` | handfuls | other |
 
-An unknown unit is a 400 whose message lists the symbols. The list lives in `src/units.ts`; adding a unit is a code change, not a migration.
+An unknown unit is a 400 whose message lists the symbols. The list lives in `shared/units.ts`, which the web client uses too; adding a unit is a code change, not a migration.
 
 ## Errors
 
@@ -307,8 +332,9 @@ Nested fields use dotted paths: `ingredients.0.unit` is the first line's unit. A
 | Status | Meaning |
 |---|---|
 | 400 | Validation failed, the body isn't valid JSON (`"The request body is not valid JSON."`), or a recipe line names an ingredient that doesn't exist |
-| 404 | The recipe or ingredient in the URL doesn't exist. Unknown routes also get a 404, but as Express's plain HTML page rather than JSON |
+| 404 | The recipe or ingredient in the URL doesn't exist, or the path under `/api` is unknown (`{ "error": "Not found." }`). Paths outside `/api` still get Express's plain HTML 404 until the web client is served (Step 10) |
 | 409 | An ingredient name is already taken, or an ingredient is still used by a recipe |
+| 412 | `If-Match` doesn't match the recipe's current ETag (`"The recipe has changed since it was loaded."`) |
 | 413 | The body is over 100 kB (`"request entity too large"`) |
 | 500 | Something unexpected. The body is always `{ "error": "Internal server error" }`; details go only to the server log |
 | 503 | Health check only: the database can't be reached |

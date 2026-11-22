@@ -8,6 +8,9 @@
  *
  * Deleting a recipe cascades to its RecipeIngredient rows but
  * leaves the underlying Ingredient records intact.
+ *
+ * Single-recipe responses carry an `ETag`, and PATCH and DELETE honour
+ * `If-Match`, so an edit can't silently overwrite one made elsewhere (F3).
  */
 
 import { Router, Request, Response, NextFunction } from 'express';
@@ -15,6 +18,7 @@ import { prisma } from '../../prisma/client.js';
 import { isPrismaError } from '../utils/prisma-errors.js';
 import { fuzzySearchByName } from '../utils/fuzzy-search.js';
 import { parseOr400 } from '../utils/validation.js';
+import { recipeEtag, ifMatchDates } from '../utils/etag.js';
 import { createRecipeSchema, updateRecipeSchema, IngredientLine } from '../schemas/recipes.js';
 import { listQuerySchema } from '../schemas/list-query.js';
 
@@ -48,6 +52,28 @@ function toRecipeIngredientCreateData(lines: IngredientLine[]) {
         unit: line.unit,
         note: line.note ?? null,
     }));
+}
+
+/** Sent when `If-Match` names a version of the recipe that's no longer current. */
+const STALE_RECIPE = { error: 'The recipe has changed since it was loaded.' };
+
+/**
+ * The `where` clause for a write that honours `If-Match`. With an ETag list,
+ * the row must also have one of the named `updatedAt` values, so checking the
+ * version and writing happen in one statement and can't be raced.
+ */
+function recipeWhere(id: string, expected: Date[] | undefined) {
+    return expected === undefined ? { id } : { id, updatedAt: { in: expected } };
+}
+
+/** A write found no row: 412 if the recipe exists (so its version didn't match), else 404. */
+async function sendMissOrStale(res: Response, id: string, expected: Date[] | undefined): Promise<void> {
+    const exists = expected !== undefined && (await prisma.recipe.count({ where: { id } })) > 0;
+    if (exists) {
+        res.status(412).json(STALE_RECIPE);
+    } else {
+        res.status(404).json({ error: 'Recipe not found.' });
+    }
 }
 
 // ── GET /api/recipes ────────────────────────────────────────────────────────
@@ -104,7 +130,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 /**
  * Retrieve a single recipe by UUID, including its ingredients.
  *
- * @returns 200 with the Recipe, or 404 if not found.
+ * @returns 200 with the Recipe and its `ETag`, or 404 if not found.
  */
 router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -118,7 +144,7 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
             return;
         }
 
-        res.status(200).json(recipe);
+        res.status(200).set('ETag', recipeEtag(recipe.updatedAt)).json(recipe);
     } catch (error) {
         next(error);
     }
@@ -133,7 +159,7 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
  *  - `description`, `servings`, `prepTime`, `cookTime`, `instructions` (optional)
  *  - `ingredients` (array of `{ ingredientId, quantity, quantityMax, unit, note }`, optional)
  *
- * @returns 201 with the created Recipe, or 400 on validation failure.
+ * @returns 201 with the created Recipe and its `ETag`, or 400 on validation failure.
  */
 router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -152,7 +178,7 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
             include: RECIPE_INCLUDE,
         });
 
-        res.status(201).json(recipe);
+        res.status(201).set('ETag', recipeEtag(recipe.updatedAt)).json(recipe);
     } catch (error) {
         if (isPrismaError(error, 'P2003')) {
             res.status(400).json({ error: 'One or more ingredient IDs are invalid.' });
@@ -176,9 +202,13 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
  * can't be relied on when only the lines change, and sync needs the
  * timestamp to move whenever anything in the recipe does (F2).
  *
- * @returns 200 with the updated Recipe, or 400/404 on failure.
+ * With `If-Match`, the update only happens if the recipe's current ETag is
+ * one of those listed; otherwise it's a 412 and nothing changes (F3).
+ *
+ * @returns 200 with the updated Recipe and its new `ETag`, or 400/404/412 on failure.
  */
 router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => {
+    const expected = ifMatchDates(req.get('If-Match'));
     try {
         const body = parseOr400(updateRecipeSchema, req.body, res);
         if (body === null) return;
@@ -187,7 +217,7 @@ router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => 
         const { ingredients, ...fields } = body;
 
         const recipe = await prisma.recipe.update({
-            where: { id: req.params.id },
+            where: recipeWhere(req.params.id, expected),
             data: {
                 ...fields,
                 updatedAt: new Date(),
@@ -202,10 +232,10 @@ router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => 
             include: RECIPE_INCLUDE,
         });
 
-        res.status(200).json(recipe);
+        res.status(200).set('ETag', recipeEtag(recipe.updatedAt)).json(recipe);
     } catch (error) {
         if (isPrismaError(error, 'P2025')) {
-            res.status(404).json({ error: 'Recipe not found.' });
+            await sendMissOrStale(res, req.params.id, expected);
         } else if (isPrismaError(error, 'P2003')) {
             res.status(400).json({ error: 'One or more ingredient IDs are invalid.' });
         } else {
@@ -217,16 +247,18 @@ router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => 
 // ── DELETE /api/recipes/:id ─────────────────────────────────────────────────
 /**
  * Delete a recipe by UUID. Cascades to RecipeIngredient rows.
+ * With `If-Match`, only the version it names is deleted (F3).
  *
- * @returns 200 on success, or 404 if not found.
+ * @returns 200 on success, 404 if not found, or 412 if `If-Match` is out of date.
  */
 router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
+    const expected = ifMatchDates(req.get('If-Match'));
     try {
-        await prisma.recipe.delete({ where: { id: req.params.id } });
+        await prisma.recipe.delete({ where: recipeWhere(req.params.id, expected) });
         res.status(200).json({ message: 'Recipe deleted successfully.' });
     } catch (error) {
         if (isPrismaError(error, 'P2025')) {
-            res.status(404).json({ error: 'Recipe not found.' });
+            await sendMissOrStale(res, req.params.id, expected);
         } else {
             next(error);
         }

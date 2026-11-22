@@ -128,12 +128,12 @@ The same ingredient may appear on more than one line of a recipe, so there is de
 
 5. **Canonical Units, Defined in Code (D2)**
 
-   **Implementation:** `src/units.ts` lists every unit as a canonical symbol with aliases, for example `g` (gram, grams, gr) and `tbsp` (tablespoon, tablespoons, tbs). The API converts whatever the client sends to the symbol, ignoring case, surrounding spaces and a trailing full stop, and rejects an unknown unit with 400 and the list of allowed units. The database stores only the symbol.
+   **Implementation:** `shared/units.ts` lists every unit as a canonical symbol with aliases, for example `g` (gram, grams, gr) and `tbsp` (tablespoon, tablespoons, tbs). The API converts whatever the client sends to the symbol, ignoring case, surrounding spaces and a trailing full stop, and rejects an unknown unit with 400 and the list of allowed units. The database stores only the symbol.
 
    **Rationale:**
    - "g", "gram" and "grams" must be stored the same way, or quantities can never be added up, for example on a shopping list.
    - The list lives in code rather than a database enum, so adding a unit is a one-line change, not a migration.
-   - The module has no server dependencies, so the Phase 3 client uses the same list: Phase 3a moves it to `shared/units.ts`, next to the quantity formatting both sides use (§3.4). Each unit records its dimension (mass, volume or other), ready for conversion factors in Phase 6.
+   - The module has no server dependencies, so the Phase 3 client uses the same list: Phase 3a moved it to `shared/`, next to the quantity formatting both sides use (§3.4). Each unit records its dimension (mass, volume or other), ready for conversion factors in Phase 6.
 
 6. **Cascade and Restrict Deletes**
 

@@ -34,13 +34,13 @@ describe('parseCorsOrigins', () => {
 });
 
 describe('corsPolicy', () => {
-    test('should let an allowed origin read responses and X-Total-Count', async () => {
+    test('should let an allowed origin read responses, X-Total-Count and ETag', async () => {
         const response = await appAllowing(['https://a.example'])
             .get('/things')
             .set('Origin', 'https://a.example');
 
         expect(response.headers['access-control-allow-origin']).toBe('https://a.example');
-        expect(response.headers['access-control-expose-headers']).toBe('X-Total-Count');
+        expect(response.headers['access-control-expose-headers']).toBe('X-Total-Count,ETag');
     });
 
     test('should not allow any other origin', async () => {

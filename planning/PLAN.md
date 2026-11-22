@@ -3,8 +3,8 @@
 # Mise en place: hardening plan (Phase 1 to Phase 3a)
 
 > **Status**
-> - Current step: **Step 9: shared code and API changes for the client**, the first of Phase 3a's Steps 9–14 (written 2026-11-22). The Phase 3 gate is done. Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
-> - Last updated: 2026-11-22 (Phase 3a: Steps 9–14 written; cooking mode is a keep-the-screen-on switch with small timers; D13 partly answered)
+> - Current step: **Step 10: the client's skeleton**, after the UI mockups and the rest of D13. Step 9 is done (2026-11-22). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
+> - Last updated: 2026-11-22 (Step 9 done: `shared/`, JSON 404s, recipe ETags and `If-Match`)
 > - Blockers: the UI mockups and the rest of D13 before Step 10 (together); D14 before Step 13 (you); the SSD for 8.1, about a month away
 
 ## How to use this file
@@ -471,17 +471,17 @@ Phase 3a builds the web client on the Phase 1 schema (D10). The specs are the re
 **Why:** these are the only server changes 3a needs (§3.2, Phase 3a). They're easier to test before any screen depends on them.
 
 ### 9.1 `shared/` (F5)
-- [ ] Move `src/units.ts` to `shared/units.ts`, and update its imports and tests. The Dockerfile must copy `shared/` into its build stage, and the server must still build to `dist/src/server.js`
-- [ ] Add `shared/quantity.ts`:
+- [x] Move `src/units.ts` to `shared/units.ts`, and update its imports and tests. The Dockerfile must copy `shared/` into its build stage, and the server must still build to `dist/src/server.js`
+- [x] Add `shared/quantity.ts`:
   - `formatQuantity()`: fractions to the nearest eighth for spoon and cup measures and for counts, decimals for metric units, and "2–3" for a range
   - `parseQuantity()`: reads "1 1/2", "1½", "1.5" and "2-3" into `quantity` and `quantityMax`. Anything else returns an error message rather than a guess
-- [ ] Unit tests for both, as `test.each` tables in `tests/`, including the edges: 0.33 as ⅓ and 0.66 as ⅔, values nowhere near an eighth (shown as decimals), and inputs such as "1/0", "0" and "abc"
+- [x] Unit tests for both, as `test.each` tables in `tests/`, including the edges: 0.33 as ⅓ and 0.66 as ⅔, values nowhere near an eighth (shown as decimals), and inputs such as "1/0", "0" and "abc"
 
 ### 9.2 API changes (F3)
-- [ ] An unknown path under `/api` returns 404 `{ "error": "Not found." }` instead of Express's HTML page
-- [ ] `GET /api/recipes/:id` returns a strong `ETag` made from `updatedAt`. `PATCH` and `DELETE` honour `If-Match`, returning 412 `{ "error": "The recipe has changed since it was loaded." }` when it's stale. Without `If-Match` there's no check, so curl and scripts keep working
-- [ ] Integration tests: the 404; a matching `If-Match` succeeds; a stale one gets 412 and changes nothing, on both PATCH and DELETE; the ETag changes after every PATCH, including one that only replaces the lines
-- [ ] `docs/api.md`: the 404, `ETag` and `If-Match`
+- [x] An unknown path under `/api` returns 404 `{ "error": "Not found." }` instead of Express's HTML page
+- [x] `GET /api/recipes/:id` returns a strong `ETag` made from `updatedAt`. `PATCH` and `DELETE` honour `If-Match`, returning 412 `{ "error": "The recipe has changed since it was loaded." }` when it's stale. Without `If-Match` there's no check, so curl and scripts keep working
+- [x] Integration tests: the 404; a matching `If-Match` succeeds; a stale one gets 412 and changes nothing, on both PATCH and DELETE; the ETag changes after every PATCH, including one that only replaces the lines
+- [x] `docs/api.md`: the 404, `ETag` and `If-Match`
 
 **Done when:** all tests pass locally and in CI, and the API reference describes the changes.
 
@@ -994,3 +994,18 @@ Before starting: make the UI mockups together (the recipe list, recipe page, edi
   - **D14 added: timer alerts when the app isn't on screen.** A timer must ring at zero whatever app is open, and a web page can't do that alone on Android. Recommended: Web Push from the Pi. It's needed before Step 13.
 
   Next: Step 9. The mockups can happen any time before Step 10.
+- **2026-11-22:** Step 9 done: shared code and API changes for the client.
+  - **`shared/`:** `src/units.ts` moved to `shared/units.ts` with `git mv`, so its history follows it. The build still produces `dist/src/server.js`, with `dist/shared/` beside it, and the Dockerfile's build stage now copies `shared/`.
+  - **`shared/quantity.ts`:** `formatQuantity()` and `parseQuantity()` (F5).
+    - The fractions are eighths plus thirds, matched within 0.02, so 0.33 shows as ⅓ but 0.3 stays a decimal rather than becoming a wrong fraction. Metric units show decimals.
+    - Parsing never guesses: "1,5", "2 eggs" and "1/0" each return an error message.
+  - **JSON 404s:** unknown paths under `/api` return 404 `{ "error": "Not found." }`. Paths outside `/api` keep Express's HTML page until Step 10 serves the client there.
+  - **Recipe ETags (F3):**
+    - The ETag is the quoted `updatedAt` in milliseconds, sent by GET, POST and PATCH.
+    - PATCH and DELETE check `If-Match` in the same statement as the write (`where: { id, updatedAt: { in: … } }`), so the check can't be raced. A miss is 412 if the recipe exists, and 404 if it doesn't.
+    - Weak ETags never match; `*`, or no header at all, means no check.
+    - CORS now exposes `ETag` as well as `X-Total-Count`.
+  - **Tests:** 312 in 14 files, all passing locally (up from 220 in 10). `quantity`, `etag`, `not-found` and `recipe-concurrency` are new, and the CORS test now expects `ETag`. Type-check, lint and the build pass. CI runs once the branch is pushed.
+  - **Docs:** `docs/api.md` (the 404, a new "ETags and `If-Match`" section, 412 in the error table, `shared/units.ts`), `docs/erd.md`, the README's structure and test count, and technical spec §2.1.
+
+  Next: the UI mockups and the rest of D13, then Step 10. D14 is needed before Step 13.

@@ -8,7 +8,7 @@
  */
 
 import { z } from 'zod';
-import { canonicaliseUnit, UNIT_SYMBOLS } from '../units.js';
+import { canonicaliseUnit, UNIT_SYMBOLS } from '../../shared/units.js';
 
 /** Message for a missing required field vs. one of the wrong type. */
 const requiredOr = (wrongType: string) => (issue: { input: unknown }) =>
