@@ -3,9 +3,9 @@
 # Mise en place: hardening plan (Phase 1 to Phase 2)
 
 > **Status**
-> - Current step: **Step 8: Phase 2, the Pi with Tailscale** (the repo side is done and tested locally; the Pi itself is next)
-> - Last updated: 2026-11-02 (Step 8: Compose file, Dockerfile, scripts and runbook)
-> - Blockers: setting up the Pi by following `docs/deployment.md` (you); choosing where the encrypted off-Pi copy goes (8.7)
+> - Current step: **Step 8: Phase 2, the Pi with Tailscale** (the repo side is done; next, the Pi switches over from its September setup, on the SD card for now)
+> - Last updated: 2026-11-22 (Step 8: what's on the Pi, the SD card for now, log rotation, moving to an SSD)
+> - Blockers: the switch-over on the Pi (you); the SSD for 8.1, about a month away; choosing where the encrypted off-Pi copy goes (8.7)
 
 ## How to use this file
 - Work through the steps in order. Each step gives a goal, why it matters, tasks as checkboxes, and a "done when" test.
@@ -349,7 +349,7 @@ Later-phase segments wait until just before their phase (see the Backlog).
 **Why:** setting up HTTPS from the start avoids redoing the network setup for the PWA (F1). How the Pi is set up decides whether you ever lose data (V4, T3).
 
 ### 8.1 Pi and operating system (V4)
-- [ ] Install 64-bit Raspberry Pi OS (Lite is fine), booting from an SSD rather than an SD card
+- [ ] Install 64-bit Raspberry Pi OS (Lite is fine), booting from an SSD rather than an SD card. **On the SD card for now (2026-11-22):** the SSD is about a month away. "Moving to an SSD" in `docs/deployment.md` covers the move; tick this once the Pi boots from the SSD
 - [ ] Install Docker Engine with the Compose plugin, and turn on unattended security updates
 
 ### 8.2 Tailscale (F1, S1)
@@ -666,3 +666,18 @@ First, settle D7–D11. Then write the Phase 3 spec segments, taking in the desi
   - **Still to do, on the Pi:** 8.1, 8.2, the first deploy, the cron job, the off-Pi copy, and the done-when checks. Then technical spec §6.2 and §6.3 get the new deploy setup.
 
   Next: set up the Pi by following `docs/deployment.md`.
+- **2026-11-22:** Step 8: what's on the Pi, and the plan for it.
+  - Step 8's CI passed: run #11 on the pull request and run #12 on the merge into `main`.
+  - **Nothing pulls automatically.** The crontab has two jobs, `~/backup-db.sh` daily at 03:00 and `~/health-check.sh` every 5 minutes, and root has none. The systemd timers are the OS's own. So none of the 2 Nov merges reached the Pi.
+  - **The Pi still runs the September setup:**
+    - Its checkout is at `ff2d9f7` (3 Mar), with the 16 Sep Docker changes uncommitted on top; those became `8e61e98`. `git pull` would refuse to overwrite them, so the switch-over stashes them first.
+    - Compose project `mise-en-place`: Postgres 15 and the API, both `restart: always`, with 3000 and 5432 published on `0.0.0.0` and `[::]`. The data is in the volume `mise-en-place_postgres-data`.
+    - One recipe, "Pi Test Recipe" (16 Sep), with no ingredients. The daily plain-SQL backups in `~/backups` are real dumps.
+    - 64-bit Pi OS, booting from the SD card (`/dev/mmcblk0p2`). Tailscale isn't installed. You're in the `docker` group, but the remote session started before you were added.
+    - `backup-db.sh` doesn't check `pg_dump`'s result. Once the old container is gone, it would write an empty file every night and, from a week later, delete a real backup every day, so its cron line goes at the same time as the old containers.
+  - **Answered: start fresh.** The new database doesn't take the test recipe. The old volume and backups stay until the new setup passes the checks.
+  - **Answered: the SD card for now.** The SSD is about a month away, so 8.1 stays open until the Pi boots from it.
+  - **`docker-compose.prod.yml`:** both services now use Docker's `local` log driver, which rotates and compresses the logs, about 100 MB per container at most. The default keeps every line forever, which wears the SD card and can fill it.
+  - **`docs/deployment.md`:** a note on starting from the SD card, and a new section, "Moving to an SSD": back up, copy the dump to your PC, install on the SSD from sections 1–4, restore into the empty database, then deploy. The SD card stays untouched as a fallback.
+
+  Next: the switch-over on the Pi, then the runbook from section 3.
