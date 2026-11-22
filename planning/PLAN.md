@@ -730,7 +730,7 @@ First, settle D7–D11. Then write the Phase 3 spec segments, taking in the desi
     - Why: it's off-site, runs nightly from the Pi without any other machine, and the first 10 GB are free.
     - Considered and not chosen:
       - your PC: in the same house, and only works when it's on
-      - a cloud drive with rclone's crypt: no snapshots, and its token can reach the whole drive
+      - Google Drive, using the empty 15 GB on your programming account. restic can keep its repository there through rclone, so the snapshots and encryption would be the same. But it adds rclone on the Pi and a Google sign-in token that Google can revoke without warning, and nothing watches the nightly job yet. It also puts the backups in the same account as that email. Confirmed B2 after comparing the two.
   - **`scripts/offsite.sh`:**
     - **With no arguments:** it backs up the backups folder (skipping `.partial` files) and keeps 7 daily, 4 weekly and 6 monthly snapshots. On Sundays it also downloads a random 10% of the stored data and checks it.
     - **With arguments:** it runs that restic command with the settings loaded, for example `init`, `snapshots` or `restore`.
