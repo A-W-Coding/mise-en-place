@@ -299,6 +299,7 @@ This phase refines the mobile experience. Since the React app is already respons
   - Voice control exploration (stretch goal)
   - An optional one-step-at-a-time view, alongside the full-recipe view
   - Wake lock improvements
+  - Timer alerts while another app is open, sent as push notifications from the Pi (D14)
 
 - **Mobile-Specific Features:**
   - Quick recipe search with recent and favourite recipes

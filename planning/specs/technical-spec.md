@@ -360,7 +360,7 @@ Phase 5 may introduce minor schema additions to support mobile-specific features
 
 **Potential Additions:**
 - User preferences for display settings
-- Push notification tokens
+- Push notification tokens, so a timer can alert while another app is open: the Pi sends a Web Push at zero (D14)
 
 Offline use needs no schema of its own: it arrives in Phase 3c, as a snapshot of the existing tables (D8).
 
@@ -773,7 +773,7 @@ The web client is a React single-page app, installable as a PWA, and the only us
   - Running timers are small chips at the edge of the screen, and never cover the recipe.
   - A timer that finishes plays a sound, vibrates where supported, and grows until it's dismissed.
   - Each counts from its end time rather than counting ticks, so it stays right if the screen locks.
-  - A timer must alert at zero even when another app is open. A web page can't do that by itself on Android, because the browser pauses it soon after you switch away. How it's done is decision D14.
+  - Timers ring while the app is on screen, which cooking mode keeps it (D14). On Android the browser pauses a page soon after you switch away, so a timer can't ring while another app is open. A short note by the timers says so, and alerts in the background wait for Phase 5's push notifications.
   - In 3b, a step with a `timerSeconds` gets a small button beside it that starts that timer.
 - **Printing:** a print stylesheet reduces a recipe to its ingredients and method, without navigation or buttons.
 

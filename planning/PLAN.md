@@ -5,7 +5,7 @@
 > **Status**
 > - Current step: **Step 10: the client's skeleton**, after the UI mockups and the rest of D13. Step 9 is done (2026-11-22). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
 > - Last updated: 2026-11-22 (Step 9 done: `shared/`, JSON 404s, recipe ETags and `If-Match`)
-> - Blockers: the UI mockups and the rest of D13 before Step 10 (together); D14 before Step 13 (you); the SSD for 8.1, about a month away
+> - Blockers: the UI mockups and the rest of D13 before Step 10 (together); the SSD for 8.1, about a month away
 
 ## How to use this file
 - Work through the steps in order. Each step gives a goal, why it matters, tasks as checkboxes, and a "done when" test.
@@ -59,7 +59,7 @@ The rule that reconciles them: **settle the spec first, then bring the code in l
 | D11 | Image upload rules | Allowed types, size and pixel caps, re-encoding (S4) | Phase 3 gate | **Decided 2026-11-22:** JPEG, PNG and WebP, recognised from the contents (SVG, GIF and HEIC rejected). At most 15 MB and 50 megapixels, checked before decoding. Each image is turned upright, then re-encoded with sharp to WebP at 2000 px on the long side, plus a 400 px thumbnail, with all metadata stripped. The original isn't kept. Server-generated filenames, 10 images per recipe, stored in a Docker volume that's backed up with the database |
 | D12 | Nutrition data source | **USDA FoodData Central** as the primary source. Use Spoonacular only for live, uncached extras (V1) | Phase 6 | Deferred |
 | D13 | Styling | **Plain CSS with CSS Modules**, built into Vite. Nothing new to learn or upgrade, styles are scoped to each component, and CSS custom properties hold the sizes and colours cooking mode and printing override. Alternatives: Tailwind (utility classes in the markup, quick once learned) or a component library such as Mantine (ready-made forms and dialogs, but heavier and opinionated) | Step 10 | **Partly answered 2026-11-22: plain CSS**, with no Tailwind or component library. Whether to use CSS Modules or plain stylesheets is decided after the UI mockups, before Step 10 |
-| D14 | Timer alerts when the app isn't on screen | **Web Push from the Pi.** On Android, Firefox pauses a page soon after you switch away, so the page alone can't ring at zero. Instead, the app tells the Pi when a timer starts, and at zero the Pi sends a push, which the phone shows as a notification with sound and vibration, whatever app is open. It needs notification permission (asked once, at the first timer), VAPID keys in the Pi's `.env`, a small table of running timers so a restart can't lose one (3a's only schema change), and a connection at that moment. The push travels encrypted through Mozilla's push service. Firefox for Android has had push bugs with installed apps, so the first task would be a quick test on your phone. Alternative: timers ring only while the app is on screen, which cooking mode keeps it, and background alerts wait for Phase 5, which already lists push | Step 13 | Deferred |
+| D14 | Timer alerts when the app isn't on screen | **Web Push from the Pi.** On Android, Firefox pauses a page soon after you switch away, so the page alone can't ring at zero. Instead, the app tells the Pi when a timer starts, and at zero the Pi sends a push, which the phone shows as a notification with sound and vibration, whatever app is open. It needs notification permission (asked once, at the first timer), VAPID keys in the Pi's `.env`, a small table of running timers so a restart can't lose one (3a's only schema change), and a connection at that moment. The push travels encrypted through Mozilla's push service. Firefox for Android has had push bugs with installed apps, so the first task would be a quick test on your phone. Alternative: timers ring only while the app is on screen, which cooking mode keeps it, and background alerts wait for Phase 5, which already lists push | Step 13 | **Decided 2026-11-22: on screen only, for now.** Timers ring while the app is on screen, and a note by them says so. Alerts while another app is open wait for Phase 5's push work |
 
 ## Revised phase map
 | Phase | Original | Proposed |
@@ -571,7 +571,7 @@ Before starting: make the UI mockups together (the recipe list, recipe page, edi
   - running timers are small chips at the edge of the screen, and never cover the recipe
   - one that finishes plays a sound, vibrates where supported, and grows until dismissed
   - each works from its end time rather than counting ticks, so it stays right if the screen locks
-  - ringing at zero while another app is open follows D14
+  - timers ring only while the app is on screen (D14), and a short note by them says so. Alerts while another app is open come in Phase 5
 - [ ] Component tests for the timers, with fake timers. Playwright: turn cooking mode on and off, and run two timers at once
 
 ### 13.2 Printing
@@ -608,7 +608,7 @@ Before starting: make the UI mockups together (the recipe list, recipe page, edi
 | Any time after Step 6 | M6: a JSON export of all data (small, and cheap insurance) |
 | Phase 3 | 3a: Steps 9–14. 3b and 3c get their steps when each starts, following the Phase 3 gate's decisions |
 | Phase 4 | Uptime and disk-space alerts, log rotation, and automated dependency updates (Dependabot or Renovate). V5: the Prisma upgrade, as its own task |
-| Phase 5 | F7: the shopping-list tables must exist before Phase 5 can deliver shopping lists |
+| Phase 5 | F7: the shopping-list tables must exist before Phase 5 can deliver shopping lists. D14: timer alerts while another app is open, through Web Push from the Pi (test it on the phone first, because Firefox for Android has had push bugs) |
 | Phase 6 | V1/D12: USDA FoodData Central. F5: unit conversion using ingredient densities. F7: fixes to the meal-plan and shopping-list schema, and ingredient categories. M5: safe URL import. M1: RecipeLink and timers each appear in two phases |
 
 ## Progress log
@@ -1009,3 +1009,8 @@ Before starting: make the UI mockups together (the recipe list, recipe page, edi
   - **Docs:** `docs/api.md` (the 404, a new "ETags and `If-Match`" section, 412 in the error table, `shared/units.ts`), `docs/erd.md`, the README's structure and test count, and technical spec §2.1.
 
   Next: the UI mockups and the rest of D13, then Step 10. D14 is needed before Step 13.
+- **2026-11-22:** D14 answered: timers ring only while the app is on screen, for now.
+  - Cooking mode keeps the app on screen anyway, so on-screen timers cover the usual case. A short note by the timers says they can't ring while another app is open.
+  - Alerts while another app is open move to Phase 5, which already lists push notifications. The Phase 5 backlog row, technical spec §2.5 and §3.4, and the design spec's Phase 5 now say so.
+
+  Next: the UI mockups and the rest of D13, then Step 10.
