@@ -36,9 +36,9 @@ The application design considers the following user stories:
 - As a user, I want to print recipes when needed
  
 ## System Architecture
- 
-The Recipe App adopts a modern architecture utilizing Node.js, React, and Electron, with data persistence handled by Prisma and PostgreSQL.
- 
+
+The Recipe App is a React web app, installable as a PWA, backed by a Node.js API, with data persistence handled by Prisma and PostgreSQL.
+
 ### High-Level Architecture Diagram
 
 ```
@@ -50,7 +50,7 @@ The Recipe App adopts a modern architecture utilizing Node.js, React, and Electr
 │   Phase 3)           │   the tailnet  │           │                            │
 │                      │                │           ▼  127.0.0.1:3000            │
 │  curl, scripts       │                │  Node.js Express API ───► Image store  │
-│                      │                │           │                (Phase 3)   │
+│                      │                │           │                (Phase 3b)  │
 └──────────────────────┘                │           ▼                            │
                                         │  Prisma Client                         │
                                         │           │                            │
@@ -58,68 +58,63 @@ The Recipe App adopts a modern architecture utilizing Node.js, React, and Electr
                                         │  PostgreSQL 17 (Docker, named volume)  │
                                         │           │                            │
                                         │           ▼  daily pg_dump             │
-                                        │  Backups (SSD, encrypted copy off-Pi)  │
+                                        │  Backups (local, and encrypted in B2)  │
                                         │                                        │
                                         └────────────────────────────────────────┘
 ```
 
 - Requests go Express → Prisma → PostgreSQL. Nothing else talks to the database.
 - Only `tailscale serve` is reachable from other devices, and only over the tailnet. The API listens on `127.0.0.1:3000`, and the database is reachable only on the Compose network (Phase 2).
-- The image store arrives with images in Phase 3. Electron isn't shown: D7 recommends dropping or deferring it in favour of the installed PWA.
- 
+- The same Express app serves the PWA's files, so the UI and the API share one HTTPS origin (F1).
+- The image store arrives with images in Phase 3b. There's no Electron app: the installed PWA is the desktop app (D7).
+
 ### Component Details
- 
+
 #### Backend Components
- 
+
 1. **Node.js Express Server**: Provides the RESTful API endpoints for all application functionality
    - Processes all data operations (CRUD)
-   - Manages image uploads and processing
+   - Validates every request with a strict schema (D1)
    - Exposes search and filtering capabilities
- 
+   - Serves the web client's files (Phase 3a), accepts image uploads (Phase 3b), and provides the offline snapshot (Phase 3c)
+
 2. **Prisma ORM**: Manages database operations with type safety and migration support
    - Provides type-safe database access
    - Handles schema migrations
    - Enforces data validation and relationships
- 
+
 3. **PostgreSQL Database**: Stores all recipe data in a robust, full-featured database
    - Recipe information
    - Ingredient definitions
-   - Tags and categories (future phase)
-   - Instruction steps (future phase)
-   - Image metadata (future phase)
- 
-4. **Image Storage System**: Manages recipe images with efficient storage (Phase 3)
-   - Images stored on Pi filesystem, paths stored in database
-   - Image compression and optimization
-   - Thumbnail generation
-   - Serves images to clients via API
- 
-5. **VPN Solution**: Secures remote access to the system
-   - Enables secure connections from external networks
-   - Provides encrypted data transmission
-   - Simplifies network configuration
- 
+   - Sections and steps, tags, equipment and image metadata (Phase 3b)
+
+4. **Image Storage System** (Phase 3b): Stores recipe images safely and efficiently
+   - Files in a Docker volume on the Pi; the database holds only their metadata
+   - Every upload checked and re-encoded to WebP with sharp, plus a thumbnail, with all metadata, including GPS, stripped (D11)
+   - Served with long-lived caching, since a stored file never changes
+   - Backed up with the database
+
+5. **Tailscale**: Secures remote access
+   - Only devices signed in to your tailnet can reach the Pi
+   - Provides the HTTPS certificate the PWA needs (F1)
+   - Needs no ports opened on the home router
+
 #### Frontend Components
- 
-1. **React Application**: Core user interface built with React
+
+1. **React Application**: The only user interface
    - Clean, modern design prioritizing readability
-   - Responsive design for all screen sizes (mobile-friendly from Phase 3)
+   - Responsive from the start, phone first, since that's where recipes are read while cooking
    - Component-based architecture
-   - State management with React Query
-   - Offline data caching with timestamp-based sync
- 
-2. **Electron Wrapper**: Packages the React application for desktop use
-   - Native desktop experience
-   - Offline capability
-   - System integration (notifications, etc.)
- 
-3. **Progressive Web App (PWA)**: Same React codebase, installable on mobile
-   - Install via "Add to Home Screen" in browser
-   - No app store required
-   - Offline recipe viewing
-   - Single codebase for web, desktop, and mobile
+   - Server data managed with TanStack Query (formerly React Query)
+   - Quantities shown as fractions, from the same units module as the API (F5)
+
+2. **Progressive Web App (PWA)**: The same app, installed
+   - Installs from the browser on phone and desktop, with no app store. The main target is Firefox on Android, installed to the Home Screen
+   - Opens in its own window, like a native app, which is what replaced Electron (D7)
+   - Offline recipe reading from a full snapshot kept on the device with no expiry, refreshed whenever the app is online (Phase 3c; D8, D9)
    - Touch-friendly responsive controls
- 
+   - Keeps the screen on in cooking mode (Screen Wake Lock)
+
 #### Design Philosophy
  
 The UI prioritizes function over form with a clean, modern aesthetic:
@@ -204,37 +199,65 @@ This phase deploys the API to the Raspberry Pi and makes it reachable from the u
 
 ### Phase 3: User Interface
 
-This phase introduces the user interface, mobile-friendly from the start, since the main use is reading a recipe on a phone while cooking. It is the largest phase, so it starts with a gate: decisions D7–D11 are settled and the Phase 3 spec segments are written before any UI code.
+This phase introduces the user interface, mobile-friendly from the start, since the main use is reading a recipe on a phone while cooking. It was the largest phase, so the Phase 3 gate settled its open decisions on 22 Nov 2026 and split it into three parts, each a step of its own (D10).
 
-**Decisions at the gate (open; recommendations from the design review):**
-- **D7, Electron:** recommended to drop or defer it. An installed PWA already gives a desktop window with offline support, from one codebase (V2).
-- **D8, sync design:** recommended to start with a full snapshot plus an ETag, and add delta sync with tombstones only if needed. Timestamp-based delta sync misses child edits and deletes (F2).
-- **D9, offline editing:** recommended read-only offline at first, to avoid edit conflicts between devices (F3).
-- **D10, splitting the phase:** recommended to split it in three (V3):
-  - **3a:** the UI and cooking mode, on the Phase 1 schema
-  - **3b:** structured instructions and sections, images, tags and equipment
-  - **3c:** offline support
-- **D11, image uploads:** allowed types, size and pixel limits, and re-encoding (S4).
+**Decisions (settled at the gate):**
+- **D7, Electron: dropped.** The installed PWA is the desktop app (V2).
+- **D8, sync: a full snapshot with an ETag.** Delta sync with tombstones only if it's ever needed (F2).
+- **D9, offline: read-only.** Editing waits for a connection, so two devices can't conflict (F3).
+- **D10: three parts,** below.
+- **D11, image uploads:** JPEG, PNG and WebP only, up to 15 MB and 50 megapixels, re-encoded to WebP with all metadata stripped, 10 per recipe (S4).
+
+#### Phase 3a: The UI and Cooking Mode
+
+On the Phase 1 schema, with no new tables.
 
 **Key Deliverables:**
+- A React app served from the Pi's HTTPS address, installable as a PWA
+- Recipe list with search, recipe view, create, edit and delete, and ingredient management
+- Quantities shown and typed as fractions, using the same units module as the API (F5)
+- Cooking mode: large text, one step at a time, the screen kept awake, and a basic timer
+- Print stylesheet
+- Protection against saving over an edit made on another device (F3)
+- Devices kept in step without background syncing: each refreshes when the app opens, comes back to the front or reconnects, and after its own saves, with a Refresh button for any other time
 
-- **Frontend:**
-  - React application with recipe viewing and editing
-  - Responsive design, installable as a PWA over the Phase 2 HTTPS address
-  - Quantities shown as fractions, using the same units module as the API (F5)
-  - Print stylesheet
+**Success Criteria:**
+- Recipes can be found, read, created, edited and deleted from a phone and a laptop
+- The app installs from Firefox on Android and opens from the Home Screen
+- Cooking mode keeps the screen on through a whole recipe
+- With the app open on both, a recipe added on the laptop appears on the phone as soon as the phone's app comes back to the front, or Refresh is tapped
+- End-to-end tests cover the main flows in Firefox and Chromium, at phone and desktop sizes, in CI
 
-- **Cooking Mode:**
-  - Large, readable text and a step-by-step view
-  - Screen kept awake (Screen Wake Lock)
-  - Basic timer
+#### Phase 3b: Structured Recipes, Images, Tags and Equipment
 
-- **Expanded Schema and API:**
-  - Structured instructions and recipe sections, including a section link on ingredient lines
-  - Image upload and storage, with a `primaryImageId` on Recipe rather than an `isPrimary` flag on images (F7)
-  - Tags and equipment, and the endpoints the original plan lacked: instruction CRUD, attaching tags and equipment to recipes, and deletes for sections, links and equipment (F6)
+**Key Deliverables:**
+- Sections and steps, with an optional timer on each step, and ingredient lines grouped by section
+- Existing text instructions migrated into steps
+- Image upload following D11, with a main image (a `primaryImageId` on Recipe, F7) and thumbnails
+- Tags, with colours and filtering, and equipment
+- Create, update and delete for every part of a recipe (F6)
+- Images included in the backups
 
-- **Offline:** read-only offline caching of recipes, using the sync design chosen in D8
+**Success Criteria:**
+- A recipe with sections, steps, timers, images, tags and equipment can be created and edited from the phone
+- A phone photo uploads with its GPS data removed
+- Cooking mode offers each step's timer
+
+#### Phase 3c: Offline Reading
+
+**Key Deliverables:**
+- A snapshot endpoint, and a client that keeps the snapshot on the device (D8)
+- An offline copy that never expires: it's replaced only by a complete newer snapshot, and a one-tap Protect button asks the browser for persistent storage, so the copy isn't cleared to free space
+- Failed refreshes retried automatically while the app is on screen, and the Refresh button to try at once
+- Every recipe readable, and cooking mode usable, with no connection
+- Editing disabled offline, with the age of the copy shown (D9)
+- Thumbnails cached ahead of time, full images as they're viewed
+
+**Success Criteria:**
+- With the phone in airplane mode, the app opens from the Home Screen, any recipe opens, and cooking mode works
+- The same holds weeks after the app was last opened, with the copy from its last refresh
+- If the first refresh fails and the connection comes back later, the copy updates without restarting the app
+- A recipe deleted on the laptop disappears from the phone at its next refresh
 
 **Technical Focus:**
 - An intuitive interface that works one-handed on a phone
@@ -312,54 +335,53 @@ The final phase adds features that turn the application from a recipe manager in
 
 - **Feature Development:**
   - Recipe scaling that handles eggs, spices and other ingredients that don't scale linearly, with confirmation for unusual factors
-  - Cooking timer implementation
   - Meal planning calendar
   - Shopping list generator, grouped by ingredient category
   - URL recipe import (stretch goal): read the schema.org Recipe data most recipe sites embed, and block private IP ranges so the Pi can't be used to probe the home network (M5)
 
-- **Still to resolve:** recipe links appear in both Phase 3 (technical spec) and Phase 6 (this document), and timers in Phases 3, 5 and 6 (M1). Settle each one's phase at the Phase 3 gate.
+- **Settled at the Phase 3 gate (M1):** recipe links are built here, in Phase 6, and the Phase 3 schema no longer has them. Timers come in three steps: a basic timer in cooking mode (3a), a timer on each step (3b), and several at once (Phase 5).
 
 **Technical Focus:**
 - Complex data processing
 - Integrating external data within each provider's terms and limits
 - Graceful fallbacks when an external service is unavailable
  
+
 ## Continuous Integration and Deployment
- 
+
 ### GitHub Actions Workflow
- 
-The project implements CI using GitHub Actions:
- 
+
+The project implements CI using GitHub Actions (`.github/workflows/node.js.yml`):
+
 1. **Continuous Integration**
-   - Triggered on every push and pull request
-   - Runs linting checks to enforce code style
-   - Executes all unit and integration tests
-   - Generates test coverage reports
- 
+   - Runs on pull requests into `main`, and on pushes to `main` and `develop*` branches
+   - Lints and type-checks, then runs every test against a real PostgreSQL 17 service, with a coverage summary on the run's page
+   - From Phase 3: the web client's lint, type-check and unit tests, then end-to-end tests in Firefox and Chromium (technical spec §5.6)
+
 2. **Deployment**
-   - Manual deployment from local development environment
-   - Deployment scripts ensure consistent process
-   - Database backup before each deployment
- 
+   - Manual: `scripts/deploy.sh` on the Pi backs up, pulls `main`, builds, migrates and waits for the health check (technical spec §6.2)
+   - Nothing deploys on its own, so every migration runs while someone is watching
+   - The database is backed up daily, with an encrypted copy in Backblaze B2
+
 ### Quality Assurance
- 
+
 To maintain code quality throughout development:
- 
+
 1. **Code Quality Standards**
-   - ESLint configuration for consistent code style
-   - Prettier for automatic code formatting
-   - TypeScript for type safety
- 
+   - ESLint for consistent code style
+   - TypeScript in strict mode, for both the API and the web client
+
 2. **Testing Requirements**
    - API endpoint tests for all routes
    - Database operation tests for all entities
    - Test data seeding for consistent test state
- 
+   - End-to-end tests for the main UI flows, in Firefox and Chromium, at phone and desktop sizes (Phase 3)
+
 3. **Documentation Requirements**
    - README documentation for setup and configuration
    - API documentation
    - Database schema documentation
- 
+
 ## Success Criteria
  
 The project will be considered successful when the following criteria are met:
@@ -402,27 +424,27 @@ The project will be considered successful when the following criteria are met:
  
 2. **Network Reliability**
    - **Risk**: VPN connection may be unreliable in certain network conditions
-   - **Mitigation**: Implement robust offline capabilities, add connection status indicators, create retry mechanisms
+   - **Mitigation**: Read-only offline use from a full snapshot (Phase 3c), a banner when offline, and a fresh snapshot as soon as the connection returns
  
 3. **Data Security**
    - **Risk**: Self-hosted solution may have security vulnerabilities
-   - **Mitigation**: Use established VPN solutions (Tailscale), keep dependencies updated, follow security best practices
+   - **Mitigation**: Tailscale only, with nothing published on the home network (Phase 2); dependency updates (Phase 4); every image upload checked and re-encoded (D11)
  
 4. **Scope Management**
    - **Risk**: Project scope may expand beyond manageable bounds
-   - **Mitigation**: Adhere to phased development approach, prioritize features, maintain focus on core functionality
+   - **Mitigation**: Adhere to the phased approach, and split the largest phase, Phase 3, into three parts that each end in something usable (D10)
  
 5. **External API Dependencies**
    - **Risk**: Spoonacular API limits or availability could impact features
-   - **Mitigation**: Implement long-term caching, local calculation fallbacks, graceful degradation
+   - **Mitigation**: Store nutrition data from USDA FoodData Central (D12), use Spoonacular only for live extras that are never stored (V1), and degrade gracefully when a service is down
  
 6. **Sync Complexity**
-   - **Risk**: Offline sync could become complex with conflict resolution
-   - **Mitigation**: Start with simple timestamp-based sync, single-user model avoids most conflicts
+   - **Risk**: Offline sync could become complex, with conflicts between devices
+   - **Mitigation**: A full snapshot instead of delta sync (D8), and read-only offline use, so there's nothing to reconcile (D9)
  
 ## Conclusion
  
-This design document outlines a comprehensive plan for developing a personal recipe management application using modern web technologies and professional development practices. By following the six-phase approach, the project systematically builds from a functional API through local deployment, UI development, global access, mobile support, and finally enhanced features.
+This design document outlines a comprehensive plan for developing a personal recipe management application using modern web technologies and professional development practices. By following the six-phase approach, the project systematically builds from a functional API through deployment on the Pi with Tailscale, the user interface in three parts, hardening, mobile polish, and finally enhanced features.
  
-The Raspberry Pi serves as the central hub for recipe storage, with clients maintaining offline copies that sync efficiently using timestamp-based change detection. Each phase builds upon the previous one, ensuring that the system evolves in a controlled and tested manner toward the complete vision.
+The Raspberry Pi serves as the central hub for recipe storage, with clients keeping a read-only offline copy, refreshed from a full snapshot whenever the data has changed. Each phase builds upon the previous one, ensuring that the system evolves in a controlled and tested manner toward the complete vision.
  

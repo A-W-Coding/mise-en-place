@@ -3,8 +3,8 @@
 # Mise en place: hardening plan (Phase 1 to Phase 2)
 
 > **Status**
-> - Current step: **Phase 3 gate**. D7–D11 are settled (2026-11-22); next come the Phase 3 spec segments. Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
-> - Last updated: 2026-11-22 (Phase 3 gate: D7–D11 settled, all as recommended)
+> - Current step: **Phase 3 gate: done** (2026-11-22). D7–D11 are settled, and both specs now describe Phase 3 as 3a, 3b and 3c. Next: write Phase 3a's steps into this plan, before any UI code. Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
+> - Last updated: 2026-11-22 (Phase 3 gate: the spec segments are applied)
 > - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
@@ -442,7 +442,7 @@ exit 1
 - [x] A restore test has passed
 
 ## Phase 3 gate (before any UI code)
-First, settle D7–D11 (**done 2026-11-22**, all as recommended). Then write the Phase 3 spec segments, taking in the design-review items that apply to Phase 3:
+First, settle D7–D11 (**done 2026-11-22**, all as recommended). Then write the Phase 3 spec segments (**done 2026-11-22**, applied to both specs), taking in the design-review items that apply to Phase 3:
 - F1: a single HTTPS origin
 - F2: the gaps in timestamp-based sync
 - F3: edit conflicts, and client-generated ids for offline creation
@@ -782,3 +782,38 @@ First, settle D7–D11 (**done 2026-11-22**, all as recommended). Then write the
   - The specs still describe these decisions as open; the Phase 3 spec segments will bring them in.
 
   Next: draft the Phase 3 spec segments.
+- **2026-11-22:** Phase 3 gate done: the Phase 3 spec segments are applied.
+  - **How:** 14 segments, 9 for the technical spec and 5 for the design spec, were drafted in `planning/spec-segments/` and reviewed. A script then applied them, refusing to run unless every start and end heading appeared exactly once and no two ranges overlapped. A dry run on copies matched the result byte for byte. The drafts are deleted, so the specs are the only copy.
+  - **Where:**
+    - `technical-spec.md`: §2.1 (four sentences), §2.2–§2.5, the end of §2.6, §3.1, §3.2's Phase 3 and Phase 6 tables, §3.3, a new §3.4 (the web client), §5.6, §6.2, §7.2 and §8
+    - `design-spec.md`: System Architecture, Phase 3, Phase 6, Continuous Integration and Deployment, Risk Assessment and the Conclusion
+  - **Design-review items taken in:**
+    - F1: one origin
+    - F2 and D8: snapshot sync
+    - F3 and D9: read-only offline, plus `If-Match`
+    - F5: fractions, and `shared/`
+    - F6: full CRUD, with a recipe edited as a whole
+    - F7: `primaryImageId`
+    - S4 and D11: the image rules
+    - V2 and D7: no Electron
+    - V3 and D10: 3a, 3b and 3c
+    - M1: recipe links in Phase 6; timers in 3a, 3b and Phase 5
+  - **Your review changed four things:**
+    - **The offline copy never expires.** TanStack Query's persistence discards data older than 24 hours by default, so the snapshot gets its own IndexedDB record instead, replaced only by a complete newer one.
+    - **Firefox on Android is the main target.**
+      - Firefox asks before granting persistent storage, and only after a tap, so a Protect button asks for it.
+      - Its "Delete browsing data on quit" setting must stay off.
+      - Cooking mode copes with a missing wake lock.
+      - Playwright runs Firefox as well as Chromium, plus a short hand check on the phone.
+    - **Failed refreshes are retried** while the app is on screen (after 15 seconds, doubling up to every 5 minutes), and a Refresh button tries at once. The browser's "online" signal alone can't tell whether the Pi is reachable.
+    - **Two open devices stay in step without background syncing.** Each refreshes when the app opens, comes back to the front or reconnects, and after its own saves. A test covers it with two browser contexts.
+  - **My proposals you agreed to, beyond the gate decisions:**
+    - `If-Match` on recipe edits
+    - a recipe edited as a whole
+    - the client stack (Vite, React, React Router, TanStack Query, idb-keyval, vite-plugin-pwa, Vitest, Playwright), with `web/` and `shared/` in this repo
+    - `stepType` dropped, and `timerSeconds` instead of `timerLength`
+    - `instructions` dropped only in a later migration
+    - images served at `/media/<id>.webp` with year-long caching
+  - **Left for the start of 3a:** styling (plain CSS modules suggested), and confirming on the phone that Firefox for Android supports the wake lock and shows the persistent-storage prompt.
+
+  Next: write Phase 3a's steps into this plan, before any UI code.
