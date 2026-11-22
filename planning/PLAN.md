@@ -3,9 +3,9 @@
 # Mise en place: hardening plan (Phase 1 to Phase 2)
 
 > **Status**
-> - Current step: **Step 8: Phase 2, the Pi with Tailscale**. The done-when checks all pass (2026-11-22). Still open: the SSD (8.1) and the encrypted off-Pi copy (8.7). After Step 8 comes the Phase 3 gate
-> - Last updated: 2026-11-22 (Step 8: the Pi switched over, all four checks pass, specs updated)
-> - Blockers: the SSD for 8.1, about a month away; choosing where the encrypted off-Pi copy goes (8.7)
+> - Current step: **Step 8: Phase 2, the Pi with Tailscale**. The done-when checks all pass (2026-11-22). Still open: the SSD (8.1) and the off-Pi copy (8.7: Backblaze B2 with restic; the script is written, the account and the Pi setup are next). After Step 8 comes the Phase 3 gate
+> - Last updated: 2026-11-22 (Step 8: the off-Pi copy goes to Backblaze B2; `scripts/offsite.sh` and runbook section 7)
+> - Blockers: the SSD for 8.1, about a month away; the Backblaze account and the Pi setup for 8.7 (you)
 
 ## How to use this file
 - Work through the steps in order. Each step gives a goal, why it matters, tasks as checkboxes, and a "done when" test.
@@ -431,7 +431,7 @@ exit 1
 
 ### 8.7 Backups (V4)
 - [x] Add a daily cron job that runs `pg_dump -Fc` through `docker compose exec -T`, saves the dump to the SSD and keeps 7 days of dumps (spec §6.2). Put the commands in a script, `scripts/backup.sh`, rather than in the crontab line itself. The script is written and tested locally; the cron line is in `docs/deployment.md`. The line was added to the Pi's crontab on 2026-11-22 (03:30 daily); its first run is on 2026-11-23
-- [ ] Keep an encrypted copy off the Pi, for example with restic or rclone's crypt backend, on another machine or in cloud storage
+- [ ] Keep an encrypted copy off the Pi, for example with restic or rclone's crypt backend, on another machine or in cloud storage. **Answered 2026-11-22: Backblaze B2, with restic.** `scripts/offsite.sh` and section 7 of `docs/deployment.md`; tick once the first copy is in B2 and a restore from it has passed
 - [ ] Back up the images directory as well, once Phase 3 adds images
 - [x] **Test a restore:** restore a dump into a scratch database, for example with `pg_restore -d miseenplace_restore_check`, and compare row counts with the live database. `scripts/restore-check.sh` does this. It passed locally, and on the Pi on 2026-11-22
 
@@ -724,3 +724,31 @@ First, settle D7–D11. Then write the Phase 3 spec segments, taking in the desi
   - You may want to archive `AWhite-Code/mise-en-place` on GitHub, so nothing pulls from it by mistake again.
 
   Next: check the first cron backup on 2026-11-23, then choose where the off-Pi copy goes (8.7). After that, the Phase 3 gate.
+- **2026-11-22:** Step 8: the off-Pi copy (8.7) is written; the Pi side is next.
+  - PR #7's CI passed: run #15 on the pull request and run #16 on the merge into `main`.
+  - **Answered: Backblaze B2, with restic.**
+    - Why: it's off-site, runs nightly from the Pi without any other machine, and the first 10 GB are free.
+    - Considered and not chosen:
+      - your PC: in the same house, and only works when it's on
+      - Google Drive, using the empty 15 GB on your programming account. restic can keep its repository there through rclone, so the snapshots and encryption would be the same. But it adds rclone on the Pi and a Google sign-in token that Google can revoke without warning, and nothing watches the nightly job yet. It also puts the backups in the same account as that email. Confirmed B2 after comparing the two.
+  - **`scripts/offsite.sh`:**
+    - **With no arguments:** it backs up the backups folder (skipping `.partial` files) and keeps 7 daily, 4 weekly and 6 monthly snapshots. On Sundays it also downloads a random 10% of the stored data and checks it.
+    - **With arguments:** it runs that restic command with the settings loaded, for example `init`, `snapshots` or `restore`.
+    - **Settings:** they come from `~/.config/miseenplace/restic.env` on the Pi, never from git. The whole file also goes in your password manager, because without its password nobody can decrypt the copy.
+    - **B2's S3-compatible API:** restic's docs recommend it over restic's own B2 backend, because of error-handling problems in the B2 library it uses. The account's master key doesn't work with it, so the Pi gets its own key, limited to the one bucket.
+    - **A fixed `--host`:** it keeps one snapshot history across reinstalls, such as the SSD move.
+  - **`docs/deployment.md`:**
+    - A new section 7: the account, bucket, bucket-only key, settings file, first copy, cron line and a test restore from B2.
+    - The cron line runs `offsite.sh` only if `backup.sh` succeeded.
+    - "Moving to an SSD" can fetch the dump from B2 instead of going through your PC.
+    - The day-to-day table and "Restoring for real" mention B2.
+  - Technical spec §6.2 and the README describe the off-site copy.
+  - **Tested on this PC with a stand-in for `restic`,** which prints its arguments. That covers the script's logic, not restic itself, so the first real run is on the Pi.
+    - Without a settings file, it stops with a message.
+    - A settings file written exactly as the runbook says reaches restic intact, including a key containing `/` and `+`.
+    - A weekday run does backup then forget, and a Sunday run adds the check.
+    - Arguments pass straight through to restic.
+    - If backup or forget fails, the script stops with restic's exit code.
+    - In the cron line, a failed backup skips the copy.
+
+  Next: set up B2 and the Pi from section 7 of the runbook, including the test restore from B2, then tick 8.7. After that, the Phase 3 gate.
