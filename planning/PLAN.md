@@ -3,9 +3,9 @@
 # Mise en place: hardening plan (Phase 1 to Phase 3a)
 
 > **Status**
-> - Current step: **Step 14: deploy, and check on the phone**, ready to start. Step 13 is done (2026-11-23), with its Firefox end-to-end runs and CI to be confirmed when its PR opens. Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
-> - Last updated: 2026-11-23 (Step 13: cooking mode, printing and installing)
-> - Blockers: the SSD for 8.1, about a month away
+> - Current step: **Phase 3a is done** (2026-11-23). Step 14 deployed it to the Pi and passed the checks on the phone and the laptop, with its CI to be confirmed when its PR opens. Next is D15 (offline edits), which decides whether 3c comes before 3b; that part's steps are written once it's settled. Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
+> - Last updated: 2026-11-23 (Step 14: deploy, and check on the phone)
+> - Blockers: the SSD for 8.1, about a month away. D15, before the next part of Phase 3 is planned
 
 ## How to use this file
 - Work through the steps in order. Each step gives a goal, why it matters, tasks as checkboxes, and a "done when" test.
@@ -60,6 +60,7 @@ The rule that reconciles them: **settle the spec first, then bring the code in l
 | D12 | Nutrition data source | **USDA FoodData Central** as the primary source. Use Spoonacular only for live, uncached extras (V1) | Phase 6 | Deferred |
 | D13 | Styling | **Plain CSS with CSS Modules**, built into Vite. Nothing new to learn or upgrade, styles are scoped to each component, and CSS custom properties hold the sizes and colours cooking mode and printing override. Alternatives: Tailwind (utility classes in the markup, quick once learned) or a component library such as Mantine (ready-made forms and dialogs, but heavier and opinionated) | Step 10 | **Decided 2026-11-23: CSS Modules.** Plain CSS, one `*.module.css` file per component with its class names scoped to it, and the theme's colours and sizes as CSS custom properties. No Tailwind or component library. Settled after the UI wireframes |
 | D14 | Timer alerts when the app isn't on screen | **Web Push from the Pi.** On Android, Firefox pauses a page soon after you switch away, so the page alone can't ring at zero. Instead, the app tells the Pi when a timer starts, and at zero the Pi sends a push, which the phone shows as a notification with sound and vibration, whatever app is open. It needs notification permission (asked once, at the first timer), VAPID keys in the Pi's `.env`, a small table of running timers so a restart can't lose one (3a's only schema change), and a connection at that moment. The push travels encrypted through Mozilla's push service. Firefox for Android has had push bugs with installed apps, so the first task would be a quick test on your phone. Alternative: timers ring only while the app is on screen, which cooking mode keeps it, and background alerts wait for Phase 5, which already lists push | Step 13 | **Decided 2026-11-22: on screen only, for now.** Timers ring while the app is on screen, and a note by them says so. Alerts while another app is open wait for Phase 5's push work |
+| D15 | Offline edits (revisits D9) | To come before 3c is planned. In outline: (1) offline drafts, where the editor saves on the phone and uploads when connected, with the 412 prompt for changes made elsewhere; (2) a full offline queue of creates, edits and deletes, with IDs made on the phone (a small API change) and conflicts shown side by side; (3) automatic merging (CRDTs), likely overkill for one person with two devices. Leaning towards 1 or 2, as part of 3c, with 3c moved before 3b | Before 3c | **Open, raised 2026-11-23.** In Step 14's phone check, Android ran only one VPN at a time: Tailscale and Proton VPN take turns, so the phone is often off the tailnet. Read-only offline (D9) would mean switching VPNs to edit |
 
 ## Revised phase map
 | Phase | Original | Proposed |
@@ -592,15 +593,15 @@ Before starting (done 2026-11-23): the UI wireframes, made and reviewed together
 
 **Why:** Playwright's Firefox is the desktop build of the engine. Installing, the wake lock and the feel of the app need the real phone.
 
-- [ ] Merge to `main`, then run `scripts/deploy.sh` on the Pi
-- [ ] On your phone, in Firefox for Android (you):
+- [x] Merge to `main`, then run `scripts/deploy.sh` on the Pi
+- [x] On your phone, in Firefox for Android (you):
   - install the app from Firefox's menu, and open it from the Home Screen
   - find, read, create, edit and delete a recipe
   - follow a whole recipe with cooking mode on, and add a timer or two to check they stay out of the way. If the screen sleeps, Firefox for Android lacks the wake lock: cooking mode should say so, and we then choose between a fallback and using Chrome for cooking
   - with the app open on the phone and the laptop, add a recipe on the laptop, bring the phone's app back to the front, then try Refresh
-- [ ] Print a recipe from the laptop
-- [ ] Docs: the README's development section (running the client, the root scripts, Playwright), `docs/architecture.md` (the API serving the client), and `docs/deployment.md` if anything changed
-- [ ] Tick the boxes, then update the Status block and the Progress log
+- [x] Print a recipe from the laptop. Done from Edge: this PC's Firefox can't reach the tailnet while Proton VPN tunnels it
+- [x] Docs: the README's development section (running the client, the root scripts, Playwright), `docs/architecture.md` (the API serving the client), and `docs/deployment.md` if anything changed
+- [x] Tick the boxes, then update the Status block and the Progress log
 
 **Done when:** every 3a success criterion above is met, and CI is green. **Phase 3a is then complete.** 3b's steps are written next, the same way.
 
@@ -608,8 +609,8 @@ Before starting (done 2026-11-23): the UI wireframes, made and reviewed together
 | When | Items |
 |---|---|
 | Any time after Step 6 | M6: a JSON export of all data (small, and cheap insurance) |
-| Phase 3 | 3a: Steps 9–14. 3b and 3c get their steps when each starts, following the Phase 3 gate's decisions |
-| Later, unscheduled | Ingredient usage, from your wireframe review: see which recipes use an ingredient, then either replace it in all of them at once (a merge) so it can be deleted, or delete those recipes with it |
+| Phase 3 | 3a: Steps 9–14. 3b and 3c get their steps when each starts, following the Phase 3 gate's decisions. 3c may come before 3b, depending on D15 |
+| Later, unscheduled | Ingredient usage, from your wireframe review: see which recipes use an ingredient, then either replace it in all of them at once (a merge) so it can be deleted, or delete those recipes with it. Phone VPNs: Android runs one VPN at a time, so Tailscale and Proton VPN take turns, and Proton doesn't reconnect by itself (Android's Always-on VPN blocks Tailscale outright). Ways to automate or avoid the switch: an automation app (MacroDroid: start Proton when Tailscale disconnects), the Pi as a Tailscale exit node sending its traffic through Proton, or Tailscale's Mullvad add-on |
 | Phase 4 | Uptime and disk-space alerts, log rotation, and automated dependency updates (Dependabot or Renovate). V5: the Prisma upgrade, as its own task |
 | Phase 5 | F7: the shopping-list tables must exist before Phase 5 can deliver shopping lists. D14: timer alerts while another app is open, through Web Push from the Pi (test it on the phone first, because Firefox for Android has had push bugs) |
 | Phase 6 | V1/D12: USDA FoodData Central. F5: unit conversion using ingredient densities. F7: fixes to the meal-plan and shopping-list schema, and ingredient categories. M5: safe URL import. M1: RecipeLink and timers each appear in two phases |
@@ -1220,3 +1221,20 @@ Before starting (done 2026-11-23): the UI wireframes, made and reviewed together
   - **Audit:** adding vite-plugin-pwa brings 4 moderate advisories in `glob` and `minimatch`, inside `workbox-build`. That code only runs at build time over our own files, and isn't in the app. Not fixed, like the API's.
 
   Next: Step 14, deploy to the Pi and check on the phone. Phase 3a is then complete.
+- **2026-11-23:** Step 13's PR #15 merged, with CI green, Firefox end-to-end included. Then Step 14 done, and with it **Phase 3a**.
+  - **Deploy:** `scripts/deploy.sh` on the Pi built the new image, web client included, found no migrations to apply, and passed its health check. A `curl: (56) Recv failure` along the way was the first health check reaching the port while the server was still starting. The retry 2 seconds later passed.
+  - **This PC on the tailnet:** it joined the tailnet, and reached the Pi from PowerShell, but Firefox timed out. Proton VPN's split tunnelling is in Inverse mode, sending Firefox, Chrome and a few other apps through Proton, which can't reach the tailnet. Edge isn't included, so the desktop app is installed from Edge. Edge offered it only through the address bar's "App available" button, with its Apps menu greyed out. Its service worker was activated and running.
+  - **The phone:** Android runs one VPN at a time, so Tailscale and Proton VPN take turns, and Proton doesn't come back by itself. Always-on VPN for Proton stops Tailscale from starting at all. The checks ran with Tailscale on. That finding opened D15 (offline edits, revisiting D9), and the switching itself went into the backlog.
+  - **The checks, all passed:**
+    - The app installed from Firefox for Android and opens from the Home Screen.
+    - Recipes were created, found, read, edited and deleted on the phone.
+    - Cooking mode kept the screen on through a whole recipe, and the timers stayed out of the way.
+    - Two devices: a recipe added on the phone appeared on the PC as soon as its window came to the front. That's the plan's direction reversed, through the same refresh on focus.
+    - Printing from Edge gave just the recipe: its name, details, ingredients and method. The date, title and address round the edge are Edge's own headers and footers, which its print dialog turns off under More settings. A page can only hide them by dropping its page margins, which would leave later pages of a long recipe running to the paper's edge, so they stay. Firefox's print preview wasn't checked by hand, since this PC's Firefox can't reach the Pi. Playwright checks the print styles in Firefox in CI.
+  - **Docs:**
+    - The README: setting up and running the client, the root scripts, the client's tests, the three CI jobs, and the API serving the client.
+    - `docs/architecture.md`: a development diagram with Vite, and the Pi serving the client to the installed app and its service worker. Electron is gone (D7).
+    - `docs/deployment.md`: the Dockerfile's three stages, and a new section 8 on installing the app on the phone.
+  - **Updates after a deploy:** an installed app picks up the new version the next time it opens, reloading into it once. One left open during a deploy keeps the old version until it's reopened or reloaded.
+
+  Next: D15. Then the steps for 3c or 3b, whichever it puts first.

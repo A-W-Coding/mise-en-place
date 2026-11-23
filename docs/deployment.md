@@ -1,13 +1,13 @@
 # Deploying to the Raspberry Pi
 
-How the API runs on the Pi from Phase 2: in Docker, listening on `127.0.0.1:3000` only, published to your own devices by `tailscale serve` over HTTPS. The database has no published port. [`architecture.md`](architecture.md) has the diagram.
+How the app runs on the Pi from Phase 2: in Docker, listening on `127.0.0.1:3000` only, published to your own devices by `tailscale serve` over HTTPS. The API serves the web client as well, so the app and its data share that one address. The database has no published port. [`architecture.md`](architecture.md) has the diagram.
 
-Sections 1–7 are a one-time setup. After that, deploying is one command (see [Day to day](#day-to-day)).
+Sections 1–7 are a one-time setup, and section 8 installs the app on your phone. After that, deploying is one command (see [Day to day](#day-to-day)).
 
 | File | What it does |
 |---|---|
 | `docker-compose.prod.yml` | The API and PostgreSQL 17, with restart policies and healthchecks. Project name `miseenplace-prod` |
-| `Dockerfile` | The API image: built on the Pi, runs as the non-root `node` user, includes the Prisma CLI for migrations |
+| `Dockerfile` | The app's image: built on the Pi, in three stages (the API, the web client, then the image itself, which keeps only the client's built files). Runs as the non-root `node` user, and includes the Prisma CLI for migrations |
 | `scripts/deploy.sh` | Backs up, pulls `main`, builds, migrates, restarts, and waits for the health check |
 | `scripts/backup.sh` | Dumps the database into the backups folder, checks the dump, and removes dumps older than 7 days |
 | `scripts/restore-check.sh` | Restores a dump into a scratch database and compares row counts with the live one |
@@ -175,6 +175,22 @@ The backups folder is on the same disk as the database, so one dead SD card or S
 
 Each night it keeps 7 daily, 4 weekly and 6 monthly snapshots. On Sundays it also downloads a random tenth of the stored data and checks it.
 
+## 8. Installing the app on your phone
+
+With Tailscale connected on the phone:
+
+1. Open `https://<name>.<tailnet>.ts.net` in Firefox for Android. The recipe list appears.
+2. In Firefox's menu (⋮), choose **Install**. On some versions it's **Add app to Home screen**. In Chrome, it's **Install app**.
+3. Open it from the Home Screen. It opens in its own window, without the browser's address bar.
+
+Things worth knowing:
+
+- **Starting without a connection:** the service worker keeps the app's files on the phone, so the app opens even with Tailscale off. It then says it can't reach the server, until 3c adds an offline copy of the recipes.
+- **Updates:** after a deploy, the next time you open the app it downloads the new version and reloads into it once. Running timers survive that, since they're kept on the phone.
+- **Cooking mode** keeps the screen on in Firefox 126 or later, and in Chrome. Where it can't, it says the screen may sleep.
+- **Timers** ring only while the app is on screen. If you switch to another app, one that ends rings when you come back.
+- **Options** (the sliders icon) holds the theme, the text size and the timer sound, which are saved on each device.
+
 ## Checks
 
 These are Step 8's "done when" checks:
@@ -195,7 +211,7 @@ All of these run in `~/mise-en-place` on the Pi:
 
 | Task | Command |
 |---|---|
-| Deploy the latest `main` | `scripts/deploy.sh` |
+| Deploy the latest `main` (it builds the web client too, so allow a few minutes) | `scripts/deploy.sh` |
 | Status and health | `docker compose ps` |
 | API logs | `docker compose logs -f api` |
 | Back up now | `scripts/backup.sh` |

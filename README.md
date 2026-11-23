@@ -2,9 +2,9 @@
 
 [![CI](https://github.com/A-W-Coding/mise-en-place/actions/workflows/node.js.yml/badge.svg)](https://github.com/A-W-Coding/mise-en-place/actions/workflows/node.js.yml)
 
-A personal recipe API, built with Express 5, TypeScript, Prisma 6.6 and PostgreSQL 17.
+A personal recipe app: an API built with Express 5, TypeScript, Prisma 6.6 and PostgreSQL 17, and a React web client that installs on your phone and keeps the screen on while you cook.
 
-Phase 1, the backend API, is complete. Phase 2 puts it on a Raspberry Pi, reachable over Tailscale HTTPS. The plan, decisions and progress are in [`planning/PLAN.md`](planning/PLAN.md).
+Phase 1 (the API) and Phase 2 (a Raspberry Pi, reachable over Tailscale HTTPS) are complete. Phase 3a adds the web client: finding, reading and editing recipes, cooking mode with timers, printing, and installing as an app. The plan, decisions and progress are in [`planning/PLAN.md`](planning/PLAN.md).
 
 ## Prerequisites
 
@@ -32,7 +32,13 @@ npm run seed
 # 6. Start the API on port 3000, and check it can reach the database
 npm run dev
 curl http://localhost:3000/api/health      # {"status":"ok"}
+
+# 7. The web client: install its dependencies and build it, then open http://localhost:3000
+npm --prefix web ci
+npm run web:build
 ```
+
+The API serves the built client from `web/dist`, at the same address as the API. To work on the client with live reloading, run `npm run web:dev` beside `npm run dev` and open http://localhost:5173 instead: Vite forwards `/api` to the API on port 3000, so the client talks to the same origin either way.
 
 `docker-compose.yml` is for development only: PostgreSQL, reachable from this machine alone. The Pi uses `docker-compose.prod.yml` (see [Deployment](#deployment)).
 
@@ -86,6 +92,11 @@ The test reset and the seed both delete every row before inserting their data. B
 | Run all tests with coverage | `npm test -- --coverage` |
 | Run one test file | `npm test -- tests/recipe-api.test.ts` |
 | Run tests by name | `npm test -- -t "should delete a recipe"` |
+| Client: dev server with live reloading (port 5173) | `npm run web:dev` |
+| Client: build to `web/dist`, which the API serves | `npm run web:build` |
+| Client: lint, type-check, unit and component tests | `npm run web:lint`, `npm run web:typecheck`, `npm run web:test` |
+| End-to-end tests (build the API and the client first) | `npm run e2e` |
+| Redraw the app's icons after changing `web/icons/` | `cd web && node scripts/make-icons.mjs` |
 
 If `prisma migrate dev` ever offers to reset the database, say no and find out why first: a reset deletes all its data.
 
@@ -102,9 +113,22 @@ There are 385 tests in [`tests/`](tests): integration tests that send real reque
 
 The tests don't type-check (ts-jest only transpiles), so run `npx tsc --noEmit` as well.
 
+### The web client
+
+- **Unit and component tests:** `npm run web:test` runs the client's Vitest tests, which sit beside the code they test. They render the real pages and router against a pretend `fetch`, so they need no server or database.
+- **End-to-end tests:** `npm run e2e` runs Playwright against the built API serving the built client, on port 3100, with the same `_test` database and guard as `npm test`. Every test starts from the sample data.
+  - It runs in Firefox (the phone's engine) and Chromium, each at a phone size and a desktop size.
+  - Install the browsers once with `npx --prefix web playwright install firefox chromium`.
+  - Build both first (`npm run build`, then `npm run web:build`), since it tests what's built.
+  - To run one browser and size, add `-- --project=chromium-phone`.
+
 ### CI
 
-GitHub Actions runs on every pull request into `main` and every push to `main`. It starts a PostgreSQL 17 service, then runs lint, the type-check and the tests with coverage, and puts a coverage table on the run's summary page.
+GitHub Actions runs on every pull request into `main` and every push to `main`, with three jobs side by side:
+
+- **The API:** a PostgreSQL 17 service, then lint, the type-check and the tests with coverage. It puts a coverage table on the run's summary page.
+- **The client:** its lint, type-check, and unit and component tests.
+- **End-to-end:** builds both, then runs Playwright in Firefox and Chromium on a PostgreSQL service of its own. If it fails, the run keeps Playwright's report.
 
 ## API
 
@@ -134,7 +158,7 @@ curl -X POST http://localhost:3000/api/ingredients \
 
 ## Deployment
 
-From Phase 2 the API runs on a Raspberry Pi, in Docker, on `127.0.0.1:3000` only. `tailscale serve` publishes it over HTTPS to your own devices, and the database has no published port. `scripts/deploy.sh` backs up, pulls `main`, builds, migrates and waits for the health check; `scripts/backup.sh` runs daily from cron, and `scripts/offsite.sh` then keeps an encrypted copy in Backblaze B2. [`docs/deployment.md`](docs/deployment.md) covers the setup, from the operating system to the restore test.
+From Phase 2 the app runs on a Raspberry Pi, in Docker, on `127.0.0.1:3000` only. `tailscale serve` publishes it over HTTPS to your own devices, and the database has no published port. The API serves the web client too, so the app and its data share one address: open it in Firefox on your phone and choose Install from the menu. `scripts/deploy.sh` backs up, pulls `main`, builds, migrates and waits for the health check; `scripts/backup.sh` runs daily from cron, and `scripts/offsite.sh` then keeps an encrypted copy in Backblaze B2. [`docs/deployment.md`](docs/deployment.md) covers the setup, from the operating system to the restore test.
 
 ## Project structure
 
@@ -152,6 +176,7 @@ shared/                  Code the API and the web client share
 web/                     The web client: Vite, React and TypeScript, with its own package.json
   src/                   Pages, components, the API module and the theme
   e2e/                   Playwright end-to-end tests
+  icons/, public/        The app's icons: SVG sources, and the PNGs scripts/make-icons.mjs draws from them
 prisma/
   schema.prisma          The database schema
   migrations/            SQL migrations, applied in order
