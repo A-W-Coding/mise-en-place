@@ -208,9 +208,9 @@ This phase introduces the user interface, mobile-friendly from the start, since 
 - **D10: three parts,** below.
 - **D11, image uploads:** JPEG, PNG and WebP only, up to 15 MB and 50 megapixels, re-encoded to WebP with all metadata stripped, 10 per recipe (S4).
 
-#### Phase 3a: The UI and Cooking Mode
+#### Phase 3a: The UI and Cooking Mode — complete
 
-On the Phase 1 schema, with no new tables.
+On the Phase 1 schema, with no new tables. It was completed on 23 November 2026, on the Pi.
 
 **Key Deliverables:**
 - A React app served from the Pi's HTTPS address, installable as a PWA
@@ -223,7 +223,7 @@ On the Phase 1 schema, with no new tables.
 - Protection against saving over an edit made on another device (F3)
 - Devices kept in step without background syncing: each refreshes when the app opens, comes back to the front or reconnects, and after its own saves, with a Refresh button for any other time
 
-**Success Criteria:**
+**Success Criteria (all met):**
 - Recipes can be found, read, created, edited and deleted from a phone and a laptop
 - The app installs from Firefox on Android and opens from the Home Screen
 - Cooking mode keeps the screen on through a whole recipe
