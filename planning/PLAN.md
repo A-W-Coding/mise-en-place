@@ -3,9 +3,9 @@
 # Mise en place: hardening plan (Phase 1 to Phase 3a)
 
 > **Status**
-> - Current step: **Step 10: the client's skeleton**, once D13 is settled. Step 9 is done (2026-11-22), and the UI wireframes are reviewed (2026-11-23). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
-> - Last updated: 2026-11-23 (Phase 3a: the wireframe review's changes)
-> - Blockers: the rest of D13 before Step 10 (you); the SSD for 8.1, about a month away
+> - Current step: **Step 10: the client's skeleton**, ready to start. Step 9 is done (2026-11-22), the UI wireframes are reviewed and D13 is settled (2026-11-23). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
+> - Last updated: 2026-11-23 (D13: CSS Modules)
+> - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
 - Work through the steps in order. Each step gives a goal, why it matters, tasks as checkboxes, and a "done when" test.
@@ -58,7 +58,7 @@ The rule that reconciles them: **settle the spec first, then bring the code in l
 | D10 | Split Phase 3 | **Yes, into three:** 3a is the UI plus cooking mode on the Phase 1 schema; 3b is structured instructions, images and tags; 3c is offline support (V3) | Phase 3 gate | **Decided 2026-11-22: three parts, as recommended.** 3b also takes sections, equipment and the missing endpoints (F6) |
 | D11 | Image upload rules | Allowed types, size and pixel caps, re-encoding (S4) | Phase 3 gate | **Decided 2026-11-22:** JPEG, PNG and WebP, recognised from the contents (SVG, GIF and HEIC rejected). At most 15 MB and 50 megapixels, checked before decoding. Each image is turned upright, then re-encoded with sharp to WebP at 2000 px on the long side, plus a 400 px thumbnail, with all metadata stripped. The original isn't kept. Server-generated filenames, 10 images per recipe, stored in a Docker volume that's backed up with the database |
 | D12 | Nutrition data source | **USDA FoodData Central** as the primary source. Use Spoonacular only for live, uncached extras (V1) | Phase 6 | Deferred |
-| D13 | Styling | **Plain CSS with CSS Modules**, built into Vite. Nothing new to learn or upgrade, styles are scoped to each component, and CSS custom properties hold the sizes and colours cooking mode and printing override. Alternatives: Tailwind (utility classes in the markup, quick once learned) or a component library such as Mantine (ready-made forms and dialogs, but heavier and opinionated) | Step 10 | **Partly answered 2026-11-22: plain CSS**, with no Tailwind or component library. Whether to use CSS Modules or plain stylesheets is decided after the UI mockups, before Step 10 |
+| D13 | Styling | **Plain CSS with CSS Modules**, built into Vite. Nothing new to learn or upgrade, styles are scoped to each component, and CSS custom properties hold the sizes and colours cooking mode and printing override. Alternatives: Tailwind (utility classes in the markup, quick once learned) or a component library such as Mantine (ready-made forms and dialogs, but heavier and opinionated) | Step 10 | **Decided 2026-11-23: CSS Modules.** Plain CSS, one `*.module.css` file per component with its class names scoped to it, and the theme's colours and sizes as CSS custom properties. No Tailwind or component library. Settled after the UI wireframes |
 | D14 | Timer alerts when the app isn't on screen | **Web Push from the Pi.** On Android, Firefox pauses a page soon after you switch away, so the page alone can't ring at zero. Instead, the app tells the Pi when a timer starts, and at zero the Pi sends a push, which the phone shows as a notification with sound and vibration, whatever app is open. It needs notification permission (asked once, at the first timer), VAPID keys in the Pi's `.env`, a small table of running timers so a restart can't lose one (3a's only schema change), and a connection at that moment. The push travels encrypted through Mozilla's push service. Firefox for Android has had push bugs with installed apps, so the first task would be a quick test on your phone. Alternative: timers ring only while the app is on screen, which cooking mode keeps it, and background alerts wait for Phase 5, which already lists push | Step 13 | **Decided 2026-11-22: on screen only, for now.** Timers ring while the app is on screen, and a note by them says so. Alerts while another app is open wait for Phase 5's push work |
 
 ## Revised phase map
@@ -490,7 +490,7 @@ Phase 3a builds the web client on the Phase 1 schema (D10). The specs are the re
 
 **Why:** setting up the build, serving, CI and Playwright once, before any screens, means each feature step only adds its own code and tests.
 
-Before starting: make the UI mockups together (the recipe list, recipe page, editor and cooking mode, at phone and laptop sizes), then settle the rest of D13: CSS Modules, or plain stylesheets.
+Before starting (done 2026-11-23): the UI wireframes, made and reviewed together, and D13, answered as CSS Modules. The wireframes are a canvas artifact, not in the repo; the 2026-11-23 Progress log entry records what they settled.
 
 ### 10.1 The client
 - [ ] Create `web/` with Vite, React and TypeScript in strict mode, with its own `package.json` and lockfile (§3.4). Keep the API's `tsc` and ESLint away from `web/`: the root `tsconfig.json` has no `include` or `exclude` yet, so it would try to compile the client
@@ -499,7 +499,7 @@ Before starting: make the UI mockups together (the recipe list, recipe page, edi
 - [ ] Import `shared/` from the client. Vite has to be allowed to read files outside `web/`
 - [ ] Development: Vite on port 5173, forwarding `/api` and `/media` to the API on port 3000, so development is same-origin like production (F1). Root scripts run, build and test the client from the repo root
 - [ ] ESLint for the client, with the React hooks rules. Vitest with Testing Library, starting with a test of the API module's error handling
-- [ ] The D13 styling setup, with a few CSS custom properties (text size, spacing, colours) for cooking mode and printing to override later
+- [ ] CSS Modules (D13): one `*.module.css` per component, plus one global stylesheet holding the theme as CSS custom properties (light and dark, following the system or the Options choice; text size; spacing). Cooking mode and printing override those properties later
 
 ### 10.2 Serving it (F1)
 - [ ] Express serves `web/dist`. Files with a content hash in their name are cached for a year. `index.html`, and later the service worker, are always revalidated. Any other GET outside `/api` and `/media` gets `index.html`, so deep links load the app. API tests cover all three
@@ -1037,3 +1037,9 @@ Before starting: make the UI mockups together (the recipe list, recipe page, edi
   - **D13 is still open:** CSS Modules or plain stylesheets, to settle before Step 10.
 
   Next: settle D13, then Step 10.
+- **2026-11-23:** D13 answered: CSS Modules.
+  - Each component gets its own `*.module.css`, whose class names Vite scopes to that component, so one screen's styles can't change another's. It's still plain CSS, and built into Vite.
+  - The theme lives in one global stylesheet as CSS custom properties, the same light and dark tokens the wireframes use, so the Options theme switch and cooking mode just swap values.
+  - Technical spec §3.4's stack table now lists it, and Step 10's styling task names the setup.
+
+  Next: Step 10, the client's skeleton.

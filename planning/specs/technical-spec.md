@@ -749,6 +749,7 @@ The web client is a React single-page app, installable as a PWA, and the only us
 | Routing | React Router | Deep links such as `/recipes/<id>` work, and survive a reload |
 | Server data | TanStack Query | Caching, refetching and request state while online |
 | Offline copy (3c) | IndexedDB, through idb-keyval | One record holding the latest snapshot. It never expires (see Offline below) |
+| Styling | CSS Modules, with the theme as CSS custom properties (D13) | Plain CSS, scoped to each component so screens can't restyle each other; light and dark swap the custom properties |
 | PWA | vite-plugin-pwa (Workbox) | Generates the manifest and the service worker |
 | Unit and component tests | Vitest, Testing Library | Vite-native, with Jest-style syntax |
 | End-to-end tests | Playwright | Real browsers (Firefox, the phone's engine, and Chromium), phone-sized viewports, and an offline mode for 3c (§5.6) |
