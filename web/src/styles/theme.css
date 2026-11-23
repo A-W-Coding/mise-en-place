@@ -1,0 +1,126 @@
+/*
+ * theme.css — the client's one global stylesheet (D13)
+ *
+ * It holds the theme as CSS custom properties, plus page basics. Components
+ * style themselves in their own *.module.css files, using these variables, so
+ * switching theme or text size only changes the values here.
+ *
+ * Theme: light by default, dark when the system prefers it, and either one
+ * forced by data-theme="light" or "dark" on <html> (the Options page, Step 11).
+ * Text size: data-text-size="smaller" or "larger" on <html> scales every rem.
+ */
+
+:root {
+    color-scheme: light;
+    --bg: #ffffff;
+    --surface: #f5f6f8;
+    --surface-2: #eceef2;
+    --text: #16181d;
+    --muted: #596170;
+    --border: #d9dde3;
+    --accent: #1f7a5c;
+    --accent-text: #ffffff;
+    --accent-soft: #e3f2ec;
+    --danger: #b42318;
+    --danger-soft: #fdecea;
+    --shadow: 0 8px 24px rgb(16 24 40 / 14%);
+
+    --font: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --radius: 12px;
+    --radius-pill: 999px;
+    --tap: 44px;
+    --page-width: 1160px;
+    --gutter: 16px;
+}
+
+/* The dark values appear twice: once for "follow the system", once for "always dark" */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+        color-scheme: dark;
+        --bg: #111316;
+        --surface: #1a1d22;
+        --surface-2: #23272e;
+        --text: #eceef1;
+        --muted: #a2a9b4;
+        --border: #2f343c;
+        --accent: #4cc79b;
+        --accent-text: #0b1f17;
+        --accent-soft: #16352a;
+        --danger: #f97066;
+        --danger-soft: #3a1d1b;
+        --shadow: 0 8px 24px rgb(0 0 0 / 50%);
+    }
+}
+
+:root[data-theme='dark'] {
+    color-scheme: dark;
+    --bg: #111316;
+    --surface: #1a1d22;
+    --surface-2: #23272e;
+    --text: #eceef1;
+    --muted: #a2a9b4;
+    --border: #2f343c;
+    --accent: #4cc79b;
+    --accent-text: #0b1f17;
+    --accent-soft: #16352a;
+    --danger: #f97066;
+    --danger-soft: #3a1d1b;
+    --shadow: 0 8px 24px rgb(0 0 0 / 50%);
+}
+
+:root[data-text-size='smaller'] {
+    font-size: 93.75%;
+}
+
+:root[data-text-size='larger'] {
+    font-size: 112.5%;
+}
+
+@media (min-width: 768px) {
+    :root {
+        --gutter: 24px;
+    }
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 1rem;
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+}
+
+a {
+    color: var(--accent);
+}
+
+button,
+input,
+select,
+textarea {
+    font: inherit;
+    color: inherit;
+}
+
+:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* Text for screen readers only, such as the label of an icon button */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}

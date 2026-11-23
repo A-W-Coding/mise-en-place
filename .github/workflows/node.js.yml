@@ -1,8 +1,12 @@
 # CI workflow — mise-en-place
 # Runs on push to main/develop* and on PRs to main.
-# Starts a throwaway PostgreSQL service, then installs, generates the Prisma
-# client, lints, type-checks and runs the tests with coverage, then puts the
-# coverage totals on the run's summary page.
+# Three jobs, which run side by side:
+# - test: the API. Starts a throwaway PostgreSQL service, then installs,
+#   generates the Prisma client, lints, type-checks and runs the tests with
+#   coverage, then puts the coverage totals on the run's summary page.
+# - web: the client in web/. Lints, type-checks and runs its unit tests.
+# - e2e: builds both, then Playwright drives Firefox and Chromium against the
+#   API serving the built client, on its own throwaway database.
 
 name: CI
 
@@ -66,3 +70,98 @@ jobs:
       - name: Coverage summary
         if: ${{ !cancelled() && hashFiles('coverage/coverage-summary.json') != '' }}
         run: node scripts/coverage-summary.js >> "$GITHUB_STEP_SUMMARY"
+
+  web:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+  e2e:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: e2e_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Ends in _test, so the Playwright config and the seed allow it
+      DATABASE_URL: postgresql://test:test@localhost:5432/e2e_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          # One cache for both projects, keyed on both lockfiles
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+
+      - name: Install the API's dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Build the API
+        run: npm run build
+
+      - name: Install the client's dependencies
+        run: npm --prefix web ci
+
+      - name: Build the client
+        run: npm run web:build
+
+      # --with-deps also installs the system libraries the browsers need
+      - name: Install Playwright's browsers
+        working-directory: web
+        run: npx playwright install --with-deps firefox chromium
+
+      - name: End-to-end tests
+        run: npm run e2e
+
+      - name: Upload the Playwright report
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: web/playwright-report/
+          retention-days: 7

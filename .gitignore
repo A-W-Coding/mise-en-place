@@ -27,6 +27,11 @@ build/
 out/
 coverage/
 
+# Playwright's reports and traces (web/)
+test-results/
+playwright-report/
+blob-report/
+
 # IDE and editor specific files
 .idea/
 *.swp

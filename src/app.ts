@@ -3,7 +3,7 @@
  * Express application setup for the mise-en-place API.
  *
  * Registers JSON body parsing, route modules, a JSON 404 for unknown API
- * paths, and the global error handler. Exported separately from the server so that tests can
+ * paths, the built web client (F1), and the global error handler. Exported separately from the server so that tests can
  * import `app` without starting a listener.
  */
 
@@ -13,6 +13,7 @@ import ingredientsRouter from './routes/ingredients.js';
 import recipesRouter from './routes/recipes.js';
 import { globalErrorHandler } from './middleware/error-handler.js';
 import { corsPolicy } from './middleware/cors.js';
+import { webClient, webDistDir } from './middleware/web-client.js';
 
 const app = express();
 
@@ -31,6 +32,9 @@ app.use('/api/recipes', recipesRouter);
 app.use('/api', (_req, res) => {
     res.status(404).json({ error: 'Not found.' });
 });
+
+// ── The web client, from the same origin (F1) ───────────────────────────────
+app.use(webClient(webDistDir()));
 
 // ── Error Handling (must be registered last) ────────────────────────────────
 app.use(globalErrorHandler);

@@ -98,7 +98,7 @@ Run tests with `npm test`, which sets up the environment Jest needs. It:
 3. runs the test files one at a time, because they share one database
 4. resets the database to the sample data before each test, and empties it after
 
-There are 312 tests in [`tests/`](tests): integration tests that send real requests to the API with Supertest, and unit tests for the request schemas, the units list, the quantity formatting and the helpers. `npm test -- --coverage` prints a coverage table and writes an HTML report to `coverage/lcov-report/index.html`.
+There are 326 tests in [`tests/`](tests): integration tests that send real requests to the API with Supertest, and unit tests for the request schemas, the units list, the quantity formatting and the helpers. `npm test -- --coverage` prints a coverage table and writes an HTML report to `coverage/lcov-report/index.html`.
 
 The tests don't type-check (ts-jest only transpiles), so run `npx tsc --noEmit` as well.
 
@@ -144,11 +144,14 @@ src/
   server.ts              Loads .env and starts listening
   routes/                health, recipes, ingredients
   schemas/               Zod schemas for every request body and list query
-  middleware/            CORS policy and the error handler
+  middleware/            CORS policy, serving the web client, and the error handler
   utils/                 Validation, fuzzy search, ETags, Prisma error helpers
 shared/                  Code the API and the web client share
   units.ts               The canonical unit list and canonicaliseUnit()
   quantity.ts            Shows and reads amounts as fractions (1½, 2–3)
+web/                     The web client: Vite, React and TypeScript, with its own package.json
+  src/                   Pages, components, the API module and the theme
+  e2e/                   Playwright end-to-end tests
 prisma/
   schema.prisma          The database schema
   migrations/            SQL migrations, applied in order
@@ -161,7 +164,7 @@ tests/
 docker/initdb/           Creates the test database on a fresh volume
 docker-compose.yml       PostgreSQL for development
 docker-compose.prod.yml  The Pi: the API and PostgreSQL
-Dockerfile               The API's production image
+Dockerfile               The production image: the API and the built web client
 docs/                    API reference, ERD, architecture, deployment
 planning/                The hardening plan, code audit, design review and specs
 scripts/                 Deploy, backup, off-site and restore-check scripts for the Pi, and a CI helper

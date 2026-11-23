@@ -332,7 +332,7 @@ Nested fields use dotted paths: `ingredients.0.unit` is the first line's unit. A
 | Status | Meaning |
 |---|---|
 | 400 | Validation failed, the body isn't valid JSON (`"The request body is not valid JSON."`), or a recipe line names an ingredient that doesn't exist |
-| 404 | The recipe or ingredient in the URL doesn't exist, or the path under `/api` is unknown (`{ "error": "Not found." }`). Paths outside `/api` still get Express's plain HTML 404 until the web client is served (Step 10) |
+| 404 | The recipe or ingredient in the URL doesn't exist, or the path under `/api` is unknown (`{ "error": "Not found." }`). Outside `/api` and `/media`, a GET for a page gets the web client's `index.html` instead, so its own routes work as links; a missing file, or any other request, gets Express's plain HTML 404 |
 | 409 | An ingredient name is already taken, or an ingredient is still used by a recipe |
 | 412 | `If-Match` doesn't match the recipe's current ETag (`"The recipe has changed since it was loaded."`) |
 | 413 | The body is over 100 kB (`"request entity too large"`) |

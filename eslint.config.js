@@ -7,7 +7,8 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
 export default defineConfig(
-    { ignores: ['dist/', 'coverage/', 'node_modules/', 'postgres-data/'] },
+    // web/ is the client, linted by its own config (npm run web:lint)
+    { ignores: ['dist/', 'coverage/', 'node_modules/', 'postgres-data/', 'web/'] },
     js.configs.recommended,
     tseslint.configs.recommended,
     {
