@@ -1,0 +1,296 @@
+/* The chips: small, along the bottom edge, above everything but dialogs */
+.bar {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    z-index: 20;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    pointer-events: none;
+}
+
+.bar > * {
+    pointer-events: auto;
+}
+
+.chip {
+    min-height: 40px;
+    padding: 0 4px 0 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: var(--surface-2);
+    color: var(--text);
+    box-shadow: var(--shadow);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.chipText {
+    white-space: nowrap;
+}
+
+.cancel {
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.cancel:hover {
+    background: var(--surface);
+    color: var(--text);
+}
+
+.add {
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    background: var(--surface-2);
+    color: var(--text);
+    box-shadow: var(--shadow);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+/* A finished timer grows across the bar until it's dismissed */
+.done {
+    flex-basis: 100%;
+    min-height: 56px;
+    padding: 8px 8px 8px 16px;
+    border: 2px solid var(--accent);
+    border-radius: 28px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    box-shadow: var(--shadow);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    animation: grow 0.25s ease-out;
+}
+
+.doneText {
+    flex-grow: 1;
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.dismiss {
+    min-height: 40px;
+    padding: 0 16px;
+    border: none;
+    border-radius: var(--radius-pill);
+    background: var(--accent);
+    color: var(--accent-text);
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+@keyframes grow {
+    from {
+        transform: scale(0.9);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .done {
+        animation: none;
+    }
+}
+
+/* The "New timer" sheet: up from the bottom on a phone, a centred dialog on a wider screen */
+.sheet {
+    width: 100%;
+    max-width: 100%;
+    margin: auto 0 0;
+    padding: 12px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+    border: none;
+    border-radius: 20px 20px 0 0;
+    background: var(--bg);
+    color: var(--text);
+    box-shadow: var(--shadow);
+}
+
+.sheet::backdrop {
+    background: rgb(10 12 16 / 45%);
+}
+
+.sheetForm {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.sheetHeader {
+    display: flex;
+    align-items: center;
+}
+
+.sheetTitle {
+    flex-grow: 1;
+    margin: 0;
+    font-size: 1.125rem;
+    font-weight: 700;
+}
+
+.iconButton {
+    width: var(--tap);
+    height: var(--tap);
+    border: none;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.input {
+    min-height: 48px;
+    padding: 0 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 1rem;
+    font-weight: 400;
+}
+
+.presets {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.preset {
+    min-height: 48px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.preset[aria-pressed='true'] {
+    border: 2px solid var(--accent);
+    background: var(--accent-soft);
+}
+
+.stepper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.stepperLabel {
+    flex-grow: 1;
+    font-weight: 400;
+    color: var(--muted);
+}
+
+.stepButton {
+    width: var(--tap);
+    height: var(--tap);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 1.25rem;
+    cursor: pointer;
+}
+
+.minutes {
+    width: 4.5rem;
+    min-height: var(--tap);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 1rem;
+    font-weight: 600;
+    text-align: center;
+}
+
+.minutes[aria-invalid='true'] {
+    border: 2px solid var(--danger);
+}
+
+.invalid {
+    margin: 0;
+    font-weight: 500;
+    color: var(--danger);
+}
+
+.start {
+    min-height: 52px;
+    border: none;
+    border-radius: 26px;
+    background: var(--accent);
+    color: var(--accent-text);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.start:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.note {
+    margin: 0;
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    color: var(--muted);
+    text-align: center;
+}
+
+@media (min-width: 768px) {
+    .sheet {
+        width: min(28rem, calc(100vw - 32px));
+        margin: auto;
+        padding: 16px 20px 20px;
+        border-radius: 16px;
+    }
+
+    .bar {
+        left: auto;
+        right: 24px;
+        bottom: 24px;
+        max-width: 40rem;
+        justify-content: flex-end;
+    }
+}
+
+@media print {
+    .bar {
+        display: none;
+    }
+}

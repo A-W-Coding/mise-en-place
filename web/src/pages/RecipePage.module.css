@@ -49,6 +49,10 @@
     font-weight: 500;
 }
 
+.cooking {
+    margin-top: 6px;
+}
+
 .columns {
     display: flex;
     flex-direction: column;
@@ -195,5 +199,57 @@
 
     .step {
         font-size: 1.125rem;
+    }
+}
+
+/*
+ * Printing (Step 13): the name, ingredients and method, on white, with
+ * nothing to tap. The header and timers are hidden by their own styles.
+ */
+@media print {
+    .page > :first-child,
+    .titleRow > :not(.title),
+    .cooking,
+    .description {
+        display: none;
+    }
+
+    .page {
+        gap: 12px;
+    }
+
+    .title {
+        font-size: 22pt;
+    }
+
+    .meta {
+        font-size: 11pt;
+    }
+
+    .columns {
+        display: block;
+    }
+
+    .ingredients {
+        padding: 0;
+        border: none;
+        margin-bottom: 16pt;
+        break-inside: avoid;
+    }
+
+    .method {
+        padding: 0;
+    }
+
+    .line,
+    .step {
+        font-size: 11pt;
+        break-inside: avoid;
+    }
+
+    .stepNumber {
+        border: 1px solid currentColor;
+        background: none;
+        color: inherit;
     }
 }

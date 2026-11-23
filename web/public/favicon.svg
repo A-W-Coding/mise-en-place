@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Mise en place's mark: a bowl with three prepared ingredients above it.
+       This is the rounded icon (favicon, and the "any" icons). -->
+  <rect width="512" height="512" rx="112" fill="#1f7a5c"/>
+  <g fill="#ffffff" transform="translate(0 -30)">
+    <circle cx="180" cy="214" r="30"/>
+    <circle cx="256" cy="186" r="30"/>
+    <circle cx="332" cy="214" r="30"/>
+    <path d="M128 276h256a128 128 0 0 1-256 0z"/>
+    <rect x="196" y="410" width="120" height="26" rx="13"/>
+  </g>
+</svg>

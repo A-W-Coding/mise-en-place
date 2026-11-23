@@ -1,7 +1,10 @@
-import { beforeEach, describe, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { screen } from '@testing-library/react';
 import { resetPreferencesCache } from '../preferences';
+import { playChime, unlockAudio, vibrate } from '../timers/sound';
 import { json, mockApi, renderApp, unreachable } from '../test/renderApp';
+
+vi.mock('../timers/sound');
 
 const root = document.documentElement;
 
@@ -69,5 +72,22 @@ describe('OptionsPage', () => {
         renderApp('/options');
 
         expect(await screen.findByRole('link', { name: /Ingredients/ })).toHaveAttribute('href', '/options/ingredients');
+    });
+    test('the timer sound can be turned off, and tested', async () => {
+        mockApi([['GET', '/api/health', json({ status: 'ok' })]]);
+        const { user } = renderApp('/options');
+
+        const toggle = await screen.findByRole('switch', { name: 'Timer sound' });
+        expect(toggle).toHaveAttribute('aria-checked', 'true');
+        expect(screen.getByText(/Timers ring while the app is on screen/)).toBeInTheDocument();
+
+        await user.click(screen.getByRole('button', { name: 'Test' }));
+        expect(unlockAudio).toHaveBeenCalled();
+        expect(playChime).toHaveBeenCalledTimes(1);
+        expect(vibrate).toHaveBeenCalledTimes(1);
+
+        await user.click(toggle);
+        expect(toggle).toHaveAttribute('aria-checked', 'false');
+        expect(JSON.parse(localStorage.getItem('miseenplace.preferences') ?? '{}')).toMatchObject({ timerSound: false });
     });
 });

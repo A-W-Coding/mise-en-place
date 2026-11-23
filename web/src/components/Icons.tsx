@@ -120,3 +120,21 @@ export function DeleteIcon(props: IconProps) {
         </Icon>
     );
 }
+
+export function TimerIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <circle cx="12" cy="13" r="8" />
+            <path d="M12 9v4l2.5 2.5" />
+            <path d="M9 2h6" />
+        </Icon>
+    );
+}
+
+export function CloseIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="M18 6L6 18M6 6l12 12" />
+        </Icon>
+    );
+}

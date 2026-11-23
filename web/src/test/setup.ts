@@ -3,6 +3,8 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup } from '@testing-library/react';
 import { afterEach, vi } from 'vitest';
+import { resetPreferencesCache } from '../preferences';
+import { resetTimers } from '../timers/timerStore';
 import { MockIntersectionObserver } from './intersectionObserver';
 
 // Assigned directly rather than with vi.stubGlobal, so a test's unstubAllGlobals() keeps them
@@ -30,6 +32,10 @@ if (typeof HTMLDialogElement.prototype.showModal !== 'function') {
 afterEach(() => {
     cleanup();
     MockIntersectionObserver.reset();
+    // The timers and preferences live outside React, so each test starts them afresh
+    resetTimers();
+    localStorage.clear();
+    resetPreferencesCache();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
 });

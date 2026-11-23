@@ -81,6 +81,11 @@
     padding: 16px var(--gutter) 32px;
 }
 
+/* Room for the timer chips, so the end of the page can scroll clear of them */
+.withTimers .main {
+    padding-bottom: 96px;
+}
+
 @media (min-width: 768px) {
     .headerInner {
         min-height: 64px;
@@ -110,5 +115,22 @@
 
     .main {
         padding: 28px var(--gutter) 48px;
+    }
+
+    .withTimers .main {
+        padding-bottom: 104px;
+    }
+}
+
+/* Printing: only the page itself (Step 13) */
+@media print {
+    .header {
+        display: none;
+    }
+
+    .main,
+    .withTimers .main {
+        max-width: none;
+        padding: 0;
     }
 }
