@@ -9,7 +9,12 @@
  * It refreshes like every page (on returning to the app, on reconnecting, and
  * with Refresh). If the recipe was deleted elsewhere, the page says so rather
  * than showing an error. Deleting from its ⋮ menu sends the ETag of the
- * version on screen. The cooking mode switch and timers come in Step 13.
+ * version on screen.
+ *
+ * The cooking mode switch keeps the screen on, and changes nothing else: the
+ * whole recipe stays readable. It's off for each recipe you open, and leaving
+ * the recipe turns it off. Printing shows only the name, ingredients and
+ * method (the print rules in RecipePage.module.css).
  */
 
 import { useEffect, useState } from 'react';
@@ -17,6 +22,7 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'reac
 import { formatAmount } from '../../../shared/quantity';
 import { useRecipe } from '../api/queries';
 import type { Recipe } from '../api/types';
+import { CookingMode } from '../cooking/CookingMode';
 import { BackLink } from '../components/BackLink';
 import { DeleteRecipeDialog } from '../components/DeleteRecipeDialog';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -36,6 +42,9 @@ export function RecipePage() {
     const { data, error, isPending, refetch } = useRecipe(id);
     const recipe = data?.data;
     const [deleting, setDeleting] = useState(false);
+    // Cooking mode belongs to one recipe: opening another starts with it off
+    const [cookingFor, setCookingFor] = useState<string | null>(null);
+    const cooking = cookingFor === id;
     const deleted = error?.status === 404;
     useDocumentTitle(deleted ? null : (recipe?.name ?? null));
 
@@ -68,7 +77,14 @@ export function RecipePage() {
                     Loading recipe…
                 </p>
             )}
-            {recipe && <RecipeContent recipe={recipe} onDelete={() => setDeleting(true)} />}
+            {recipe && (
+                <RecipeContent
+                    recipe={recipe}
+                    onDelete={() => setDeleting(true)}
+                    cooking={cooking}
+                    onCookingChange={(on) => setCookingFor(on ? id : null)}
+                />
+            )}
             <DeleteRecipeDialog
                 recipe={deleting && recipe ? recipe : null}
                 etag={data?.etag}
@@ -79,7 +95,14 @@ export function RecipePage() {
     );
 }
 
-function RecipeContent({ recipe, onDelete }: { recipe: Recipe; onDelete: () => void }) {
+interface RecipeContentProps {
+    recipe: Recipe;
+    onDelete: () => void;
+    cooking: boolean;
+    onCookingChange: (on: boolean) => void;
+}
+
+function RecipeContent({ recipe, onDelete, cooking, onCookingChange }: RecipeContentProps) {
     const steps = methodSteps(recipe.instructions);
 
     return (
@@ -99,6 +122,9 @@ function RecipeContent({ recipe, onDelete }: { recipe: Recipe; onDelete: () => v
                 {/* 3b adds all of the recipe's tags here */}
                 {recipe.description && <p className={styles.description}>{recipe.description}</p>}
                 <p className={styles.meta}>{recipeMeta(recipe)}</p>
+                <div className={styles.cooking}>
+                    <CookingMode on={cooking} onChange={onCookingChange} />
+                </div>
             </header>
 
             <div className={styles.columns}>

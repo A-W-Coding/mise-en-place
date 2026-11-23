@@ -3,8 +3,8 @@
 # Mise en place: hardening plan (Phase 1 to Phase 3a)
 
 > **Status**
-> - Current step: **Step 13: cooking mode, printing and installing**, ready to start. Step 12 is done (2026-11-23), with its Firefox end-to-end runs and CI to be confirmed when its PR opens. Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
-> - Last updated: 2026-11-23 (Step 12: editing)
+> - Current step: **Step 14: deploy, and check on the phone**, ready to start. Step 13 is done (2026-11-23), with its Firefox end-to-end runs and CI to be confirmed when its PR opens. Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
+> - Last updated: 2026-11-23 (Step 13: cooking mode, printing and installing)
 > - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
@@ -565,25 +565,25 @@ Before starting (done 2026-11-23): the UI wireframes, made and reviewed together
 **Why:** these are what make it a kitchen app rather than a website, and the install is what later carries offline reading (3c).
 
 ### 13.1 Cooking mode
-- [ ] A cooking mode switch on the recipe page. The page itself doesn't change: the whole recipe stays readable and scrollable (§3.4)
-- [ ] While it's on, the Screen Wake Lock keeps the screen on. The lock is taken again whenever the page becomes visible, and released when the switch is turned off or you leave the recipe. If the API is missing, the switch says the screen may sleep
-- [ ] Timers, for mid-length waits:
+- [x] A cooking mode switch on the recipe page. The page itself doesn't change: the whole recipe stays readable and scrollable (§3.4)
+- [x] While it's on, the Screen Wake Lock keeps the screen on. The lock is taken again whenever the page becomes visible, and released when the switch is turned off or you leave the recipe. If the API is missing, the switch says the screen may sleep
+- [x] Timers, for mid-length waits:
   - a small button adds one, with a length and an optional label, and several can run at once
   - running timers are small chips at the edge of the screen, and never cover the recipe
   - one that finishes plays a sound, vibrates where supported, and grows until dismissed
   - each works from its end time rather than counting ticks, so it stays right if the screen locks
   - timers ring only while the app is on screen (D14), and a short note by them says so. Alerts while another app is open come in Phase 5
-- [ ] A timer sound switch in Options, with a test button
-- [ ] Component tests for the timers, with fake timers. Playwright: turn cooking mode on and off, and run two timers at once
+- [x] A timer sound switch in Options, with a test button
+- [x] Component tests for the timers, with fake timers. Playwright: turn cooking mode on and off, and run two timers at once
 
 ### 13.2 Printing
-- [ ] A print stylesheet: the recipe's name, ingredients and method, without navigation, buttons or a footer. Checked in the print preview of Firefox and Chromium
+- [x] A print stylesheet: the recipe's name, ingredients and method, without navigation, buttons or a footer. Checked in the print preview of Firefox and Chromium. Chromium was checked here, as a PDF from the production image. For Firefox, Playwright checks the print styles in CI; its print preview itself is checked with Step 14's print from the laptop
 
 ### 13.3 Installing
-- [ ] vite-plugin-pwa: the manifest (name, short name, icons, theme colour, `display: standalone`, start URL) and a service worker that caches the app's own files, so the app opens without a connection. Offline data comes in 3c
-- [ ] Icons: a simple mark at the sizes the manifest needs, including a maskable one for Android
-- [ ] A new deploy is picked up the next time the app starts. `index.html` and the service worker are always revalidated (Step 10)
-- [ ] Playwright: the manifest is valid, and the service worker registers
+- [x] vite-plugin-pwa: the manifest (name, short name, icons, theme colour, `display: standalone`, start URL) and a service worker that caches the app's own files, so the app opens without a connection. Offline data comes in 3c
+- [x] Icons: a simple mark at the sizes the manifest needs, including a maskable one for Android
+- [x] A new deploy is picked up the next time the app starts. `index.html` and the service worker are always revalidated (Step 10)
+- [x] Playwright: the manifest is valid, and the service worker registers
 
 **Done when:** the tests pass in CI, and the production image installs as an app in Chromium on this PC.
 
@@ -1178,3 +1178,45 @@ Before starting (done 2026-11-23): the UI wireframes, made and reviewed together
   - **From the visual check:** the picker's suggestions now span the whole line, not just the narrow Ingredient box, so "Create ingredient “chipotle”" fits on one line on a phone.
 
   Next: Step 13, cooking mode, printing and installing.
+- **2026-11-23:** Step 12's PR (#14) merged; CI run #29 passed all three jobs, including Playwright in Firefox, and run #30 on `main` too.
+- **2026-11-23:** Step 13 done: cooking mode, printing and installing.
+  - **Cooking mode** is a switch in a panel on the recipe page (`web/src/cooking/`), beside the Timer button. Nothing else on the page changes.
+    - `useWakeLock()` asks for the Screen Wake Lock, asks again whenever the page becomes visible (the browser drops it when hidden), and releases it when the switch is turned off or you leave the recipe.
+    - The switch belongs to one recipe: opening another starts with it off.
+    - Where there's no wake lock, or the browser refuses one (the Claude Browser pane does), the panel says the screen may sleep, on a line of its own.
+  - **Timers** (`web/src/timers/`):
+    - Started from the "New timer" sheet: an optional label, and a length from 5, 10, 15, 20, 30 and 45 minutes or set to the minute (1–600).
+    - Running timers are chips along the bottom of every page, with a cancel button and a + to add another. The page leaves room for them.
+    - Each is kept as the moment it ends, in the browser's storage, so it's right after the screen locks and survives a reload. One that ended meanwhile rings on return.
+    - An ending timer plays a three-note chime made with Web Audio (so nothing to download), vibrates on Android, and grows into "Stir: time's up" with Dismiss.
+    - It rings again every 5 seconds until dismissed, for up to 2 minutes.
+    - Starting a timer is the tap that unlocks audio.
+    - Options › Cooking has a Timer sound switch, a Test button, and the note that timers ring only while the app is on screen (D14).
+  - **Printing:** print styles hide the header, the back link, the menus, the cooking panel and the timers, and print black on white even from the dark theme, with 16 mm × 14 mm page margins. Chromium's output was checked as a PDF from the production image.
+  - **Installing:**
+    - vite-plugin-pwa 2.0.0 (added as this step says; it supports Vite 8) generates the manifest and a Workbox service worker.
+    - Manifest: name, short name, `display: standalone`, start URL `/`, theme colour `#1f7a5c`.
+    - It precaches the app's 22 files (about 680 KB, fonts and icons included), so the app opens with no connection. Any page address falls back to `index.html` offline, but `/api` and `/media` never do.
+    - `autoUpdate` with `skipWaiting` and `clientsClaim`: a new deploy takes over when the app starts, and the page reloads into it once. Timers survive that, being stored.
+    - Icons: a bowl with three ingredients, drawn as SVG in `web/icons/` and rendered to PNG by `web/scripts/make-icons.mjs` with Playwright's Chromium. That gives 192 and 512 px, a maskable 512 with the mark inside the safe zone, a 180 px Apple touch icon, and the SVG favicon.
+    - The API already serves `manifest.webmanifest` as `application/manifest+json`, and `sw.js` with `no-cache`.
+  - **The production image installs:** run on this PC, Chromium's own check (`Page.getInstallabilityErrors`) found no errors, the manifest had none, and the service worker controlled the page.
+  - **Tests:**
+    - Client: 112 Vitest tests in 13 files:
+      - timers with faked clock and intervals: two at once, ringing, repeats and their 2-minute limit, sound off, cancel, surviving a reload, and the sheet's lengths
+      - cooking mode with a stand-in wake lock: on, off, taken again when visible, released on leaving, unsupported, refused
+      - the timer sound option
+    - End-to-end: 19 in each project, 6 of them new:
+      - cooking mode with a counted stand-in wake lock
+      - two timers with Playwright's clock
+      - print styles
+      - the manifest and its icons
+      - the service worker registering and the app opening offline at a deep link
+      - Chromium finding the app installable (skipped in Firefox)
+    - All pass in Chromium here; Firefox runs in CI. API: 385, unchanged.
+  - **Small fixes on the way:**
+    - The generated worker skipped waiting but didn't claim open pages until `clientsClaim` was set.
+    - Playwright's role names match substrings, so "5 min" and "Timer" needed `exact: true`.
+  - **Audit:** adding vite-plugin-pwa brings 4 moderate advisories in `glob` and `minimatch`, inside `workbox-build`. That code only runs at build time over our own files, and isn't in the app. Not fixed, like the API's.
+
+  Next: Step 14, deploy to the Pi and check on the phone. Phase 3a is then complete.

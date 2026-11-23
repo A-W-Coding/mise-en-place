@@ -10,8 +10,8 @@ afterEach(() => {
 
 describe('loadPreferences', () => {
     test('reads what was saved', () => {
-        localStorage.setItem('miseenplace.preferences', JSON.stringify({ theme: 'dark', textSize: 'larger' }));
-        expect(loadPreferences()).toEqual({ theme: 'dark', textSize: 'larger' });
+        localStorage.setItem('miseenplace.preferences', JSON.stringify({ theme: 'dark', textSize: 'larger', timerSound: false }));
+        expect(loadPreferences()).toEqual({ theme: 'dark', textSize: 'larger', timerSound: false });
     });
 
     test('falls back to the defaults for anything missing, unknown or unreadable', () => {
@@ -33,7 +33,7 @@ describe('loadPreferences', () => {
 describe('applyPreferences', () => {
     test('sets the attributes theme.css reads, and removes them for the defaults', () => {
         const root = document.createElement('html');
-        applyPreferences({ theme: 'light', textSize: 'smaller' }, root);
+        applyPreferences({ theme: 'light', textSize: 'smaller', timerSound: true }, root);
         expect(root.dataset).toMatchObject({ theme: 'light', textSize: 'smaller' });
 
         applyPreferences(DEFAULT_PREFERENCES, root);

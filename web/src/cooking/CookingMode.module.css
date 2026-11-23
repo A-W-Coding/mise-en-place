@@ -1,0 +1,110 @@
+.panel {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: 34rem;
+    padding: 10px 12px 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface);
+}
+
+.panelOn {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.text {
+    flex-grow: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.title {
+    font-size: 0.9375rem;
+    font-weight: 600;
+}
+
+.status {
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    color: var(--muted);
+}
+
+.warning {
+    margin: 0;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    color: var(--danger);
+    font-weight: 500;
+}
+
+.timerButton {
+    flex-shrink: 0;
+    min-height: 40px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+/* A switch, 52 × 32, with a tap area of the usual size around it */
+.switch {
+    position: relative;
+    flex-shrink: 0;
+    width: 52px;
+    height: 32px;
+    padding: 3px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--surface-2);
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.switch::after {
+    content: '';
+    position: absolute;
+    inset: -6px;
+}
+
+.knob {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--bg);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 25%);
+    transition: transform 0.15s ease;
+}
+
+.switch[aria-checked='true'] {
+    border-color: var(--accent);
+    background: var(--accent);
+}
+
+.switch[aria-checked='true'] .knob {
+    background: var(--accent-text);
+    transform: translateX(20px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .knob {
+        transition: none;
+    }
+}

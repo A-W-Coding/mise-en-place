@@ -1,7 +1,7 @@
 /**
  * @module web/src/preferences
- * The theme and text size, chosen on the Options page and saved on this
- * device only (technical spec §3.4).
+ * The theme, text size and timer sound, chosen on the Options page and saved
+ * on this device only (technical spec §3.4).
  *
  * They're applied as `data-theme` and `data-text-size` on <html>, which
  * theme.css turns into colours and a root font size. "System" and "Normal"
@@ -20,9 +20,11 @@ export type TextSize = 'smaller' | 'normal' | 'larger';
 export interface Preferences {
     theme: Theme;
     textSize: TextSize;
+    /** Whether a finished timer plays a sound. It vibrates either way, where the device can. */
+    timerSound: boolean;
 }
 
-export const DEFAULT_PREFERENCES: Preferences = { theme: 'system', textSize: 'normal' };
+export const DEFAULT_PREFERENCES: Preferences = { theme: 'system', textSize: 'normal', timerSound: true };
 
 const STORAGE_KEY = 'miseenplace.preferences';
 const THEMES: readonly Theme[] = ['system', 'light', 'dark'];
@@ -35,6 +37,7 @@ export function loadPreferences(): Preferences {
         return {
             theme: THEMES.find((theme) => theme === saved.theme) ?? DEFAULT_PREFERENCES.theme,
             textSize: TEXT_SIZES.find((size) => size === saved.textSize) ?? DEFAULT_PREFERENCES.textSize,
+            timerSound: typeof saved.timerSound === 'boolean' ? saved.timerSound : DEFAULT_PREFERENCES.timerSound,
         };
     } catch {
         return DEFAULT_PREFERENCES;
@@ -79,6 +82,11 @@ export function setPreference<K extends keyof Preferences>(key: K, value: Prefer
 /** Forget the cached copy, so the next read comes from storage again. For tests. */
 export function resetPreferencesCache(): void {
     current = null;
+}
+
+/** The current preferences, outside React (the timers read the sound setting when one finishes). */
+export function getPreferences(): Preferences {
+    return getSnapshot();
 }
 
 /** The current preferences, and a setter, for a component. */

@@ -1,8 +1,8 @@
 /**
  * @module web/src/pages/OptionsPage
- * `/options`: how the app looks on this device, whether it can reach the
- * server, and Advanced › Ingredients (technical spec §3.4). The timer sound
- * joins in Step 13, and the offline copy's state in 3c.
+ * `/options`: how the app looks on this device, the timer sound, whether it
+ * can reach the server, and Advanced › Ingredients (technical spec §3.4). The
+ * offline copy's state joins in 3c.
  */
 
 import { useId } from 'react';
@@ -12,6 +12,7 @@ import { BackLink } from '../components/BackLink';
 import { ChevronRightIcon } from '../components/Icons';
 import { useDocumentTitle } from '../components/useDocumentTitle';
 import { usePreferences, type TextSize, type Theme } from '../preferences';
+import { playChime, unlockAudio, vibrate } from '../timers/sound';
 import styles from './OptionsPage.module.css';
 
 const THEME_CHOICES: [Theme, string][] = [
@@ -53,6 +54,44 @@ export function OptionsPage() {
                         onChange={(size) => setPreference('textSize', size)}
                     />
                     <p className={styles.hint}>Saved on this device only.</p>
+                </div>
+            </section>
+
+            <section aria-labelledby="cooking-heading" className={styles.section}>
+                <h2 id="cooking-heading" className={styles.sectionTitle}>
+                    Cooking
+                </h2>
+                <div className={styles.card}>
+                    <div className={styles.switchRow}>
+                        <span id="timer-sound-label" className={styles.switchLabel}>
+                            Timer sound
+                        </span>
+                        <button
+                            type="button"
+                            className={styles.smallButton}
+                            onClick={() => {
+                                unlockAudio();
+                                playChime();
+                                vibrate();
+                            }}
+                        >
+                            Test
+                        </button>
+                        <button
+                            type="button"
+                            role="switch"
+                            aria-checked={preferences.timerSound}
+                            aria-labelledby="timer-sound-label"
+                            className={styles.switch}
+                            onClick={() => setPreference('timerSound', !preferences.timerSound)}
+                        >
+                            <span className={styles.knob} />
+                        </button>
+                    </div>
+                    <p className={styles.hint}>
+                        Timers ring while the app is on screen. If you switch to another app, they can't ring until you come
+                        back.
+                    </p>
                 </div>
             </section>
 

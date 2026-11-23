@@ -124,3 +124,34 @@ textarea {
     clip-path: inset(50%);
     white-space: nowrap;
 }
+
+/*
+ * Printing: always the light theme, in black on white, whatever the screen
+ * shows. These selectors match the dark ones above in strength and come
+ * later, so they win.
+ */
+@media print {
+    :root:not([data-print]),
+    :root[data-theme] {
+        color-scheme: light;
+        --bg: #ffffff;
+        --surface: #ffffff;
+        --surface-2: #ffffff;
+        --text: #000000;
+        --muted: #444444;
+        --border: #bbbbbb;
+        --accent: #000000;
+        --accent-soft: transparent;
+        font-size: 100%;
+    }
+
+    body {
+        background: #ffffff;
+        color: #000000;
+    }
+}
+
+/* Margins of our own, so nothing runs to the paper's edge whatever the browser's default */
+@page {
+    margin: 16mm 14mm;
+}
