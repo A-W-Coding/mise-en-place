@@ -98,7 +98,7 @@ Run tests with `npm test`, which sets up the environment Jest needs. It:
 3. runs the test files one at a time, because they share one database
 4. resets the database to the sample data before each test, and empties it after
 
-There are 220 tests in [`tests/`](tests): integration tests that send real requests to the API with Supertest, and unit tests for the request schemas, the units list and the helpers. `npm test -- --coverage` prints a coverage table and writes an HTML report to `coverage/lcov-report/index.html`.
+There are 312 tests in [`tests/`](tests): integration tests that send real requests to the API with Supertest, and unit tests for the request schemas, the units list, the quantity formatting and the helpers. `npm test -- --coverage` prints a coverage table and writes an HTML report to `coverage/lcov-report/index.html`.
 
 The tests don't type-check (ts-jest only transpiles), so run `npx tsc --noEmit` as well.
 
@@ -142,11 +142,13 @@ From Phase 2 the API runs on a Raspberry Pi, in Docker, on `127.0.0.1:3000` only
 src/
   app.ts                 The Express app: CORS, JSON parsing, routes, error handler (tests import it)
   server.ts              Loads .env and starts listening
-  units.ts               The canonical unit list and canonicaliseUnit()
   routes/                health, recipes, ingredients
   schemas/               Zod schemas for every request body and list query
   middleware/            CORS policy and the error handler
-  utils/                 Validation, fuzzy search, Prisma error helpers
+  utils/                 Validation, fuzzy search, ETags, Prisma error helpers
+shared/                  Code the API and the web client share
+  units.ts               The canonical unit list and canonicaliseUnit()
+  quantity.ts            Shows and reads amounts as fractions (1½, 2–3)
 prisma/
   schema.prisma          The database schema
   migrations/            SQL migrations, applied in order

@@ -214,8 +214,9 @@ On the Phase 1 schema, with no new tables.
 
 **Key Deliverables:**
 - A React app served from the Pi's HTTPS address, installable as a PWA
-- Recipe list with search, recipe view, create, edit and delete, and ingredient management
-- Quantities shown and typed as fractions, using the same units module as the API (F5)
+- A recipe list with search that loads more as you scroll; the recipe view; create, edit and delete, with a ⋮ menu on every recipe and every delete confirmed
+- An Options page: theme, text size, timer sound and the connection, with ingredient management under Advanced
+- Quantities shown as fractions, and typed with their unit in one box ("100 g", "1½ tbsp"), using the same units module as the API (F5)
 - Cooking mode: a switch on the recipe page that keeps the screen on, so the recipe can be read and scrolled while cooking with no extra taps
 - Small, unobtrusive timers for mid-length waits, several at once if needed
 - Print stylesheet
@@ -235,7 +236,7 @@ On the Phase 1 schema, with no new tables.
 - Sections and steps, with an optional timer on each step, and ingredient lines grouped by section
 - Existing text instructions migrated into steps
 - Image upload following D11, with a main image (a `primaryImageId` on Recipe, F7) and thumbnails
-- Tags, with colours and filtering, and equipment
+- Tags, with colours and filtering, shown as coloured pills: a recipe's first two beside its name on the list, all of them on the recipe page; and equipment
 - Create, update and delete for every part of a recipe (F6)
 - Images included in the backups
 
@@ -299,6 +300,7 @@ This phase refines the mobile experience. Since the React app is already respons
   - Voice control exploration (stretch goal)
   - An optional one-step-at-a-time view, alongside the full-recipe view
   - Wake lock improvements
+  - Timer alerts while another app is open, sent as push notifications from the Pi (D14)
 
 - **Mobile-Specific Features:**
   - Quick recipe search with recent and favourite recipes

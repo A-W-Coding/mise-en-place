@@ -36,13 +36,14 @@ export function parseCorsOrigins(value: string | undefined): string[] {
  *
  * With no origins, `origin: false` makes the `cors` package add no CORS
  * headers at all, so browsers block every cross-origin read. Allowed
- * origins may also read `X-Total-Count`, which carries list totals (D6).
+ * origins may also read `X-Total-Count`, which carries list totals (D6),
+ * and `ETag`, which clients send back in `If-Match` (F3).
  *
  * @param origins - Allowed origins (defaults to `CORS_ORIGINS`).
  */
 export function corsPolicy(origins: string[] = parseCorsOrigins(process.env.CORS_ORIGINS)) {
     return cors({
         origin: origins.length > 0 ? origins : false,
-        exposedHeaders: ['X-Total-Count'],
+        exposedHeaders: ['X-Total-Count', 'ETag'],
     });
 }

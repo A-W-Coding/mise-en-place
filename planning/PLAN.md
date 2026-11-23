@@ -3,9 +3,9 @@
 # Mise en place: hardening plan (Phase 1 to Phase 3a)
 
 > **Status**
-> - Current step: **Step 9: shared code and API changes for the client**, the first of Phase 3a's Steps 9–14 (written 2026-11-22). The Phase 3 gate is done. Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
-> - Last updated: 2026-11-22 (Phase 3a: Steps 9–14 written; cooking mode is a keep-the-screen-on switch with small timers; D13 partly answered)
-> - Blockers: the UI mockups and the rest of D13 before Step 10 (together); D14 before Step 13 (you); the SSD for 8.1, about a month away
+> - Current step: **Step 10: the client's skeleton**, ready to start. Step 9 is done (2026-11-22), the UI wireframes are reviewed and D13 is settled (2026-11-23). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
+> - Last updated: 2026-11-23 (D13: CSS Modules)
+> - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
 - Work through the steps in order. Each step gives a goal, why it matters, tasks as checkboxes, and a "done when" test.
@@ -58,8 +58,8 @@ The rule that reconciles them: **settle the spec first, then bring the code in l
 | D10 | Split Phase 3 | **Yes, into three:** 3a is the UI plus cooking mode on the Phase 1 schema; 3b is structured instructions, images and tags; 3c is offline support (V3) | Phase 3 gate | **Decided 2026-11-22: three parts, as recommended.** 3b also takes sections, equipment and the missing endpoints (F6) |
 | D11 | Image upload rules | Allowed types, size and pixel caps, re-encoding (S4) | Phase 3 gate | **Decided 2026-11-22:** JPEG, PNG and WebP, recognised from the contents (SVG, GIF and HEIC rejected). At most 15 MB and 50 megapixels, checked before decoding. Each image is turned upright, then re-encoded with sharp to WebP at 2000 px on the long side, plus a 400 px thumbnail, with all metadata stripped. The original isn't kept. Server-generated filenames, 10 images per recipe, stored in a Docker volume that's backed up with the database |
 | D12 | Nutrition data source | **USDA FoodData Central** as the primary source. Use Spoonacular only for live, uncached extras (V1) | Phase 6 | Deferred |
-| D13 | Styling | **Plain CSS with CSS Modules**, built into Vite. Nothing new to learn or upgrade, styles are scoped to each component, and CSS custom properties hold the sizes and colours cooking mode and printing override. Alternatives: Tailwind (utility classes in the markup, quick once learned) or a component library such as Mantine (ready-made forms and dialogs, but heavier and opinionated) | Step 10 | **Partly answered 2026-11-22: plain CSS**, with no Tailwind or component library. Whether to use CSS Modules or plain stylesheets is decided after the UI mockups, before Step 10 |
-| D14 | Timer alerts when the app isn't on screen | **Web Push from the Pi.** On Android, Firefox pauses a page soon after you switch away, so the page alone can't ring at zero. Instead, the app tells the Pi when a timer starts, and at zero the Pi sends a push, which the phone shows as a notification with sound and vibration, whatever app is open. It needs notification permission (asked once, at the first timer), VAPID keys in the Pi's `.env`, a small table of running timers so a restart can't lose one (3a's only schema change), and a connection at that moment. The push travels encrypted through Mozilla's push service. Firefox for Android has had push bugs with installed apps, so the first task would be a quick test on your phone. Alternative: timers ring only while the app is on screen, which cooking mode keeps it, and background alerts wait for Phase 5, which already lists push | Step 13 | Deferred |
+| D13 | Styling | **Plain CSS with CSS Modules**, built into Vite. Nothing new to learn or upgrade, styles are scoped to each component, and CSS custom properties hold the sizes and colours cooking mode and printing override. Alternatives: Tailwind (utility classes in the markup, quick once learned) or a component library such as Mantine (ready-made forms and dialogs, but heavier and opinionated) | Step 10 | **Decided 2026-11-23: CSS Modules.** Plain CSS, one `*.module.css` file per component with its class names scoped to it, and the theme's colours and sizes as CSS custom properties. No Tailwind or component library. Settled after the UI wireframes |
+| D14 | Timer alerts when the app isn't on screen | **Web Push from the Pi.** On Android, Firefox pauses a page soon after you switch away, so the page alone can't ring at zero. Instead, the app tells the Pi when a timer starts, and at zero the Pi sends a push, which the phone shows as a notification with sound and vibration, whatever app is open. It needs notification permission (asked once, at the first timer), VAPID keys in the Pi's `.env`, a small table of running timers so a restart can't lose one (3a's only schema change), and a connection at that moment. The push travels encrypted through Mozilla's push service. Firefox for Android has had push bugs with installed apps, so the first task would be a quick test on your phone. Alternative: timers ring only while the app is on screen, which cooking mode keeps it, and background alerts wait for Phase 5, which already lists push | Step 13 | **Decided 2026-11-22: on screen only, for now.** Timers ring while the app is on screen, and a note by them says so. Alerts while another app is open wait for Phase 5's push work |
 
 ## Revised phase map
 | Phase | Original | Proposed |
@@ -471,17 +471,17 @@ Phase 3a builds the web client on the Phase 1 schema (D10). The specs are the re
 **Why:** these are the only server changes 3a needs (§3.2, Phase 3a). They're easier to test before any screen depends on them.
 
 ### 9.1 `shared/` (F5)
-- [ ] Move `src/units.ts` to `shared/units.ts`, and update its imports and tests. The Dockerfile must copy `shared/` into its build stage, and the server must still build to `dist/src/server.js`
-- [ ] Add `shared/quantity.ts`:
+- [x] Move `src/units.ts` to `shared/units.ts`, and update its imports and tests. The Dockerfile must copy `shared/` into its build stage, and the server must still build to `dist/src/server.js`
+- [x] Add `shared/quantity.ts`:
   - `formatQuantity()`: fractions to the nearest eighth for spoon and cup measures and for counts, decimals for metric units, and "2–3" for a range
   - `parseQuantity()`: reads "1 1/2", "1½", "1.5" and "2-3" into `quantity` and `quantityMax`. Anything else returns an error message rather than a guess
-- [ ] Unit tests for both, as `test.each` tables in `tests/`, including the edges: 0.33 as ⅓ and 0.66 as ⅔, values nowhere near an eighth (shown as decimals), and inputs such as "1/0", "0" and "abc"
+- [x] Unit tests for both, as `test.each` tables in `tests/`, including the edges: 0.33 as ⅓ and 0.66 as ⅔, values nowhere near an eighth (shown as decimals), and inputs such as "1/0", "0" and "abc"
 
 ### 9.2 API changes (F3)
-- [ ] An unknown path under `/api` returns 404 `{ "error": "Not found." }` instead of Express's HTML page
-- [ ] `GET /api/recipes/:id` returns a strong `ETag` made from `updatedAt`. `PATCH` and `DELETE` honour `If-Match`, returning 412 `{ "error": "The recipe has changed since it was loaded." }` when it's stale. Without `If-Match` there's no check, so curl and scripts keep working
-- [ ] Integration tests: the 404; a matching `If-Match` succeeds; a stale one gets 412 and changes nothing, on both PATCH and DELETE; the ETag changes after every PATCH, including one that only replaces the lines
-- [ ] `docs/api.md`: the 404, `ETag` and `If-Match`
+- [x] An unknown path under `/api` returns 404 `{ "error": "Not found." }` instead of Express's HTML page
+- [x] `GET /api/recipes/:id` returns a strong `ETag` made from `updatedAt`. `PATCH` and `DELETE` honour `If-Match`, returning 412 `{ "error": "The recipe has changed since it was loaded." }` when it's stale. Without `If-Match` there's no check, so curl and scripts keep working
+- [x] Integration tests: the 404; a matching `If-Match` succeeds; a stale one gets 412 and changes nothing, on both PATCH and DELETE; the ETag changes after every PATCH, including one that only replaces the lines
+- [x] `docs/api.md`: the 404, `ETag` and `If-Match`
 
 **Done when:** all tests pass locally and in CI, and the API reference describes the changes.
 
@@ -490,7 +490,7 @@ Phase 3a builds the web client on the Phase 1 schema (D10). The specs are the re
 
 **Why:** setting up the build, serving, CI and Playwright once, before any screens, means each feature step only adds its own code and tests.
 
-Before starting: make the UI mockups together (the recipe list, recipe page, editor and cooking mode, at phone and laptop sizes), then settle the rest of D13: CSS Modules, or plain stylesheets.
+Before starting (done 2026-11-23): the UI wireframes, made and reviewed together, and D13, answered as CSS Modules. The wireframes are a canvas artifact, not in the repo; the 2026-11-23 Progress log entry records what they settled.
 
 ### 10.1 The client
 - [ ] Create `web/` with Vite, React and TypeScript in strict mode, with its own `package.json` and lockfile (§3.4). Keep the API's `tsc` and ESLint away from `web/`: the root `tsconfig.json` has no `include` or `exclude` yet, so it would try to compile the client
@@ -499,7 +499,7 @@ Before starting: make the UI mockups together (the recipe list, recipe page, edi
 - [ ] Import `shared/` from the client. Vite has to be allowed to read files outside `web/`
 - [ ] Development: Vite on port 5173, forwarding `/api` and `/media` to the API on port 3000, so development is same-origin like production (F1). Root scripts run, build and test the client from the repo root
 - [ ] ESLint for the client, with the React hooks rules. Vitest with Testing Library, starting with a test of the API module's error handling
-- [ ] The D13 styling setup, with a few CSS custom properties (text size, spacing, colours) for cooking mode and printing to override later
+- [ ] CSS Modules (D13): one `*.module.css` per component, plus one global stylesheet holding the theme as CSS custom properties (light and dark, following the system or the Options choice; text size; spacing). Cooking mode and printing override those properties later
 
 ### 10.2 Serving it (F1)
 - [ ] Express serves `web/dist`. Files with a content hash in their name are cached for a year. `index.html`, and later the service worker, are always revalidated. Any other GET outside `/api` and `/media` gets `index.html`, so deep links load the app. API tests cover all three
@@ -518,9 +518,10 @@ Before starting: make the UI mockups together (the recipe list, recipe page, edi
 
 **Why:** reading on the phone while cooking is the main use. Doing reading before editing gives a usable app early.
 
-- [ ] Recipe list: the API's fuzzy search, a "load more" button driven by `X-Total-Count`, and empty and no-results states
-- [ ] Recipe page: ingredients through `formatQuantity()`, the method from `instructions`, and servings and times. Buttons for cooking mode, editing and printing, wired up in Steps 12 and 13
-- [ ] Ingredients page: list and search. Renaming and deleting come in Step 12
+- [ ] Lighter lists: `GET /api/recipes` drops the ingredient lines (§3.2, Phase 3a), so the client can load page after page quickly. Update the API tests and `docs/api.md`
+- [ ] Recipe list: the API's fuzzy search, more loading automatically as you scroll (no button), and empty and no-results states. Rows leave room for 3b's tag pills and thumbnail, and become tiles on a desktop
+- [ ] Recipe page: ingredients through `formatQuantity()`, the method from `instructions`, and servings and times. The cooking mode switch, and a ⋮ menu (Edit, Print, Delete) on the page and on each list row, wired up in Steps 12 and 13
+- [ ] Options page: theme (system, light or dark) and text size, saved on the device, and the connection's state. Its Advanced section opens Ingredients: list and search, with renaming and deleting in Step 12
 - [ ] Phone first: readable one-handed, with large tap targets and text that scales with the browser's font size. Semantic HTML, labelled controls and visible focus (§3.4)
 - [ ] Keeping devices in step (§3.4):
   - refetch when the app opens, comes back to the front or reconnects
@@ -529,7 +530,7 @@ Before starting: make the UI mockups together (the recipe list, recipe page, edi
 - [ ] Loading and error states, including "Can't reach the server"
 - [ ] Component tests for the list and the recipe page
 - [ ] Playwright:
-  - find a recipe by search and open it
+  - find a recipe by search and open it, and scroll the list until the next page loads
   - with two browser contexts standing in for the laptop and the phone, a recipe added through the API in one appears in the other when that one comes back to the front, and when Refresh is pressed
 
 **Done when:** the tests pass in CI.
@@ -541,16 +542,16 @@ Before starting: make the UI mockups together (the recipe list, recipe page, edi
 
 - [ ] Recipe editor, for create and edit: name, description, servings, times and instructions
 - [ ] Ingredient lines:
-  - add, remove, and reorder with Move up and Move down buttons, which work by touch and keyboard
+  - every line shown, each on one row: Amount, Ingredient and a ⋮ menu (Move up, Move down, Add note, Remove) that works by touch and keyboard. A note shows under its line only when it has one
+  - one Amount box per line, with the amount and unit typed together ("100 g", "1½ tbsp", "2-3"). A new `parseAmount()` in `shared/quantity.ts` reads it, canonicalising the unit, and errors show inline
   - an ingredient picker that searches as you type, and can create a missing ingredient on the spot
-  - the quantity typed as text and read with `parseQuantity()`, with any error shown inline
-  - a unit picker from the shared list, and a note
+- [ ] The Ingredients and Method sections collapse, to jump between them
 - [ ] The API's `fields` errors shown next to their inputs, including line errors such as `ingredients.2.unit`
 - [ ] Saving sends `If-Match`. A 412 says the recipe changed elsewhere and offers to reload it
-- [ ] Deleting a recipe, after a confirmation
-- [ ] Ingredients page: rename (409 when the name is taken) and delete (409 says it's in use)
+- [ ] Deleting a recipe, from its ⋮ menu or the bottom of the editor, always after a confirmation
+- [ ] Ingredients, under Options › Advanced: rename (409 when the name is taken) and delete (409 says it's in use)
 - [ ] A warning before leaving the editor with unsaved changes
-- [ ] Component tests: the line editor, quantity parsing in the form, and mapping `fields` onto inputs
+- [ ] Tests: `parseAmount()` as `test.each` tables in Jest; component tests for the line editor, amount parsing in the form, and mapping `fields` onto inputs
 - [ ] Playwright:
   - create a recipe with lines and a new ingredient, edit it, and delete it
   - get the 412 prompt after changing the recipe in a second context
@@ -571,11 +572,12 @@ Before starting: make the UI mockups together (the recipe list, recipe page, edi
   - running timers are small chips at the edge of the screen, and never cover the recipe
   - one that finishes plays a sound, vibrates where supported, and grows until dismissed
   - each works from its end time rather than counting ticks, so it stays right if the screen locks
-  - ringing at zero while another app is open follows D14
+  - timers ring only while the app is on screen (D14), and a short note by them says so. Alerts while another app is open come in Phase 5
+- [ ] A timer sound switch in Options, with a test button
 - [ ] Component tests for the timers, with fake timers. Playwright: turn cooking mode on and off, and run two timers at once
 
 ### 13.2 Printing
-- [ ] A print stylesheet: the recipe's name, ingredients and method, without navigation or buttons. Checked in the print preview of Firefox and Chromium
+- [ ] A print stylesheet: the recipe's name, ingredients and method, without navigation, buttons or a footer. Checked in the print preview of Firefox and Chromium
 
 ### 13.3 Installing
 - [ ] vite-plugin-pwa: the manifest (name, short name, icons, theme colour, `display: standalone`, start URL) and a service worker that caches the app's own files, so the app opens without a connection. Offline data comes in 3c
@@ -607,8 +609,9 @@ Before starting: make the UI mockups together (the recipe list, recipe page, edi
 |---|---|
 | Any time after Step 6 | M6: a JSON export of all data (small, and cheap insurance) |
 | Phase 3 | 3a: Steps 9–14. 3b and 3c get their steps when each starts, following the Phase 3 gate's decisions |
+| Later, unscheduled | Ingredient usage, from your wireframe review: see which recipes use an ingredient, then either replace it in all of them at once (a merge) so it can be deleted, or delete those recipes with it |
 | Phase 4 | Uptime and disk-space alerts, log rotation, and automated dependency updates (Dependabot or Renovate). V5: the Prisma upgrade, as its own task |
-| Phase 5 | F7: the shopping-list tables must exist before Phase 5 can deliver shopping lists |
+| Phase 5 | F7: the shopping-list tables must exist before Phase 5 can deliver shopping lists. D14: timer alerts while another app is open, through Web Push from the Pi (test it on the phone first, because Firefox for Android has had push bugs) |
 | Phase 6 | V1/D12: USDA FoodData Central. F5: unit conversion using ingredient densities. F7: fixes to the meal-plan and shopping-list schema, and ingredient categories. M5: safe URL import. M1: RecipeLink and timers each appear in two phases |
 
 ## Progress log
@@ -994,3 +997,49 @@ Before starting: make the UI mockups together (the recipe list, recipe page, edi
   - **D14 added: timer alerts when the app isn't on screen.** A timer must ring at zero whatever app is open, and a web page can't do that alone on Android. Recommended: Web Push from the Pi. It's needed before Step 13.
 
   Next: Step 9. The mockups can happen any time before Step 10.
+- **2026-11-22:** Step 9 done: shared code and API changes for the client.
+  - **`shared/`:** `src/units.ts` moved to `shared/units.ts` with `git mv`, so its history follows it. The build still produces `dist/src/server.js`, with `dist/shared/` beside it, and the Dockerfile's build stage now copies `shared/`.
+  - **`shared/quantity.ts`:** `formatQuantity()` and `parseQuantity()` (F5).
+    - The fractions are eighths plus thirds, matched within 0.02, so 0.33 shows as ⅓ but 0.3 stays a decimal rather than becoming a wrong fraction. Metric units show decimals.
+    - Parsing never guesses: "1,5", "2 eggs" and "1/0" each return an error message.
+  - **JSON 404s:** unknown paths under `/api` return 404 `{ "error": "Not found." }`. Paths outside `/api` keep Express's HTML page until Step 10 serves the client there.
+  - **Recipe ETags (F3):**
+    - The ETag is the quoted `updatedAt` in milliseconds, sent by GET, POST and PATCH.
+    - PATCH and DELETE check `If-Match` in the same statement as the write (`where: { id, updatedAt: { in: … } }`), so the check can't be raced. A miss is 412 if the recipe exists, and 404 if it doesn't.
+    - Weak ETags never match; `*`, or no header at all, means no check.
+    - CORS now exposes `ETag` as well as `X-Total-Count`.
+  - **Tests:** 312 in 14 files, all passing locally (up from 220 in 10). `quantity`, `etag`, `not-found` and `recipe-concurrency` are new, and the CORS test now expects `ETag`. Type-check, lint and the build pass. CI runs once the branch is pushed.
+  - **Docs:** `docs/api.md` (the 404, a new "ETags and `If-Match`" section, 412 in the error table, `shared/units.ts`), `docs/erd.md`, the README's structure and test count, and technical spec §2.1.
+
+  Next: the UI mockups and the rest of D13, then Step 10. D14 is needed before Step 13.
+- **2026-11-22:** D14 answered: timers ring only while the app is on screen, for now.
+  - Cooking mode keeps the app on screen anyway, so on-screen timers cover the usual case. A short note by the timers says they can't ring while another app is open.
+  - Alerts while another app is open move to Phase 5, which already lists push notifications. The Phase 5 backlog row, technical spec §2.5 and §3.4, and the design spec's Phase 5 now say so.
+
+  Next: the UI mockups and the rest of D13, then Step 10.
+- **2026-11-23:** Phase 3a: the UI wireframes, and your review of them.
+  - **The wireframes:** a canvas of 14 artboards: phone and desktop for the recipe list, recipe page, editor and Options; Ingredients; cooking mode with timers; the ⋮ menu; adding a timer; other states; and the print sheet. They use Inter and a green accent, with light and dark themes and no yellow.
+  - **Your answers on the flow:**
+    - Separate pages on both, with desktop just wider: the list becomes tiles, and the recipe page puts ingredients beside the method.
+    - Delete sits in each recipe's ⋮ menu and at the bottom of the editor, always behind a confirmation.
+    - Ingredients move under a new Options page, in its Advanced section, because they're shared data rather than everyday work.
+    - Light and dark themes, with no yellow in the main UI. Tags can be any colour.
+  - **Changes from your review:**
+    - **No "load more":** the list loads more as you scroll. To keep that fast, list responses drop the ingredient lines (a Step 11 task).
+    - **Tags on the list:** a recipe's first two tags show as coloured pills beside its name, on phone and desktop, and the recipe page shows them all. Which two is set by the order of the recipe's tags (`RecipeTag.orderIndex`, from the `tagIds` array), so Banana Bread can lead with Dessert and still be tagged Vegetarian. Tags arrive in 3b, so 3a's rows just leave room.
+    - **Editor:**
+      - Every ingredient line is shown (the wireframe's "6 more lines" was only an abbreviation), and the Ingredients and Method sections collapse.
+      - Each line is one row: Amount, Ingredient and a ⋮ menu. The amount and unit are typed together in one box ("100 g", "1½ tbsp"), which removes the unit picker and answers how to decide when a unit is needed: you type it when the recipe has one. A new `parseAmount()` does the reading.
+      - The phone wireframe's boxes ran off the screen, because a fieldset grows to fit its widest content. That's fixed in the wireframe and noted for the real form.
+    - **Print sheet:** no "Printed from" footer.
+  - **For later:** seeing which recipes use an ingredient, and replacing it everywhere or deleting those recipes, is in the backlog.
+  - **Updated to match:** technical spec §2.3 (RecipeTag order), §3.2 (lighter lists, `tagIds` order), §3.4 (pages, Options, the Amount box, tag pills) and §5.6; the design spec's Phase 3a and 3b; and Steps 11–13.
+  - **D13 is still open:** CSS Modules or plain stylesheets, to settle before Step 10.
+
+  Next: settle D13, then Step 10.
+- **2026-11-23:** D13 answered: CSS Modules.
+  - Each component gets its own `*.module.css`, whose class names Vite scopes to that component, so one screen's styles can't change another's. It's still plain CSS, and built into Vite.
+  - The theme lives in one global stylesheet as CSS custom properties, the same light and dark tokens the wireframes use, so the Options theme switch and cooking mode just swap values.
+  - Technical spec §3.4's stack table now lists it, and Step 10's styling task names the setup.
+
+  Next: Step 10, the client's skeleton.

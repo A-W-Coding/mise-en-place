@@ -3,7 +3,7 @@
  * Unit tests for the canonical unit list and `canonicaliseUnit()` (D2).
  */
 
-import { canonicaliseUnit, UNITS, UNIT_SYMBOLS } from '../src/units.js';
+import { canonicaliseUnit, UNITS, UNIT_SYMBOLS } from '../shared/units.js';
 
 describe('canonicaliseUnit', () => {
     test.each(UNIT_SYMBOLS)('maps the symbol %j to itself', (symbol) => {

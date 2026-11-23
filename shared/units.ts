@@ -1,14 +1,15 @@
 /**
- * @module src/units
+ * @module shared/units
  * The canonical list of units for recipe ingredient lines (decision D2).
  *
  * Every unit has one canonical symbol, which is what the database stores,
  * and any number of aliases that clients may send instead ("grams" → `g`).
  * A line with no unit is a count, as in "3 eggs".
  *
- * This module is plain data and one function, with no server imports, so
- * the Phase 3 client can reuse it. Phase 6 can add a conversion factor to
- * each entry (F5); `dimension` already says which units convert into which.
+ * This module is plain data and one function, with no server or browser
+ * imports, so the API and the web client share it. Phase 6 can add a
+ * conversion factor to each entry (F5); `dimension` already says which
+ * units convert into which.
  *
  * Units are code rather than a database enum, so adding one is an edit
  * here, not a migration.

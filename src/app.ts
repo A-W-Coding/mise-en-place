@@ -2,8 +2,8 @@
  * @module src/app
  * Express application setup for the mise-en-place API.
  *
- * Registers JSON body parsing, route modules, and the global error
- * handler. Exported separately from the server so that tests can
+ * Registers JSON body parsing, route modules, a JSON 404 for unknown API
+ * paths, and the global error handler. Exported separately from the server so that tests can
  * import `app` without starting a listener.
  */
 
@@ -26,6 +26,11 @@ app.use(express.json());
 app.use('/api/health', healthRouter);
 app.use('/api/ingredients', ingredientsRouter);
 app.use('/api/recipes', recipesRouter);
+
+// ── Unknown API paths: JSON, not Express's HTML page ────────────────────────
+app.use('/api', (_req, res) => {
+    res.status(404).json({ error: 'Not found.' });
+});
 
 // ── Error Handling (must be registered last) ────────────────────────────────
 app.use(globalErrorHandler);

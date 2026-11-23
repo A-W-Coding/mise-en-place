@@ -42,4 +42,4 @@ erDiagram
 - A recipe has any number of lines, and each line uses one ingredient. The same ingredient can appear on several lines of one recipe.
 - Deleting a recipe deletes its lines (cascade). Deleting an ingredient fails while any line uses it (restrict); the API returns 409.
 - Both `name` columns also have a trigram (GIN) index for fuzzy search: `recipe_name_trgm_idx` and `ingredient_name_trgm_idx`.
-- `unit` holds a symbol from `src/units.ts`, such as `g` or `tbsp`. See [the API reference](api.md#units) for the list.
+- `unit` holds a symbol from `shared/units.ts`, such as `g` or `tbsp`. See [the API reference](api.md#units) for the list.
