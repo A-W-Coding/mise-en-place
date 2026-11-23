@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import { BEEF_CHILI_ID, beefChili } from '../test/fixtures';
-import { json, mockApi, renderApp, unreachable } from '../test/renderApp';
+import { json, mockApi, page, renderApp, sent, unreachable } from '../test/renderApp';
 
 const RECIPE_PATH = `/api/recipes/${BEEF_CHILI_ID}`;
 const notFound = () => json({ error: 'Recipe not found.' }, { status: 404 });
@@ -115,5 +115,40 @@ describe('RecipePage', () => {
 
         expect(within(screen.getByRole('menu')).getAllByRole('menuitem')).toHaveLength(3);
         expect(screen.getByRole('link', { name: 'Edit' })).toHaveAttribute('href', `/recipes/${BEEF_CHILI_ID}/edit`);
+    });
+    test('Delete asks first, sends the ETag of the version on screen, and goes to the list', async () => {
+        const fetchMock = mockApi([
+            ['GET', RECIPE_PATH, json(beefChili, { headers: { ETag: '"111"' } })],
+            ['DELETE', RECIPE_PATH, json({ message: 'Recipe deleted successfully.' })],
+            ['GET', '/api/recipes', page([])],
+        ]);
+        const { user, router } = renderApp(`/recipes/${BEEF_CHILI_ID}`);
+
+        await user.click(await screen.findByRole('button', { name: 'More options for Beef Chili' }));
+        await user.click(screen.getByRole('menuitem', { name: 'Delete recipe…' }));
+        const dialog = screen.getByRole('alertdialog', { name: 'Delete Beef Chili?' });
+        await user.click(within(dialog).getByRole('button', { name: 'Delete' }));
+
+        expect(await screen.findByText('No recipes yet')).toBeInTheDocument();
+        expect(router.state.location.pathname).toBe('/');
+        expect(sent(fetchMock, 'DELETE')[0]?.headers['If-Match']).toBe('"111"');
+    });
+
+    test('a recipe changed elsewhere since it loaded is not deleted unseen', async () => {
+        mockApi([
+            ['GET', RECIPE_PATH, json(beefChili, { headers: { ETag: '"111"' } })],
+            ['DELETE', RECIPE_PATH, json({ error: 'The recipe has changed since it was loaded.' }, { status: 412 })],
+        ]);
+        const { user } = renderApp(`/recipes/${BEEF_CHILI_ID}`);
+
+        await user.click(await screen.findByRole('button', { name: 'More options for Beef Chili' }));
+        await user.click(screen.getByRole('menuitem', { name: 'Delete recipe…' }));
+        const dialog = screen.getByRole('alertdialog');
+        await user.click(within(dialog).getByRole('button', { name: 'Delete' }));
+
+        expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+            'This recipe changed on another device since it was loaded. Check the latest version first.',
+        );
+        expect(screen.getByRole('heading', { level: 1, name: 'Beef Chili' })).toBeInTheDocument();
     });
 });

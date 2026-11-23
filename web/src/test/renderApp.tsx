@@ -32,7 +32,7 @@ export function unreachable(): never {
     throw new TypeError('Failed to fetch');
 }
 
-type Responder = Response | ((url: URL) => Response | Promise<Response>);
+type Responder = Response | ((url: URL, init: RequestInit) => Response | Promise<Response>);
 
 /**
  * Replace `fetch` with fake API routes, matched in order by method and path
@@ -50,7 +50,7 @@ export function mockApi(routes: [method: string, path: string | RegExp, respond:
         if (!route) return json({ error: 'Not found.' }, { status: 404 });
         const respond = route[2];
         // A Response body can only be read once, so a fixed one is cloned for each request
-        return typeof respond === 'function' ? respond(url) : respond.clone();
+        return typeof respond === 'function' ? respond(url, init ?? {}) : respond.clone();
     });
     vi.stubGlobal('fetch', fetchMock);
     return fetchMock;
@@ -59,6 +59,25 @@ export function mockApi(routes: [method: string, path: string | RegExp, respond:
 /** The URLs of every request made so far. */
 export function requestedUrls(fetchMock: ReturnType<typeof mockApi>): URL[] {
     return fetchMock.mock.calls.map(([input]) => new URL(String(input), 'http://localhost'));
+}
+
+export interface SentRequest {
+    method: string;
+    path: string;
+    body: unknown;
+    headers: Record<string, string>;
+}
+
+/** Every request with a given method, with its parsed JSON body and headers: what a write sent. */
+export function sent(fetchMock: ReturnType<typeof mockApi>, method: string): SentRequest[] {
+    return fetchMock.mock.calls
+        .map(([input, init]) => ({
+            method: init?.method ?? 'GET',
+            path: new URL(String(input), 'http://localhost').pathname,
+            body: typeof init?.body === 'string' ? (JSON.parse(init.body) as unknown) : undefined,
+            headers: (init?.headers ?? {}) as Record<string, string>,
+        }))
+        .filter((request) => request.method === method);
 }
 
 export function renderApp(entry: InitialEntry) {

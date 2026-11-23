@@ -6,8 +6,11 @@
  * for 3b's tag pills, and the tile for its thumbnail.
  */
 
+import { useState } from 'react';
 import { Link } from 'react-router';
 import { useRecipeList } from '../api/queries';
+import type { RecipeSummary } from '../api/types';
+import { DeleteRecipeDialog } from '../components/DeleteRecipeDialog';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PlusIcon } from '../components/Icons';
 import { LoadMore } from '../components/LoadMore';
@@ -30,6 +33,8 @@ export function RecipeListPage() {
     const { text, setText, search, clear } = useSearchQuery();
     const list = useRecipeList(search);
     const { items, total, error, isPending, isPlaceholderData, isFetchNextPageError } = list;
+    // The recipe whose Delete was chosen, while its confirmation is open
+    const [deleting, setDeleting] = useState<RecipeSummary | null>(null);
     // Where a recipe's back link returns to: this list, with this search
     const listUrl = search ? `/?q=${encodeURIComponent(search)}` : '/';
 
@@ -93,7 +98,7 @@ export function RecipeListPage() {
                                 </Link>
                                 <Menu
                                     label={`More options for ${recipe.name}`}
-                                    items={recipeMenuItems(recipe.id)}
+                                    items={recipeMenuItems(recipe.id, () => setDeleting(recipe))}
                                     buttonClassName={styles.rowMenu}
                                 />
                             </li>
@@ -109,6 +114,9 @@ export function RecipeListPage() {
                     />
                 </>
             )}
+
+            {/* From the list there's no ETag to send: the confirmation, by name, is the check */}
+            <DeleteRecipeDialog recipe={deleting} onClose={() => setDeleting(null)} onDeleted={() => setDeleting(null)} />
         </div>
     );
 }

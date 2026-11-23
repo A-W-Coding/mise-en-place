@@ -3,10 +3,13 @@
  * Showing and reading ingredient amounts (F5).
  *
  * The API stores amounts as numbers: `quantity`, plus `quantityMax` for a
- * range. People write them as "1½", "1 1/2" or "2–3", so the web client
- * shows and reads them with these two functions. Like `shared/units`, this
- * has no server or browser imports, so it's tested once, in the Jest suite.
+ * range, and a canonical `unit`. People write them as "1½ tbsp", "1 1/2" or
+ * "2–3 cloves", so the web client shows them with `formatAmount()` and reads
+ * them back with `parseAmount()`. Like `shared/units`, this has no server or
+ * browser imports, so it's tested once, in the Jest suite.
  */
+
+import { canonicaliseUnit, type Unit } from './units.js';
 
 /** Units shown as decimals (250 g, 1.5 l). Every other unit, and a count, gets fractions. */
 const METRIC_UNITS: ReadonlySet<string> = new Set(['g', 'kg', 'ml', 'l']);
@@ -105,8 +108,8 @@ export type ParsedQuantity =
 
 const READ_ERROR = "Couldn't read that amount. Try 2, 1.5, 1 1/2, ½ or 2-3.";
 
-/** Read one amount, such as "2", "1.5", "1/2", "1 1/2", "½" or "1½". Returns null if it can't. */
-function parseAmount(text: string): number | null {
+/** Read one number, such as "2", "1.5", "1/2", "1 1/2", "½" or "1½". Returns null if it can't. */
+function parseNumber(text: string): number | null {
     let match = /^(\d+)\s+(\d+)\s*\/\s*(\d+)$/.exec(text); // 1 1/2
     if (match) {
         const [, whole, numerator, denominator] = match.map(Number);
@@ -149,7 +152,7 @@ export function parseQuantity(text: string): ParsedQuantity {
     const parts = trimmed.split(/\s*(?:-|–|—|\bto\b)\s*/i);
     if (parts.length > 2) return { error: READ_ERROR };
 
-    const amounts = parts.map(parseAmount);
+    const amounts = parts.map(parseNumber);
     if (amounts.some((amount) => amount === null)) return { error: READ_ERROR };
     const [quantity, quantityMax = null] = amounts as number[];
 
@@ -160,4 +163,53 @@ export function parseQuantity(text: string): ParsedQuantity {
         return { error: 'In a range, the second amount must be at least the first.' };
     }
     return { quantity, quantityMax };
+}
+
+/** A whole amount read from the editor's one Amount box: numbers and a unit for the API, or a message. */
+export type ParsedAmount =
+    | { quantity: number | null; quantityMax: number | null; unit: Unit | null }
+    | { error: string };
+
+const AMOUNT_ERROR = "Couldn't read that amount. Try 100 g, 1½ tbsp or 2-3.";
+
+/**
+ * Read an ingredient line's amount and unit, typed together as a recipe
+ * writes them: "100 g", "1½ tbsp", "2-3 cloves", "1 can", or just "3" for a
+ * count. The unit is the word (or words, as in "fl oz") at the end, and any
+ * spelling `canonicaliseUnit()` knows is accepted ("grams", "Tbsp."). This
+ * reads back everything `formatAmount()` writes.
+ *
+ * Like `parseQuantity()`, it never guesses: "3 eggs" is an error, because
+ * "eggs" belongs in the Ingredient box, and "pinch" with no number is one too.
+ *
+ * @example
+ * parseAmount('100g');        // { quantity: 100, quantityMax: null, unit: 'g' }
+ * parseAmount('1-2 tsp');     // { quantity: 1, quantityMax: 2, unit: 'tsp' }
+ * parseAmount('2 cloves');    // { quantity: 2, quantityMax: null, unit: 'clove' }
+ * parseAmount('');            // { quantity: null, quantityMax: null, unit: null }
+ */
+export function parseAmount(text: string): ParsedAmount {
+    const trimmed = text.trim();
+    if (trimmed === '') return { quantity: null, quantityMax: null, unit: null };
+
+    // The unit is the run of letters at the end (with spaces or dots, for "fl oz" or "tbsp.")
+    const match = /^(.*?)\s*([a-z][a-z .]*)$/i.exec(trimmed);
+    const numberText = match ? match[1] : trimmed;
+    const unitText = match ? match[2].trim() : '';
+
+    let unit: Unit | null = null;
+    if (unitText !== '') {
+        const symbol = canonicaliseUnit(unitText);
+        if (!symbol) {
+            return numberText === ''
+                ? { error: AMOUNT_ERROR }
+                : { error: `“${unitText}” isn't a unit. For a count, type just the number.` };
+        }
+        unit = symbol;
+        if (numberText === '') return { error: `Put a number before “${unitText}”, like 1 ${unit}.` };
+    }
+
+    const parsed = parseQuantity(numberText);
+    if ('error' in parsed) return { error: parsed.error === READ_ERROR ? AMOUNT_ERROR : parsed.error };
+    return { ...parsed, unit };
 }

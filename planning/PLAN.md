@@ -3,8 +3,8 @@
 # Mise en place: hardening plan (Phase 1 to Phase 3a)
 
 > **Status**
-> - Current step: **Step 12: editing recipes and ingredients**, ready to start. Step 11 is done (2026-11-23), with its Firefox end-to-end runs and CI to be confirmed when its PR opens. Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
-> - Last updated: 2026-11-23 (Step 11: reading recipes)
+> - Current step: **Step 13: cooking mode, printing and installing**, ready to start. Step 12 is done (2026-11-23), with its Firefox end-to-end runs and CI to be confirmed when its PR opens. Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
+> - Last updated: 2026-11-23 (Step 12: editing)
 > - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
@@ -540,19 +540,19 @@ Before starting (done 2026-11-23): the UI wireframes, made and reviewed together
 
 **Why:** with reading in place, editing completes the everyday use, and it's where the API's validation and `If-Match` meet the UI.
 
-- [ ] Recipe editor, for create and edit: name, description, servings, times and instructions
-- [ ] Ingredient lines:
+- [x] Recipe editor, for create and edit: name, description, servings, times and instructions
+- [x] Ingredient lines:
   - every line shown, each on one row: Amount, Ingredient and a ⋮ menu (Move up, Move down, Add note, Remove) that works by touch and keyboard. A note shows under its line only when it has one
   - one Amount box per line, with the amount and unit typed together ("100 g", "1½ tbsp", "2-3"). A new `parseAmount()` in `shared/quantity.ts` reads it, canonicalising the unit, and errors show inline
   - an ingredient picker that searches as you type, and can create a missing ingredient on the spot
-- [ ] The Ingredients and Method sections collapse, to jump between them
-- [ ] The API's `fields` errors shown next to their inputs, including line errors such as `ingredients.2.unit`
-- [ ] Saving sends `If-Match`. A 412 says the recipe changed elsewhere and offers to reload it
-- [ ] Deleting a recipe, from its ⋮ menu or the bottom of the editor, always after a confirmation
-- [ ] Ingredients, under Options › Advanced: rename (409 when the name is taken) and delete (409 says it's in use)
-- [ ] A warning before leaving the editor with unsaved changes
-- [ ] Tests: `parseAmount()` as `test.each` tables in Jest; component tests for the line editor, amount parsing in the form, and mapping `fields` onto inputs
-- [ ] Playwright:
+- [x] The Ingredients and Method sections collapse, to jump between them
+- [x] The API's `fields` errors shown next to their inputs, including line errors such as `ingredients.2.unit`
+- [x] Saving sends `If-Match`. A 412 says the recipe changed elsewhere and offers to reload it
+- [x] Deleting a recipe, from its ⋮ menu or the bottom of the editor, always after a confirmation
+- [x] Ingredients, under Options › Advanced: rename (409 when the name is taken) and delete (409 says it's in use)
+- [x] A warning before leaving the editor with unsaved changes
+- [x] Tests: `parseAmount()` as `test.each` tables in Jest; component tests for the line editor, amount parsing in the form, and mapping `fields` onto inputs
+- [x] Playwright:
   - create a recipe with lines and a new ingredient, edit it, and delete it
   - get the 412 prompt after changing the recipe in a second context
   - rename an ingredient
@@ -1131,3 +1131,50 @@ Before starting (done 2026-11-23): the UI wireframes, made and reviewed together
     - A simulated `visibilitychange` must bubble to `window`, where TanStack Query listens.
 
   Next: Step 12, editing recipes and ingredients.
+- **2026-11-23:** Step 11's PR (#13) merged; CI run #27 passed all three jobs, including Playwright in Firefox.
+- **2026-11-23:** Step 12 done: editing recipes and ingredients.
+  - **`parseAmount()`** in `shared/quantity.ts` reads the one Amount box: "100 g", "1½ tbsp", "2-3 cloves", "1 can", or "3" for a count.
+    - The unit is the word (or words, "fl oz") at the end, and any spelling `canonicaliseUnit()` knows is accepted.
+    - It never guesses. "3 eggs" says “eggs” isn't a unit, and a unit with no number asks for one.
+    - It reads back everything `formatAmount()` writes, and Jest checks that round trip.
+    - The old private `parseAmount` inside the module was renamed `parseNumber`.
+  - **The editor** (`/recipes/new` and `/recipes/:id/edit`):
+    - Name, description, servings and times, the ingredient lines, and the method. A new recipe starts with one empty line.
+    - On a phone, Cancel, the title and Save stay at the top while you scroll. On a desktop they sit in the heading row.
+    - The state lives in `web/src/editor/draft.ts` as plain functions (build the body, map errors, reducer), tested without rendering.
+  - **Ingredient lines:**
+    - One row each: Amount, Ingredient and a ⋮ menu with Move up, Move down, Add note (or Remove note) and Remove line. A note shows only when the line has one.
+    - An amount is checked as you leave its box.
+    - A line whose Amount box still shows its saved text sends its saved numbers, so an untouched 0.33 isn't rounded to the ⅓ it's shown as.
+    - Empty lines are left out rather than refused.
+  - **The ingredient picker:**
+    - A combobox that searches as you type, with the arrow keys, Enter and Escape.
+    - When nothing has that exact name, "Create ingredient “x”" creates it on the spot. A 409, from one created elsewhere a moment ago, picks the existing one.
+    - Leaving the box with an exact name typed picks it; anything else asks you to choose.
+  - **Errors:**
+    - Problems found here and the API's `fields` (`ingredients.2.unit` and the like) appear next to their boxes, with `aria-invalid` and a summary at the top.
+    - Focus moves to the first problem, opening a collapsed section if needed.
+  - **Saving** sends `If-Match` with the ETag of the version opened, so a background refresh never moves it.
+    - A 412 opens "This recipe changed on another device", and Reload recipe restarts the form from the latest version.
+    - A 404 says the recipe was deleted elsewhere.
+  - **Leaving with unsaved changes** asks first: React Router's `useBlocker` within the app, and `beforeunload` for the tab.
+  - **Deleting a recipe:** from the list's ⋮, the recipe page's ⋮, or the bottom of the editor, always through a confirmation (the browser's `<dialog>`).
+    - The recipe page and the editor send the ETag. From the list there's none to send, and the named confirmation is the check.
+    - A 412 says the recipe changed and refreshes it; a 404 counts as done.
+  - **Ingredients**, under Options › Advanced: each row's ⋮ offers Rename and Delete.
+    - Rename edits in place, and a taken name says so (409).
+    - Delete asks first. A 409 shows "Can't delete “onion”: a recipe still uses it." at the top.
+    - A rename also refreshes recipes, since they show the name.
+  - **Tests:**
+    - API: 385 in 15 files, including 40 new `parseAmount()` cases.
+    - Client: 93 Vitest tests in 11 files. They cover the draft functions, the editor (create, pick, create an ingredient, keyboard picking, errors, the API's `fields`, If-Match, 412 and Reload, the line menu, collapsing, the leave warning, delete), deletes from the list and the recipe page, and renaming and deleting ingredients.
+    - jsdom has no `<dialog>` methods, so the test setup adds stand-ins.
+    - End-to-end: 4 new tests in each project:
+      - create with a new ingredient, edit, and delete
+      - the 412 prompt from a second context
+      - the leave warning
+      - rename an ingredient, and a refused delete
+    - All 26 per browser pass in Chromium here. Firefox runs in CI.
+  - **From the visual check:** the picker's suggestions now span the whole line, not just the narrow Ingredient box, so "Create ingredient “chipotle”" fits on one line on a phone.
+
+  Next: Step 13, cooking mode, printing and installing.

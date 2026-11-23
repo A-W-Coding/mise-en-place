@@ -9,12 +9,12 @@ import type { MenuItem } from './Menu';
 /**
  * Edit, Print and Delete. Print opens the recipe with `?print`, and the
  * recipe page prints once it has loaded; the print stylesheet comes in
- * Step 13. Deleting, with its confirmation, comes in Step 12.
+ * Step 13. Delete asks first, through `DeleteRecipeDialog`.
  */
-export function recipeMenuItems(id: string): MenuItem[] {
+export function recipeMenuItems(id: string, onDelete: () => void): MenuItem[] {
     return [
         { label: 'Edit', icon: <EditIcon size={18} />, to: `/recipes/${id}/edit` },
         { label: 'Print', icon: <PrintIcon size={18} />, to: `/recipes/${id}?print` },
-        { label: 'Delete recipe…', icon: <DeleteIcon size={18} />, danger: true, disabled: true, hint: 'Coming in Step 12' },
+        { label: 'Delete recipe…', icon: <DeleteIcon size={18} />, danger: true, onSelect: onDelete },
     ];
 }

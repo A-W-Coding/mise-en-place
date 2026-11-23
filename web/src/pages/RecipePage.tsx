@@ -8,15 +8,17 @@
  *
  * It refreshes like every page (on returning to the app, on reconnecting, and
  * with Refresh). If the recipe was deleted elsewhere, the page says so rather
- * than showing an error. The cooking mode switch and timers come in Step 13.
+ * than showing an error. Deleting from its ⋮ menu sends the ETag of the
+ * version on screen. The cooking mode switch and timers come in Step 13.
  */
 
-import { useEffect } from 'react';
-import { Link, useLocation, useParams, useSearchParams } from 'react-router';
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { formatAmount } from '../../../shared/quantity';
 import { useRecipe } from '../api/queries';
 import type { Recipe } from '../api/types';
 import { BackLink } from '../components/BackLink';
+import { DeleteRecipeDialog } from '../components/DeleteRecipeDialog';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Menu } from '../components/Menu';
 import { recipeMenuItems } from '../components/recipeMenu';
@@ -30,8 +32,10 @@ export function RecipePage() {
     const location = useLocation();
     // The list passes its own address, search included, so "Recipes" goes back to it
     const backTo = (location.state as { from?: string } | null)?.from ?? '/';
+    const navigate = useNavigate();
     const { data, error, isPending, refetch } = useRecipe(id);
     const recipe = data?.data;
+    const [deleting, setDeleting] = useState(false);
     const deleted = error?.status === 404;
     useDocumentTitle(deleted ? null : (recipe?.name ?? null));
 
@@ -64,12 +68,18 @@ export function RecipePage() {
                     Loading recipe…
                 </p>
             )}
-            {recipe && <RecipeContent recipe={recipe} />}
+            {recipe && <RecipeContent recipe={recipe} onDelete={() => setDeleting(true)} />}
+            <DeleteRecipeDialog
+                recipe={deleting && recipe ? recipe : null}
+                etag={data?.etag}
+                onClose={() => setDeleting(false)}
+                onDeleted={() => navigate('/', { replace: true })}
+            />
         </article>
     );
 }
 
-function RecipeContent({ recipe }: { recipe: Recipe }) {
+function RecipeContent({ recipe, onDelete }: { recipe: Recipe; onDelete: () => void }) {
     const steps = methodSteps(recipe.instructions);
 
     return (
@@ -82,7 +92,7 @@ function RecipeContent({ recipe }: { recipe: Recipe }) {
                     </Link>
                     <Menu
                         label={`More options for ${recipe.name}`}
-                        items={recipeMenuItems(recipe.id)}
+                        items={recipeMenuItems(recipe.id, onDelete)}
                         buttonClassName={styles.menuButton}
                     />
                 </div>

@@ -1,0 +1,87 @@
+.dialog {
+    width: min(26rem, calc(100vw - 32px));
+    padding: 20px;
+    border: none;
+    border-radius: 16px;
+    background: var(--bg);
+    color: var(--text);
+    box-shadow: var(--shadow);
+}
+
+.dialog::backdrop {
+    background: rgb(0 0 0 / 45%);
+}
+
+.title {
+    margin: 0 0 8px;
+    font-size: 1.0625rem;
+    font-weight: 700;
+}
+
+.body {
+    font-size: 0.875rem;
+    line-height: 1.45;
+    color: var(--muted);
+}
+
+.body p {
+    margin: 0;
+}
+
+.error {
+    margin: 12px 0 0;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--danger);
+}
+
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.cancel,
+.primary,
+.danger,
+.dangerOutline {
+    min-height: var(--tap);
+    padding: 0 16px;
+    border-radius: var(--radius-pill);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.cancel {
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+}
+
+.primary {
+    border: none;
+    background: var(--accent);
+    color: var(--accent-text);
+}
+
+.danger {
+    border: none;
+    background: var(--danger);
+    color: #ffffff;
+}
+
+.dangerOutline {
+    border: 1px solid var(--danger);
+    background: transparent;
+    color: var(--danger);
+}
+
+.primary:disabled,
+.danger:disabled,
+.dangerOutline:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
