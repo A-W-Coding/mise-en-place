@@ -1,0 +1,50 @@
+.app {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.header {
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+}
+
+.headerInner {
+    max-width: var(--page-width);
+    margin: 0 auto;
+    height: 56px;
+    padding: 0 6px 0 var(--gutter);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.title {
+    flex-grow: 1;
+    color: var(--text);
+    font-size: 1.125rem;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.iconLink {
+    width: var(--tap);
+    height: var(--tap);
+    border-radius: 10px;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.iconLink:hover {
+    background: var(--surface);
+}
+
+.main {
+    flex-grow: 1;
+    width: 100%;
+    max-width: var(--page-width);
+    margin: 0 auto;
+    padding: 20px var(--gutter) 32px;
+}

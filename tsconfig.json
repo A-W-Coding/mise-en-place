@@ -10,5 +10,7 @@
     "isolatedModules": true,
     "outDir": "dist",
     "types": ["jest", "node"]
-  }
+  },
+  // web/ is the client, with its own tsconfig; compiling it here would fail
+  "exclude": ["node_modules", "dist", "web"]
 }

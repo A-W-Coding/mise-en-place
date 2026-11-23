@@ -3,8 +3,8 @@
 # Mise en place: hardening plan (Phase 1 to Phase 3a)
 
 > **Status**
-> - Current step: **Step 10: the client's skeleton**, ready to start. Step 9 is done (2026-11-22), the UI wireframes are reviewed and D13 is settled (2026-11-23). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
-> - Last updated: 2026-11-23 (D13: CSS Modules)
+> - Current step: **Step 11: reading recipes, and keeping devices in step**, ready to start. Step 10 is done (2026-11-23), with the Firefox end-to-end runs and CI to be confirmed when its PR opens. Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
+> - Last updated: 2026-11-23 (Step 10: the client's skeleton)
 > - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
@@ -493,23 +493,23 @@ Phase 3a builds the web client on the Phase 1 schema (D10). The specs are the re
 Before starting (done 2026-11-23): the UI wireframes, made and reviewed together, and D13, answered as CSS Modules. The wireframes are a canvas artifact, not in the repo; the 2026-11-23 Progress log entry records what they settled.
 
 ### 10.1 The client
-- [ ] Create `web/` with Vite, React and TypeScript in strict mode, with its own `package.json` and lockfile (§3.4). Keep the API's `tsc` and ESLint away from `web/`: the root `tsconfig.json` has no `include` or `exclude` yet, so it would try to compile the client
-- [ ] React Router, with placeholders for the 3a routes: `/`, `/recipes/new`, `/recipes/:id`, `/recipes/:id/edit`, `/recipes/:id/cook` and `/ingredients`
-- [ ] TanStack Query, and one small API module that handles JSON in and out, an error type carrying the API's `error` and `fields`, `ETag` and `If-Match`, and `X-Total-Count`
-- [ ] Import `shared/` from the client. Vite has to be allowed to read files outside `web/`
-- [ ] Development: Vite on port 5173, forwarding `/api` and `/media` to the API on port 3000, so development is same-origin like production (F1). Root scripts run, build and test the client from the repo root
-- [ ] ESLint for the client, with the React hooks rules. Vitest with Testing Library, starting with a test of the API module's error handling
-- [ ] CSS Modules (D13): one `*.module.css` per component, plus one global stylesheet holding the theme as CSS custom properties (light and dark, following the system or the Options choice; text size; spacing). Cooking mode and printing override those properties later
+- [x] Create `web/` with Vite, React and TypeScript in strict mode, with its own `package.json` and lockfile (§3.4). Keep the API's `tsc` and ESLint away from `web/`: the root `tsconfig.json` has no `include` or `exclude` yet, so it would try to compile the client
+- [x] React Router, with placeholders for the 3a routes: `/`, `/recipes/new`, `/recipes/:id`, `/recipes/:id/edit`, `/options` and `/options/ingredients`. The wireframe review made cooking mode a switch on the recipe page (no `/cook` route) and moved Ingredients under Options
+- [x] TanStack Query, and one small API module that handles JSON in and out, an error type carrying the API's `error` and `fields`, `ETag` and `If-Match`, and `X-Total-Count`
+- [x] Import `shared/` from the client. Vite has to be allowed to read files outside `web/`
+- [x] Development: Vite on port 5173, forwarding `/api` and `/media` to the API on port 3000, so development is same-origin like production (F1). Root scripts run, build and test the client from the repo root
+- [x] ESLint for the client, with the React hooks rules. Vitest with Testing Library, starting with a test of the API module's error handling
+- [x] CSS Modules (D13): one `*.module.css` per component, plus one global stylesheet holding the theme as CSS custom properties (light and dark, following the system or the Options choice; text size; spacing). Cooking mode and printing override those properties later
 
 ### 10.2 Serving it (F1)
-- [ ] Express serves `web/dist`. Files with a content hash in their name are cached for a year. `index.html`, and later the service worker, are always revalidated. Any other GET outside `/api` and `/media` gets `index.html`, so deep links load the app. API tests cover all three
-- [ ] Dockerfile: a stage that builds the client. The API image copies in only the built files
-- [ ] Check the production image locally under a throwaway project name, as in Step 8: `/`, a deep link, and `/api/health`
+- [x] Express serves `web/dist`. Files with a content hash in their name are cached for a year. `index.html`, and later the service worker, are always revalidated. Any other GET outside `/api` and `/media` gets `index.html`, so deep links load the app. API tests cover all three
+- [x] Dockerfile: a stage that builds the client. The API image copies in only the built files
+- [x] Check the production image locally: `/`, a deep link, and `/api/health`. Run with `docker run` on the dev Compose network against `miseenplace_dev` rather than under a throwaway project, so no new volume was made
 
 ### 10.3 Tests in CI
-- [ ] Playwright, with Firefox and Chromium at a phone size and a desktop size, against the built client served by the API. It uses `miseenplace_test`, reset to the base seed before each test (§5.6), so the T1 guard applies
-- [ ] One smoke test: the app loads at `/` and at a deep link, in all four combinations
-- [ ] CI: the client's lint, type-check and unit tests, then Playwright, alongside the API's job
+- [x] Playwright, with Firefox and Chromium at a phone size and a desktop size, against the built client served by the API. It uses a `_test` database, reset to the base seed before each test (§5.6), and refuses any other, so the T1 guard applies
+- [x] One smoke test: the app loads at `/` and at a deep link, in all four combinations
+- [x] CI: the client's lint, type-check and unit tests, then Playwright, alongside the API's job
 
 **Done when:** the shell loads in development and from the production image, and CI runs and passes the API tests, the client's checks and the Playwright smoke test.
 
@@ -1043,3 +1043,40 @@ Before starting (done 2026-11-23): the UI wireframes, made and reviewed together
   - Technical spec §3.4's stack table now lists it, and Step 10's styling task names the setup.
 
   Next: Step 10, the client's skeleton.
+- **2026-11-23:** Step 10 done: the client's skeleton, served by the API.
+  - **`web/`:** its own npm project.
+    - Libraries: Vite 8, React 19, React Router 7, TanStack Query 5, Inter (self-hosted through Fontsource), Vitest 5 with Testing Library, ESLint with the React hooks rules, and Playwright.
+    - React Router stays on 7 because 8 needs Node 22.22, and this PC has 22.13.
+    - The API's `tsc` and ESLint skip `web/`; the client's own type-check covers `shared/`.
+  - **The shell:**
+    - A header with the app's name and an Options icon.
+    - Placeholder pages for the 3a routes, each naming the step that fills it in.
+    - The theme as CSS custom properties: the wireframes' light and dark tokens, following the system unless `data-theme` says otherwise, plus `data-text-size`.
+  - **The API module** (`web/src/api/client.ts`):
+    - JSON in and out; `ETag`, `If-Match` and `X-Total-Count`.
+    - An `ApiError` carrying the API's `error`, `fields` and status. A dropped connection, or a 502 or 504 from the proxy, reads "Can't reach the server."
+  - **Serving it** (`src/middleware/web-client.ts`, after the `/api` 404):
+    - Hashed files under `/assets` are cached for a year, marked `immutable`.
+    - Other files, and `index.html`, are sent `no-cache`.
+    - A GET or HEAD that wants HTML, outside `/api` and `/media`, with no file extension, gets `index.html`. A missing `.js` file stays a 404, so a stale page can't load HTML as script.
+    - `WEB_DIST_DIR` overrides where the built files are (the default is `web/dist`).
+  - **Dockerfile:** a `web` stage builds the client, and the final image copies in only `web/dist`, without the client's `node_modules`. The image served `/`, a deep link, a hashed asset and `/api/health` correctly against the dev database.
+  - **Playwright:**
+    - Four projects: Firefox and Chromium, each at 390×844 and 1280×900. Firefox's phone size is the viewport alone, because Playwright can't emulate a mobile device in Firefox.
+    - It runs the built API on port 3100, applies the migrations, and reseeds before each test.
+    - The config loads `.env.test` over the environment and refuses any database not ending in `_test`.
+  - **Tests:**
+    - API: 326 in 15 files, all passing, up from 312 (`web-client` is new).
+    - Client: 22 Vitest tests.
+    - End-to-end: 4 tests in each of the 4 projects.
+    - Lint, type-checks and both builds pass.
+  - **Not checked here:**
+    - Playwright's Windows build of Firefox won't start on this PC: Windows reports a side-by-side error for its `mozglue` library. Reinstalling it didn't help.
+    - Chromium passes at both sizes. The Firefox projects run in CI on Linux, which also checks the new `web` and `e2e` jobs when the PR opens.
+    - Locally, run `npm run e2e -- --project=chromium-*` for now. The root scripts now pass extra arguments through to the client's.
+  - **CI:** two new jobs beside `test`:
+    - `web`: lint, type-check and unit tests.
+    - `e2e`: builds both, installs the two browsers, runs Playwright on its own Postgres service, and uploads the report if it fails.
+  - **Docs:** the README's structure and test count, and the 404 row in `docs/api.md`. The README's development section and `docs/architecture.md` wait for Step 14, as planned.
+
+  Next: Step 11, reading recipes.
