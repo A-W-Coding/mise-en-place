@@ -1,11 +1,11 @@
 > Created on 27 September 2026. This is the live copy: progress is ticked off here as each step is done.
 
-# Mise en place: hardening plan (Phase 1 to Phase 2)
+# Mise en place: hardening plan (Phase 1 to Phase 3a)
 
 > **Status**
-> - Current step: **Step 8: Phase 2, the Pi with Tailscale**. The done-when checks all pass (2026-11-22). Still open: the SSD (8.1, about a month away); images backups (8.7) wait for Phase 3. After Step 8 comes the Phase 3 gate, which can start while the SSD is on its way
-> - Last updated: 2026-11-22 (Step 8: the off-site copy to Backblaze B2 is live, and a restore from it passed)
-> - Blockers: the SSD for 8.1, about a month away
+> - Current step: **Step 9: shared code and API changes for the client**, the first of Phase 3a's Steps 9–14 (written 2026-11-22). The Phase 3 gate is done. Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
+> - Last updated: 2026-11-22 (Phase 3a: Steps 9–14 written; cooking mode is a keep-the-screen-on switch with small timers; D13 partly answered)
+> - Blockers: the UI mockups and the rest of D13 before Step 10 (together); D14 before Step 13 (you); the SSD for 8.1, about a month away
 
 ## How to use this file
 - Work through the steps in order. Each step gives a goal, why it matters, tasks as checkboxes, and a "done when" test.
@@ -52,19 +52,21 @@ The rule that reconciles them: **settle the spec first, then bring the code in l
 | D4 | Postgres version | **17**, in dev, CI and on the Pi, adopted now while dev data is disposable. 18 also works but moves the Docker data path (see the Step 3 note) | Step 1 | **Decided 2026-10-27: 17.** The dev data is disposable (one placeholder recipe) |
 | D5 | Move Tailscale into Phase 2 | **Yes.** The PWA needs HTTPS and a single origin (F1) | Before Step 7 | **Decided 2026-10-27: yes** |
 | D6 | List response shape for pagination | **Keep a plain array and add an `X-Total-Count` header**, which breaks nothing. The alternative is a `{ items, total, limit, offset }` envelope | Step 5 | **Decided 2026-11-02: a plain array plus an `X-Total-Count` header** |
-| D7 | Electron | **Drop it or defer it.** An installed PWA already covers the desktop (V2) | Phase 3 gate | Deferred |
-| D8 | Sync design | **A full snapshot with an ETag first.** Add delta sync with tombstones only if it's ever needed (F2) | Phase 3 gate | Deferred |
-| D9 | Offline editing | **Read-only offline** to begin with (F3) | Phase 3 gate | Deferred |
-| D10 | Split Phase 3 | **Yes, into three:** 3a is the UI plus cooking mode on the Phase 1 schema; 3b is structured instructions, images and tags; 3c is offline support (V3) | Phase 3 gate | Deferred |
-| D11 | Image upload rules | Allowed types, size and pixel caps, re-encoding (S4) | Phase 3 gate | Deferred |
+| D7 | Electron | **Drop it or defer it.** An installed PWA already covers the desktop (V2) | Phase 3 gate | **Decided 2026-11-22: drop it.** The installed PWA is the desktop app; Electron can come back if a real need appears |
+| D8 | Sync design | **A full snapshot with an ETag first.** Add delta sync with tombstones only if it's ever needed (F2) | Phase 3 gate | **Decided 2026-11-22: a full snapshot with an ETag.** Delta sync only if it's ever needed |
+| D9 | Offline editing | **Read-only offline** to begin with (F3) | Phase 3 gate | **Decided 2026-11-22: read-only offline.** Editing waits for a connection |
+| D10 | Split Phase 3 | **Yes, into three:** 3a is the UI plus cooking mode on the Phase 1 schema; 3b is structured instructions, images and tags; 3c is offline support (V3) | Phase 3 gate | **Decided 2026-11-22: three parts, as recommended.** 3b also takes sections, equipment and the missing endpoints (F6) |
+| D11 | Image upload rules | Allowed types, size and pixel caps, re-encoding (S4) | Phase 3 gate | **Decided 2026-11-22:** JPEG, PNG and WebP, recognised from the contents (SVG, GIF and HEIC rejected). At most 15 MB and 50 megapixels, checked before decoding. Each image is turned upright, then re-encoded with sharp to WebP at 2000 px on the long side, plus a 400 px thumbnail, with all metadata stripped. The original isn't kept. Server-generated filenames, 10 images per recipe, stored in a Docker volume that's backed up with the database |
 | D12 | Nutrition data source | **USDA FoodData Central** as the primary source. Use Spoonacular only for live, uncached extras (V1) | Phase 6 | Deferred |
+| D13 | Styling | **Plain CSS with CSS Modules**, built into Vite. Nothing new to learn or upgrade, styles are scoped to each component, and CSS custom properties hold the sizes and colours cooking mode and printing override. Alternatives: Tailwind (utility classes in the markup, quick once learned) or a component library such as Mantine (ready-made forms and dialogs, but heavier and opinionated) | Step 10 | **Partly answered 2026-11-22: plain CSS**, with no Tailwind or component library. Whether to use CSS Modules or plain stylesheets is decided after the UI mockups, before Step 10 |
+| D14 | Timer alerts when the app isn't on screen | **Web Push from the Pi.** On Android, Firefox pauses a page soon after you switch away, so the page alone can't ring at zero. Instead, the app tells the Pi when a timer starts, and at zero the Pi sends a push, which the phone shows as a notification with sound and vibration, whatever app is open. It needs notification permission (asked once, at the first timer), VAPID keys in the Pi's `.env`, a small table of running timers so a restart can't lose one (3a's only schema change), and a connection at that moment. The push travels encrypted through Mozilla's push service. Firefox for Android has had push bugs with installed apps, so the first task would be a quick test on your phone. Alternative: timers ring only while the app is on screen, which cooking mode keeps it, and background alerts wait for Phase 5, which already lists push | Step 13 | Deferred |
 
 ## Revised phase map
 | Phase | Original | Proposed |
 |---|---|---|
 | 1 | Backend API | Backend API **plus hardening** (Steps 1–7 below) |
 | 2 | Pi on the home network | The Pi **plus Tailscale HTTPS** from day one (Step 8) |
-| 3 | Desktop UI (a very large phase) | The UI, gated by D7–D11 and probably split into 3a, 3b and 3c |
+| 3 | Desktop UI (a very large phase) | The UI, gated by D7–D11 and split into 3a, 3b and 3c (D10) |
 | 4 | Global access via Tailscale | Hardening and monitoring, since Tailscale is already done |
 | 5 | Mobile polish | Unchanged |
 | 6 | Enhanced features | Unchanged, except nutrition comes from USDA FoodData Central (D12) |
@@ -442,7 +444,7 @@ exit 1
 - [x] A restore test has passed
 
 ## Phase 3 gate (before any UI code)
-First, settle D7–D11. Then write the Phase 3 spec segments, taking in the design-review items that apply to Phase 3:
+First, settle D7–D11 (**done 2026-11-22**, all as recommended). Then write the Phase 3 spec segments (**done 2026-11-22**, applied to both specs), taking in the design-review items that apply to Phase 3:
 - F1: a single HTTPS origin
 - F2: the gaps in timestamp-based sync
 - F3: edit conflicts, and client-generated ids for offline creation
@@ -453,11 +455,158 @@ First, settle D7–D11. Then write the Phase 3 spec segments, taking in the desi
 - V2: Electron
 - V3: splitting the phase
 
+## Phase 3a: the UI and cooking mode
+Phase 3a builds the web client on the Phase 1 schema (D10). The specs are the reference: technical spec §3.2 (Phase 3a), §3.4 and §5.6, and the design spec's Phase 3a. Every step ends with its tests passing in CI, so the app works at the end of each step, not only the last.
+
+**Phase 3a is done when** the design spec's 3a success criteria are met:
+- Recipes can be found, read, created, edited and deleted from a phone and a laptop
+- The app installs from Firefox on Android and opens from the Home Screen
+- Cooking mode keeps the screen on through a whole recipe
+- With the app open on both, a recipe added on the laptop appears on the phone as soon as the phone's app comes back to the front, or Refresh is tapped
+- End-to-end tests cover the main flows in Firefox and Chromium, at phone and desktop sizes, in CI
+
+## Step 9: Shared code and API changes for the client
+**Goal:** the API is ready for a browser client, and the code both sides need lives in `shared/`.
+
+**Why:** these are the only server changes 3a needs (§3.2, Phase 3a). They're easier to test before any screen depends on them.
+
+### 9.1 `shared/` (F5)
+- [ ] Move `src/units.ts` to `shared/units.ts`, and update its imports and tests. The Dockerfile must copy `shared/` into its build stage, and the server must still build to `dist/src/server.js`
+- [ ] Add `shared/quantity.ts`:
+  - `formatQuantity()`: fractions to the nearest eighth for spoon and cup measures and for counts, decimals for metric units, and "2–3" for a range
+  - `parseQuantity()`: reads "1 1/2", "1½", "1.5" and "2-3" into `quantity` and `quantityMax`. Anything else returns an error message rather than a guess
+- [ ] Unit tests for both, as `test.each` tables in `tests/`, including the edges: 0.33 as ⅓ and 0.66 as ⅔, values nowhere near an eighth (shown as decimals), and inputs such as "1/0", "0" and "abc"
+
+### 9.2 API changes (F3)
+- [ ] An unknown path under `/api` returns 404 `{ "error": "Not found." }` instead of Express's HTML page
+- [ ] `GET /api/recipes/:id` returns a strong `ETag` made from `updatedAt`. `PATCH` and `DELETE` honour `If-Match`, returning 412 `{ "error": "The recipe has changed since it was loaded." }` when it's stale. Without `If-Match` there's no check, so curl and scripts keep working
+- [ ] Integration tests: the 404; a matching `If-Match` succeeds; a stale one gets 412 and changes nothing, on both PATCH and DELETE; the ETag changes after every PATCH, including one that only replaces the lines
+- [ ] `docs/api.md`: the 404, `ETag` and `If-Match`
+
+**Done when:** all tests pass locally and in CI, and the API reference describes the changes.
+
+## Step 10: The client's skeleton, served by the API
+**Goal:** an empty app shell runs in development and from the production image, with CI and end-to-end tests ready for the later steps to add to.
+
+**Why:** setting up the build, serving, CI and Playwright once, before any screens, means each feature step only adds its own code and tests.
+
+Before starting: make the UI mockups together (the recipe list, recipe page, editor and cooking mode, at phone and laptop sizes), then settle the rest of D13: CSS Modules, or plain stylesheets.
+
+### 10.1 The client
+- [ ] Create `web/` with Vite, React and TypeScript in strict mode, with its own `package.json` and lockfile (§3.4). Keep the API's `tsc` and ESLint away from `web/`: the root `tsconfig.json` has no `include` or `exclude` yet, so it would try to compile the client
+- [ ] React Router, with placeholders for the 3a routes: `/`, `/recipes/new`, `/recipes/:id`, `/recipes/:id/edit`, `/recipes/:id/cook` and `/ingredients`
+- [ ] TanStack Query, and one small API module that handles JSON in and out, an error type carrying the API's `error` and `fields`, `ETag` and `If-Match`, and `X-Total-Count`
+- [ ] Import `shared/` from the client. Vite has to be allowed to read files outside `web/`
+- [ ] Development: Vite on port 5173, forwarding `/api` and `/media` to the API on port 3000, so development is same-origin like production (F1). Root scripts run, build and test the client from the repo root
+- [ ] ESLint for the client, with the React hooks rules. Vitest with Testing Library, starting with a test of the API module's error handling
+- [ ] The D13 styling setup, with a few CSS custom properties (text size, spacing, colours) for cooking mode and printing to override later
+
+### 10.2 Serving it (F1)
+- [ ] Express serves `web/dist`. Files with a content hash in their name are cached for a year. `index.html`, and later the service worker, are always revalidated. Any other GET outside `/api` and `/media` gets `index.html`, so deep links load the app. API tests cover all three
+- [ ] Dockerfile: a stage that builds the client. The API image copies in only the built files
+- [ ] Check the production image locally under a throwaway project name, as in Step 8: `/`, a deep link, and `/api/health`
+
+### 10.3 Tests in CI
+- [ ] Playwright, with Firefox and Chromium at a phone size and a desktop size, against the built client served by the API. It uses `miseenplace_test`, reset to the base seed before each test (§5.6), so the T1 guard applies
+- [ ] One smoke test: the app loads at `/` and at a deep link, in all four combinations
+- [ ] CI: the client's lint, type-check and unit tests, then Playwright, alongside the API's job
+
+**Done when:** the shell loads in development and from the production image, and CI runs and passes the API tests, the client's checks and the Playwright smoke test.
+
+## Step 11: Reading recipes, and keeping devices in step
+**Goal:** any recipe can be found and read comfortably on a phone, and an open app picks up changes made elsewhere.
+
+**Why:** reading on the phone while cooking is the main use. Doing reading before editing gives a usable app early.
+
+- [ ] Recipe list: the API's fuzzy search, a "load more" button driven by `X-Total-Count`, and empty and no-results states
+- [ ] Recipe page: ingredients through `formatQuantity()`, the method from `instructions`, and servings and times. Buttons for cooking mode, editing and printing, wired up in Steps 12 and 13
+- [ ] Ingredients page: list and search. Renaming and deleting come in Step 12
+- [ ] Phone first: readable one-handed, with large tap targets and text that scales with the browser's font size. Semantic HTML, labelled controls and visible focus (§3.4)
+- [ ] Keeping devices in step (§3.4):
+  - refetch when the app opens, comes back to the front or reconnects
+  - a Refresh button
+  - a recipe deleted elsewhere shows "This recipe was deleted" rather than an error
+- [ ] Loading and error states, including "Can't reach the server"
+- [ ] Component tests for the list and the recipe page
+- [ ] Playwright:
+  - find a recipe by search and open it
+  - with two browser contexts standing in for the laptop and the phone, a recipe added through the API in one appears in the other when that one comes back to the front, and when Refresh is pressed
+
+**Done when:** the tests pass in CI.
+
+## Step 12: Editing recipes and ingredients
+**Goal:** recipes and ingredients can be created, changed and deleted from the app, and an edit on one device can't silently overwrite one made on another (F3).
+
+**Why:** with reading in place, editing completes the everyday use, and it's where the API's validation and `If-Match` meet the UI.
+
+- [ ] Recipe editor, for create and edit: name, description, servings, times and instructions
+- [ ] Ingredient lines:
+  - add, remove, and reorder with Move up and Move down buttons, which work by touch and keyboard
+  - an ingredient picker that searches as you type, and can create a missing ingredient on the spot
+  - the quantity typed as text and read with `parseQuantity()`, with any error shown inline
+  - a unit picker from the shared list, and a note
+- [ ] The API's `fields` errors shown next to their inputs, including line errors such as `ingredients.2.unit`
+- [ ] Saving sends `If-Match`. A 412 says the recipe changed elsewhere and offers to reload it
+- [ ] Deleting a recipe, after a confirmation
+- [ ] Ingredients page: rename (409 when the name is taken) and delete (409 says it's in use)
+- [ ] A warning before leaving the editor with unsaved changes
+- [ ] Component tests: the line editor, quantity parsing in the form, and mapping `fields` onto inputs
+- [ ] Playwright:
+  - create a recipe with lines and a new ingredient, edit it, and delete it
+  - get the 412 prompt after changing the recipe in a second context
+  - rename an ingredient
+
+**Done when:** the tests pass in CI.
+
+## Step 13: Cooking mode, printing and installing
+**Goal:** cooking mode keeps the screen on while you read and scroll a recipe, small timers are there when a wait needs one, recipes print cleanly, and the app installs from Firefox on Android.
+
+**Why:** these are what make it a kitchen app rather than a website, and the install is what later carries offline reading (3c).
+
+### 13.1 Cooking mode
+- [ ] A cooking mode switch on the recipe page. The page itself doesn't change: the whole recipe stays readable and scrollable (§3.4)
+- [ ] While it's on, the Screen Wake Lock keeps the screen on. The lock is taken again whenever the page becomes visible, and released when the switch is turned off or you leave the recipe. If the API is missing, the switch says the screen may sleep
+- [ ] Timers, for mid-length waits:
+  - a small button adds one, with a length and an optional label, and several can run at once
+  - running timers are small chips at the edge of the screen, and never cover the recipe
+  - one that finishes plays a sound, vibrates where supported, and grows until dismissed
+  - each works from its end time rather than counting ticks, so it stays right if the screen locks
+  - ringing at zero while another app is open follows D14
+- [ ] Component tests for the timers, with fake timers. Playwright: turn cooking mode on and off, and run two timers at once
+
+### 13.2 Printing
+- [ ] A print stylesheet: the recipe's name, ingredients and method, without navigation or buttons. Checked in the print preview of Firefox and Chromium
+
+### 13.3 Installing
+- [ ] vite-plugin-pwa: the manifest (name, short name, icons, theme colour, `display: standalone`, start URL) and a service worker that caches the app's own files, so the app opens without a connection. Offline data comes in 3c
+- [ ] Icons: a simple mark at the sizes the manifest needs, including a maskable one for Android
+- [ ] A new deploy is picked up the next time the app starts. `index.html` and the service worker are always revalidated (Step 10)
+- [ ] Playwright: the manifest is valid, and the service worker registers
+
+**Done when:** the tests pass in CI, and the production image installs as an app in Chromium on this PC.
+
+## Step 14: Deploy, and check on the phone (Phase 3a done)
+**Goal:** Phase 3a runs on the Pi and meets its success criteria on your phone.
+
+**Why:** Playwright's Firefox is the desktop build of the engine. Installing, the wake lock and the feel of the app need the real phone.
+
+- [ ] Merge to `main`, then run `scripts/deploy.sh` on the Pi
+- [ ] On your phone, in Firefox for Android (you):
+  - install the app from Firefox's menu, and open it from the Home Screen
+  - find, read, create, edit and delete a recipe
+  - follow a whole recipe with cooking mode on, and add a timer or two to check they stay out of the way. If the screen sleeps, Firefox for Android lacks the wake lock: cooking mode should say so, and we then choose between a fallback and using Chrome for cooking
+  - with the app open on the phone and the laptop, add a recipe on the laptop, bring the phone's app back to the front, then try Refresh
+- [ ] Print a recipe from the laptop
+- [ ] Docs: the README's development section (running the client, the root scripts, Playwright), `docs/architecture.md` (the API serving the client), and `docs/deployment.md` if anything changed
+- [ ] Tick the boxes, then update the Status block and the Progress log
+
+**Done when:** every 3a success criterion above is met, and CI is green. **Phase 3a is then complete.** 3b's steps are written next, the same way.
+
 ## Backlog (later phases)
 | When | Items |
 |---|---|
 | Any time after Step 6 | M6: a JSON export of all data (small, and cheap insurance) |
-| Phase 3 | See the Phase 3 gate |
+| Phase 3 | 3a: Steps 9–14. 3b and 3c get their steps when each starts, following the Phase 3 gate's decisions |
 | Phase 4 | Uptime and disk-space alerts, log rotation, and automated dependency updates (Dependabot or Renovate). V5: the Prisma upgrade, as its own task |
 | Phase 5 | F7: the shopping-list tables must exist before Phase 5 can deliver shopping lists |
 | Phase 6 | V1/D12: USDA FoodData Central. F5: unit conversion using ingredient densities. F7: fixes to the meal-plan and shopping-list schema, and ingredient categories. M5: safe URL import. M1: RecipeLink and timers each appear in two phases |
@@ -769,3 +918,79 @@ First, settle D7–D11. Then write the Phase 3 spec segments, taking in the desi
   - **To check on 2026-11-23:** after the 03:30 run, `~/miseenplace-backup.log` should show `Backed up to …` and restic's `snapshot … saved`.
 
   Next: the SSD when it arrives, following "Moving to an SSD" in `docs/deployment.md`. Meanwhile, the Phase 3 gate (D7–D11) can start, if you want.
+- **2026-11-22:** Phase 3 gate: D7–D11 settled, all as recommended.
+  - PR #9's CI passed: run #19 on the pull request and run #20 on the merge into `main`.
+  - **D7, Electron: dropped.** An installed PWA opens in its own window and works offline, from one codebase and one deploy. Electron would add packaging, signing and updates, and a desktop build could fall behind the API.
+  - **D8: a full snapshot with an ETag.** `GET /api/sync` returns everything, with a fingerprint of the response, and a 304 when nothing has changed. It can't miss a child edit or a delete, which timestamp-based delta sync can (F2). A personal collection is a few hundred KB at most.
+  - **D9: read-only offline.** Reading and cooking mode work offline, and editing waits for a connection, so two devices can't conflict (F3). It fits the main use, reading on a phone while cooking.
+  - **D10: three parts,** each a step of its own:
+    - 3a: the UI and cooking mode, on the Phase 1 schema. A usable app at the end of it.
+    - 3b: structured instructions and sections, images, tags and equipment, and the missing endpoints (F6, F7).
+    - 3c: offline support, following D8 and D9.
+  - **D11: the image rules in the Decisions table.** Re-encoding with sharp strips the GPS data phones embed (S4). HEIC is rejected because sharp's standard build can't read it; iPhones normally send JPEG from Safari.
+  - The specs still describe these decisions as open; the Phase 3 spec segments will bring them in.
+
+  Next: draft the Phase 3 spec segments.
+- **2026-11-22:** Phase 3 gate done: the Phase 3 spec segments are applied.
+  - **How:** 14 segments, 9 for the technical spec and 5 for the design spec, were drafted in `planning/spec-segments/` and reviewed. A script then applied them, refusing to run unless every start and end heading appeared exactly once and no two ranges overlapped. A dry run on copies matched the result byte for byte. The drafts are deleted, so the specs are the only copy.
+  - **Where:**
+    - `technical-spec.md`: §2.1 (four sentences), §2.2–§2.5, the end of §2.6, §3.1, §3.2's Phase 3 and Phase 6 tables, §3.3, a new §3.4 (the web client), §5.6, §6.2, §7.2 and §8
+    - `design-spec.md`: System Architecture, Phase 3, Phase 6, Continuous Integration and Deployment, Risk Assessment and the Conclusion
+  - **Design-review items taken in:**
+    - F1: one origin
+    - F2 and D8: snapshot sync
+    - F3 and D9: read-only offline, plus `If-Match`
+    - F5: fractions, and `shared/`
+    - F6: full CRUD, with a recipe edited as a whole
+    - F7: `primaryImageId`
+    - S4 and D11: the image rules
+    - V2 and D7: no Electron
+    - V3 and D10: 3a, 3b and 3c
+    - M1: recipe links in Phase 6; timers in 3a, 3b and Phase 5
+  - **Your review changed four things:**
+    - **The offline copy never expires.** TanStack Query's persistence discards data older than 24 hours by default, so the snapshot gets its own IndexedDB record instead, replaced only by a complete newer one.
+    - **Firefox on Android is the main target.**
+      - Firefox asks before granting persistent storage, and only after a tap, so a Protect button asks for it.
+      - Its "Delete browsing data on quit" setting must stay off.
+      - Cooking mode copes with a missing wake lock.
+      - Playwright runs Firefox as well as Chromium, plus a short hand check on the phone.
+    - **Failed refreshes are retried** while the app is on screen (after 15 seconds, doubling up to every 5 minutes), and a Refresh button tries at once. The browser's "online" signal alone can't tell whether the Pi is reachable.
+    - **Two open devices stay in step without background syncing.** Each refreshes when the app opens, comes back to the front or reconnects, and after its own saves. A test covers it with two browser contexts.
+  - **My proposals you agreed to, beyond the gate decisions:**
+    - `If-Match` on recipe edits
+    - a recipe edited as a whole
+    - the client stack (Vite, React, React Router, TanStack Query, idb-keyval, vite-plugin-pwa, Vitest, Playwright), with `web/` and `shared/` in this repo
+    - `stepType` dropped, and `timerSeconds` instead of `timerLength`
+    - `instructions` dropped only in a later migration
+    - images served at `/media/<id>.webp` with year-long caching
+  - **Left for the start of 3a:** styling (plain CSS modules suggested), and confirming on the phone that Firefox for Android supports the wake lock and shows the persistent-storage prompt.
+
+  Next: write Phase 3a's steps into this plan, before any UI code.
+- **2026-11-22:** Phase 3a planned: Steps 9–14.
+  - Each step ends with its tests passing in CI, so the app works at every stage:
+    - **9:** `shared/` (the units list and quantity formatting) and the API's 3a changes (JSON 404s, `ETag` and `If-Match`)
+    - **10:** the client's skeleton, served by the API, with Playwright in CI from the start
+    - **11:** reading recipes, and keeping open devices in step
+    - **12:** editing recipes and ingredients
+    - **13:** cooking mode, printing and installing
+    - **14:** deploying, then checking the success criteria on your phone
+  - Reading comes before editing, so there's a usable app early, and the phone is the main use.
+  - Playwright starts in Step 10 rather than at the end, so each feature step adds its own flows.
+  - Step 10 must keep the API's `tsc` and ESLint away from `web/`: the root `tsconfig.json` compiles every `.ts` file it finds.
+  - **D13 added: styling.** Recommended: plain CSS with CSS Modules. It's needed before Step 10.
+
+  Next: Step 9, once you've looked over the steps.
+- **2026-11-22:** Phase 3a: your review of Steps 9–14.
+  - **Cooking mode shows the whole recipe.** It's like the print sheet but in larger text, with ingredients then method on a phone, and side by side on a wider screen. Hands are messy while cooking, and you need to see the steps ahead, so it's about keeping the screen on and timers rather than tapping through steps. Optional aids: tap a step or ingredient to dim it, and a text-size control.
+  - The one-step-at-a-time view becomes optional, in Phase 5. Technical spec §3.4 and §5.6, the design spec's Phase 3a and Phase 5, and Step 13 are updated to match.
+  - **D13 partly answered: plain CSS**, with no Tailwind or component library. Whether to use CSS Modules or plain stylesheets is decided after UI mockups made together, before Step 10.
+
+  Next: Step 9. The mockups can happen any time before Step 10.
+- **2026-11-22:** Phase 3a: cooking mode and timers, settled with you.
+  - **Cooking mode is a switch on the recipe page that keeps the screen on.** At heart that's all it is. The page doesn't change: the recipe stays readable and scrollable, and wiping a hand to scroll once is fine. This replaces the separate full-recipe screen and its optional aids from the entry above.
+  - **Timers: several at once, in 3a,** moved from Phase 5. They're for mid-length waits such as "stir every 15 minutes", not short steps or the oven, which has its own. Most recipes won't need one, so they stay small: a button to add one with an optional label, and small chips at the edge of the screen that never cover the recipe.
+  - In 3b, a step with a timer gets a small button beside it.
+  - Updated to match: technical spec §3.4 and §5.6, the design spec's Phase 3a, 3b, 5 and 6 (the M1 note), and Steps 13 and 14.
+  - **D14 added: timer alerts when the app isn't on screen.** A timer must ring at zero whatever app is open, and a web page can't do that alone on Android. Recommended: Web Push from the Pi. It's needed before Step 13.
+
+  Next: Step 9. The mockups can happen any time before Step 10.

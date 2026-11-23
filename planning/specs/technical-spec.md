@@ -81,7 +81,7 @@ The same ingredient may appear on more than one line of a recipe, so there is de
    ```
 
    **Rationale:** UUIDs were chosen over auto-incrementing integers because they can be generated anywhere:
-   - A client can create a record offline and choose its id, with no risk of colliding with ids made on another device. This only works once the API accepts client-generated ids, which is a Phase 3 decision (F3).
+   - A client could create a record offline and choose its id, with no risk of colliding with ids made on another device. Phase 3 keeps offline use read-only (D9), so the API doesn't accept client-generated ids yet, but UUIDs keep that option open.
    - Records keep the same id when data is synced, exported or moved between databases.
 
    UUIDs are **not** a security measure here. `GET /api/recipes` lists every id, and the API has no authentication; access is controlled by the network (localhost in Phase 1, the Tailscale network from Phase 2).
@@ -133,7 +133,7 @@ The same ingredient may appear on more than one line of a recipe, so there is de
    **Rationale:**
    - "g", "gram" and "grams" must be stored the same way, or quantities can never be added up, for example on a shopping list.
    - The list lives in code rather than a database enum, so adding a unit is a one-line change, not a migration.
-   - The module has no server dependencies, so the Phase 3 client can use the same list. Each unit records its dimension (mass, volume or other), ready for conversion factors in Phase 6.
+   - The module has no server dependencies, so the Phase 3 client uses the same list: Phase 3a moves it to `shared/units.ts`, next to the quantity formatting both sides use (§3.4). Each unit records its dimension (mass, volume or other), ready for conversion factors in Phase 6.
 
 6. **Cascade and Restrict Deletes**
 
@@ -164,9 +164,9 @@ The same ingredient may appear on more than one line of a recipe, so there is de
 8. **Deferred Features**
 
    These are documented but deferred beyond Phase 1:
-   - **Soft delete** (`deletedAt`): when recipe restoration, or sync of deletions, is needed (F2, D8)
+   - **Soft delete** (`deletedAt`): only if restoring deleted recipes is ever wanted. Offline sync doesn't need it, because the Phase 3c snapshot simply leaves deleted recipes out (D8)
    - **Version tracking** (`previousVersion`): when undo or history is needed
-   - **Section links on lines** (`sectionId`): Phase 3, for groupings like "for the sauce"
+   - **Section links on lines** (`sectionId`): Phase 3b, for groupings like "for the sauce" (§2.3)
    - **Unit conversion**: Phase 6, using per-ingredient densities to convert between volume and weight
 
 #### Current Prisma Schema
@@ -226,124 +226,128 @@ model Ingredient {
 }
 ```
  
-### 2.2 Phase 2: Pi Deployment (Local Network)
- 
-Phase 2 focuses on deployment rather than schema changes. The Phase 1 schema is deployed to the Raspberry Pi with PostgreSQL running in Docker.
- 
-**Infrastructure Focus:**
-- Docker containerization
-- PostgreSQL on Raspberry Pi
-- Backup automation
-- Health monitoring
- 
+### 2.2 Phase 2: Pi Deployment with Tailscale
+
+Phase 2 deploys the Phase 1 schema to the Raspberry Pi, with PostgreSQL in Docker, reachable only over Tailscale HTTPS (§6.2).
+
 No schema changes in this phase.
- 
-### 2.3 Phase 3: Desktop UI
- 
-Phase 3 expands the schema to support the desktop user interface with structured instructions, images, tags, and equipment.
- 
-#### Additional Entities
- 
+
+### 2.3 Phase 3: User Interface
+
+Phase 3 is split into three parts, each a step of its own (D10, V3):
+
+| Part | What it delivers | Schema changes |
+|------|------------------|----------------|
+| 3a | The web UI and cooking mode, installable as a PWA, on the Phase 1 schema | None |
+| 3b | Structured instructions and sections, images, tags and equipment | The entities below |
+| 3c | Read-only offline use, from a full snapshot (D8, D9) | None |
+
+Electron was dropped (D7): the installed PWA is the desktop app. Recipe links moved to Phase 6 (§2.6), where the design document already had them (M1).
+
+#### Phase 3b Entities
+
+Every new table has a UUID primary key, as in Phase 1. Order follows the Phase 1 rule: clients send arrays, and the server sets each `orderIndex` from the position (§2.1, principle 3).
+
 ##### RecipeSection Entity
- 
+
 | Field Name | Data Type | Constraints | Description |
 |------------|-----------|-------------|-------------|
-| id | UUID | Primary Key | Unique identifier for section |
-| recipeId | UUID | Foreign Key, Required | References Recipe |
-| name | String | Required | Section name (e.g., "Sauce", "Main") |
-| orderIndex | Integer | Required | Position within recipe |
- 
+| id | UUID | Primary Key | Unique identifier for the section |
+| recipeId | UUID | Foreign Key, Required, Cascade | References Recipe |
+| name | String | Required, 1–100 characters | Section name, such as "Sauce" or "Base" |
+| orderIndex | Integer | Required, set by the server | Position within the recipe |
+
 ##### Instruction Entity
- 
+
 | Field Name | Data Type | Constraints | Description |
 |------------|-----------|-------------|-------------|
-| id | UUID | Primary Key | Unique identifier for instruction |
-| sectionId | UUID | Foreign Key, Required | References RecipeSection |
-| stepNumber | Integer | Required | Order within section |
-| text | Text | Required | Instruction text |
-| stepType | String | Default: "Cooking" | Type of instruction step |
-| timerLength | Integer | Optional | Timer duration in seconds |
- 
+| id | UUID | Primary Key | Unique identifier for the step |
+| sectionId | UUID | Foreign Key, Required, Cascade | References RecipeSection |
+| orderIndex | Integer | Required, set by the server | Position within the section |
+| text | Text | Required, 1–2,000 characters | What to do |
+| timerSeconds | Integer | Optional, 1–86,400 | A timer cooking mode can start for this step |
+
 ##### Image Entity
- 
+
 | Field Name | Data Type | Constraints | Description |
 |------------|-----------|-------------|-------------|
-| id | UUID | Primary Key | Unique identifier for image |
-| recipeId | UUID | Foreign Key, Required | References Recipe |
-| filePath | String | Required | Path to image file |
-| isPrimary | Boolean | Default: false | Whether this is the main image |
-| width | Integer | Optional | Image width in pixels |
-| height | Integer | Optional | Image height in pixels |
-| fileSize | Integer | Optional | File size in bytes |
-| uploadedAt | DateTime | Auto: current time | When image was uploaded |
- 
+| id | UUID | Primary Key | Unique identifier, also the files' name |
+| recipeId | UUID | Foreign Key, Required, Cascade | References Recipe |
+| orderIndex | Integer | Required, set by the server | Upload order, used as the gallery order |
+| width | Integer | Required | Width of the stored image, in pixels |
+| height | Integer | Required | Height of the stored image, in pixels |
+| fileSize | Integer | Required | Size of the stored image, in bytes |
+| createdAt | DateTime | Auto: current time | When it was uploaded |
+
+The files live on disk, not in the database (§6.2). There's no `filePath` column: the server builds each path from the id, so no path ever comes from a client.
+
 ##### Tag Entity
- 
+
 | Field Name | Data Type | Constraints | Description |
 |------------|-----------|-------------|-------------|
-| id | UUID | Primary Key | Unique identifier for tag |
-| name | String | Unique, Required | Tag name |
-| color | String | Optional | HEX color code for visual representation |
- 
+| id | UUID | Primary Key | Unique identifier for the tag |
+| name | String | Unique, Required | Normalised like ingredient names: trimmed, lowercase, 1–50 characters |
+| color | String | Optional | A `#rrggbb` colour |
+| createdAt | DateTime | Auto: current time | When the tag was created |
+| updatedAt | DateTime | Auto: update | When the tag was last changed |
+
+##### RecipeTag Entity
+
+| Field Name | Data Type | Constraints | Description |
+|------------|-----------|-------------|-------------|
+| recipeId | UUID | Foreign Key, Cascade | References Recipe |
+| tagId | UUID | Foreign Key, Cascade | References Tag |
+
+The primary key is `(recipeId, tagId)`, so a tag can't be applied to a recipe twice. Deleting a tag removes it from every recipe: unlike an ingredient, a tag carries nothing a recipe depends on.
+
 ##### Equipment Entity
- 
+
 | Field Name | Data Type | Constraints | Description |
 |------------|-----------|-------------|-------------|
-| id | UUID | Primary Key | Unique identifier for equipment |
-| name | String | Unique, Required | Equipment name |
-| description | Text | Optional | Equipment description |
- 
+| id | UUID | Primary Key | Unique identifier for the item |
+| name | String | Unique, Required | Normalised like ingredient names, 1–100 characters |
+| createdAt | DateTime | Auto: current time | When the item was created |
+| updatedAt | DateTime | Auto: update | When the item was last changed |
+
 ##### RecipeEquipment Entity
- 
+
 | Field Name | Data Type | Constraints | Description |
 |------------|-----------|-------------|-------------|
-| id | UUID | Primary Key | Unique identifier for recipe-equipment relation |
-| recipeId | UUID | Foreign Key, Required | References Recipe |
-| equipmentId | UUID | Foreign Key, Required | References Equipment |
-| optional | Boolean | Default: false | Whether equipment is optional |
-| quantity | Integer | Default: 1 | Number of equipment items needed |
- 
-##### RecipeLink Entity
- 
-| Field Name | Data Type | Constraints | Description |
-|------------|-----------|-------------|-------------|
-| id | UUID | Primary Key | Unique identifier for recipe link |
-| sourceRecipeId | UUID | Foreign Key, Required | References source Recipe |
-| linkedRecipeId | UUID | Foreign Key, Required | References linked Recipe |
-| linkType | String | Required | Relationship type (e.g., "component", "variation") |
-| notes | Text | Optional | Notes about the recipe link |
- 
-#### Phase 3 Entity Relationships
- 
+| id | UUID | Primary Key | Unique identifier for the line |
+| recipeId | UUID | Foreign Key, Required, Cascade | References Recipe |
+| equipmentId | UUID | Foreign Key, Required, Restrict | References Equipment |
+| orderIndex | Integer | Required, set by the server | Position in the recipe's list |
+| quantity | Integer | Default: 1, at least 1 | How many are needed |
+| optional | Boolean | Default: false | Whether the recipe works without it |
+
+##### Changes to Phase 1 Tables
+
+| Table | Change | Why |
+|-------|--------|-----|
+| Recipe | Add `primaryImageId`: UUID, optional, references Image, `SetNull` | The main image is a property of the recipe. An `isPrimary` flag on images could mark two images as primary, or none (F7) |
+| RecipeIngredient | Add `sectionId`: UUID, optional, references RecipeSection, `SetNull` | Groups lines, as in "for the sauce". Null means the line is in no section |
+| Recipe | Remove `instructions`, once the migration in §7.2 has moved them into sections | One place for the method, not two |
+
+#### Phase 3b Entity Relationships
+
 | Entity | Relationship | Related Entity | Description |
 |--------|--------------|----------------|-------------|
-| Recipe | One-to-Many | RecipeSection | Sections within recipe |
-| Recipe | One-to-Many | Image | Images of recipe |
-| Recipe | Many-to-Many | Tag | Tags applied to recipe |
-| Recipe | One-to-Many | RecipeEquipment | Equipment used in recipe |
-| Recipe | One-to-Many | RecipeLink (as source) | Links to other recipes |
-| Recipe | One-to-Many | RecipeLink (as linked) | Links from other recipes |
-| RecipeSection | One-to-Many | Instruction | Instructions within section |
-| Tag | Many-to-Many | Recipe | Recipes with this tag |
-| Equipment | One-to-Many | RecipeEquipment | Recipes using this equipment |
- 
-#### Phase 3 Schema Enhancements
- 
-1. **Structured Instructions**
-   - Replace simple text instructions with hierarchical sections and steps
-   - Support timing information and instruction types
-   - Allow more complex recipe organization
- 
-2. **Image Management**
-   - Store image metadata in the database
-   - Support multiple images per recipe with primary image designation
-   - Track image dimensions and file size for optimization
- 
-3. **Tagging System**
-   - Implement flexible categorization through tags
-   - Support colored tags for visual organization
-   - Allow filtering and searching by tags
- 
+| Recipe | One-to-Many | RecipeSection | Sections in `orderIndex` order (Cascade) |
+| RecipeSection | One-to-Many | Instruction | Steps in `orderIndex` order (Cascade) |
+| RecipeSection | One-to-Many | RecipeIngredient | Lines grouped under the section (`SetNull`) |
+| Recipe | One-to-Many | Image | The recipe's images (Cascade; the files are deleted too) |
+| Recipe | Many-to-One | Image (as primary) | The main image, or none (`SetNull`) |
+| Recipe | Many-to-Many | Tag | Through RecipeTag (Cascade on both sides) |
+| Recipe | One-to-Many | RecipeEquipment | Equipment lines (Cascade) |
+| Equipment | One-to-Many | RecipeEquipment | Lines that use it (Restrict: 409 while a recipe uses it) |
+
+#### Phase 3b Design Notes
+
+1. **A recipe is written as a whole.** Its sections, steps, tags and equipment lines are sent in the recipe's POST or PATCH body and replace what's there, exactly as `ingredients` does in Phase 1 (§3.2). Every change to a recipe goes through one route, in one transaction, and sets the recipe's `updatedAt` (F2). Tags and equipment are shared lists, like ingredients, with endpoints of their own.
+2. **Timers belong to steps.** A step's optional `timerSeconds` lets cooking mode offer that step's timer. The original `stepType` field is dropped, because nothing would use it.
+3. **Images follow D11** (§3.2): only the re-encoded files are kept, with their metadata stripped.
+4. **Indexes:** every foreign key above is indexed, as in Phase 1 (§2.1, principle 7). Tag and equipment names get trigram indexes, so they can be searched like ingredients.
+
 ### 2.4 Phase 4: Hardening and Monitoring
 
 Remote access moved into Phase 2, so Phase 4 is about keeping the running system healthy: alerts, dependency updates and the Prisma upgrade (§6.3).
@@ -351,16 +355,17 @@ Remote access moved into Phase 2, so Phase 4 is about keeping the running system
 No schema changes in this phase.
 
 ### 2.5 Phase 5: Mobile UI
- 
+
 Phase 5 may introduce minor schema additions to support mobile-specific features.
- 
+
 **Potential Additions:**
 - User preferences for display settings
-- Offline sync metadata
 - Push notification tokens
- 
+
+Offline use needs no schema of its own: it arrives in Phase 3c, as a snapshot of the existing tables (D8).
+
 Schema details to be determined based on mobile implementation approach.
- 
+
 ### 2.6 Phase 6: Enhanced Features
  
 Phase 6 adds advanced functionality including meal planning, shopping lists, and external API integration.
@@ -432,16 +437,33 @@ Phase 6 adds advanced functionality including meal planning, shopping lists, and
 | cacheExpiresAt | DateTime | Optional | When to consider refreshing |
 | externalData | JSON | Optional | Stores complete external API response |
  
+##### RecipeLink Entity
+
+Moved here from Phase 3 at the Phase 3 gate (M1): the design document puts recipe variations and links in Phase 6, and nothing in Phase 3 needs them.
+
+| Field Name | Data Type | Constraints | Description |
+|------------|-----------|-------------|-------------|
+| id | UUID | Primary Key | Unique identifier for the link |
+| sourceRecipeId | UUID | Foreign Key, Required, Cascade | The recipe the link is shown on |
+| linkedRecipeId | UUID | Foreign Key, Required, Cascade | The recipe it points to |
+| linkType | String | Required | "component", "variation" or "pairing" |
+| notes | Text | Optional | Notes about the link |
+
+A recipe can't link to itself, and the same link can't be made twice: `(sourceRecipeId, linkedRecipeId, linkType)` is unique.
+
 #### Phase 6 Entity Relationships
  
 | Entity | Relationship | Related Entity | Description |
 |--------|--------------|----------------|-------------|
 | Recipe | One-to-Many | MealPlanEntry | Meal plan entries using this recipe |
 | Recipe | One-to-One | NutritionalInfo | Nutritional information for recipe |
+| Recipe | One-to-Many | RecipeLink (as source) | Links from this recipe to others |
+| Recipe | One-to-Many | RecipeLink (as linked) | Links from other recipes to this one |
 | MealPlan | One-to-Many | MealPlanEntry | Entries in this meal plan |
 | ShoppingList | One-to-Many | ShoppingListItem | Items in this shopping list |
 | Ingredient | One-to-Many | ShoppingListItem | Shopping list items referencing this ingredient |
  
+
 ## 3. API Architecture
  
 The API follows RESTful principles and is implemented using Express.js with TypeScript.
@@ -472,6 +494,7 @@ The API follows RESTful principles and is implemented using Express.js with Type
 
 4. **Performance**
    - Every list endpoint is paginated, with a stable order, so the response size is bounded however many recipes there are
+   - The one exception is `GET /api/sync` (Phase 3c), which returns everything by design (D8). At personal scale that's a few hundred kilobytes, and an unchanged snapshot costs a 304 with no body (§3.3)
    - Foreign keys and searched names are indexed (§2.1)
 
 5. **Search Strategy**
@@ -488,8 +511,14 @@ The API follows RESTful principles and is implemented using Express.js with Type
 
 6. **Access Control (S1)**
 
-   There is no authentication. Access is controlled by the network: the API listens on localhost in development and is reachable only over Tailscale from Phase 2. Browsers may call it cross-origin only from the origins listed in `CORS_ORIGINS`; by default, none.
- 
+   There is no authentication. Access is controlled by the network: the API listens on localhost in development and is reachable only over Tailscale from Phase 2. Browsers may call it cross-origin only from the origins listed in `CORS_ORIGINS`; by default, none. From Phase 3 the web client is served by the same app, from the same origin, so it needs no CORS (F1, §3.4).
+
+7. **Concurrency (F3, Phase 3a)**
+
+   **Implementation:** `GET /api/recipes/:id` returns an `ETag` header made from the recipe's `updatedAt`. A recipe `PATCH` or `DELETE` may send it back in `If-Match`. If the recipe has changed since, the API returns 412 and changes nothing.
+
+   **Rationale:** one person with the editor open on a phone and a laptop could otherwise save one edit over the other without knowing. The header is optional, so curl and scripts keep working; the web client always sends it. Editing offline would need far more, such as queued edits and conflict resolution, which is why offline use stays read-only (D9).
+
 ### 3.2 API Endpoints by Phase
  
 #### Phase 1: Foundation
@@ -575,27 +604,88 @@ Every body and list query rejects unknown fields. Numbers must be JSON numbers: 
 
 Routes map the Prisma errors they expect themselves. `P2002` is mapped once, in the error handler, so every route that writes a unique field gets the same 409.
  
-#### Phase 3: Desktop UI
- 
+#### Phase 3a: Web UI
+
+3a adds no endpoints. The UI uses the Phase 1 API, with three changes to how the app answers:
+
+- **The UI's files.** The Express app serves the built web client (§3.4). A GET outside `/api` and `/media` that matches no file returns the client's `index.html`, so a deep link such as `/recipes/<id>` loads the app.
+- **JSON 404s under `/api`.** An unknown `/api` path returns 404 `{ "error": "Not found." }`, not Express's HTML page.
+- **Concurrency headers.** `GET /api/recipes/:id` returns an `ETag`, and recipe `PATCH` and `DELETE` honour `If-Match` (§3.1, principle 7).
+
+| Status | When | Body |
+|--------|------|------|
+| 404 | An unknown path under `/api` | `{ "error": "Not found." }` |
+| 412 | `If-Match` doesn't match the recipe's current `ETag` | `{ "error": "The recipe has changed since it was loaded." }` |
+
+#### Phase 3b: Structured Recipes, Images, Tags and Equipment
+
 | Resource | Method | Endpoint | Description |
 |----------|--------|----------|-------------|
-| Images | POST | `/api/recipes/:id/images` | Upload an image for a recipe |
-| Images | GET | `/api/recipes/:id/images` | Get all images for a recipe |
-| Images | DELETE | `/api/images/:id` | Delete an image |
-| Images | PATCH | `/api/images/:id/primary` | Set image as primary |
-| Tags | GET | `/api/tags` | List all tags |
-| Tags | POST | `/api/tags` | Create a new tag |
-| Tags | PATCH | `/api/tags/:id` | Update a tag |
-| Tags | DELETE | `/api/tags/:id` | Delete a tag |
-| Sections | GET | `/api/recipes/:id/sections` | Get all sections with instructions |
-| Sections | POST | `/api/recipes/:id/sections` | Add a section to a recipe |
-| Sections | PATCH | `/api/sections/:id` | Update a section |
-| Equipment | GET | `/api/equipment` | List all equipment |
-| Equipment | POST | `/api/equipment` | Create equipment |
-| Recipe Links | GET | `/api/recipes/:id/links` | Get linked recipes |
-| Recipe Links | POST | `/api/recipes/:id/links` | Create link between recipes |
-| Sync | GET | `/api/sync?since=:timestamp` | Get changes since timestamp |
- 
+| Recipes | POST, PATCH | `/api/recipes`, `/api/recipes/:id` | Also accept `sections`, `tagIds`, `equipment` and `primaryImageId` (below) |
+| Recipes | GET | `/api/recipes?tag=:tagId` | Recipes with a tag; combines with `search` and paging |
+| Tags | GET | `/api/tags` | List tags, paginated, with optional fuzzy search |
+| Tags | GET | `/api/tags/:id` | Get a tag |
+| Tags | POST | `/api/tags` | Create a tag (name normalised; 409 if it exists) |
+| Tags | PATCH | `/api/tags/:id` | Rename or recolour a tag |
+| Tags | DELETE | `/api/tags/:id` | Delete a tag, removing it from every recipe |
+| Equipment | GET | `/api/equipment` | List equipment, paginated, with optional fuzzy search |
+| Equipment | GET | `/api/equipment/:id` | Get an item |
+| Equipment | POST | `/api/equipment` | Create an item (name normalised; 409 if it exists) |
+| Equipment | PATCH | `/api/equipment/:id` | Rename an item |
+| Equipment | DELETE | `/api/equipment/:id` | Delete an item (409 while a recipe uses it) |
+| Images | POST | `/api/recipes/:id/images` | Upload one image (`multipart/form-data`, field `image`) |
+| Images | DELETE | `/api/images/:id` | Delete an image and its files |
+| Image files | GET | `/media/:imageId.webp`, `/media/:imageId-thumb.webp` | The stored image and its thumbnail |
+
+Recipe responses also include `sections`, each with its `steps`; `tags`; `equipment`, each line with its `equipment`; `images`; and `primaryImageId`. Lists are in order, and ingredient lines include `sectionId`.
+
+This closes the gaps in the original Phase 3 API (F6): every part of a recipe can be created, changed and removed, and every shared list (ingredients, tags, equipment) has full CRUD. There are no separate section or step endpoints. A recipe is edited as a whole, so a change can never leave the recipe's `updatedAt` behind (F2).
+
+##### Recipe Body Additions
+
+| Field | Effect when present (absent leaves it untouched) |
+|-------|---------------------------------------------------|
+| `sections` | Replaces every section and step: an array of `{ name, steps: [{ text, timerSeconds }] }` |
+| `ingredients[].sectionIndex` | Puts the line in the section at that position in `sections`; null or absent means no section |
+| `tagIds` | Replaces the recipe's tags: unique UUIDs of existing tags |
+| `equipment` | Replaces the equipment lines: an array of `{ equipmentId, quantity, optional }` |
+| `primaryImageId` | Sets the main image to one of this recipe's images, or clears it with null |
+
+Validation:
+- `sections[].name`: 1–100 characters after trimming. `steps[].text`: 1–2,000 characters after trimming. `timerSeconds`: a whole number from 1 to 86,400, or null.
+- `sectionIndex` must point inside `sections`.
+- A body with `sections` must also have `ingredients`, because replacing the sections gives them new ids, and lines would otherwise silently lose their section.
+- `equipment[].quantity`: a whole number of at least 1, default 1. `optional`: a boolean, default false.
+- `primaryImageId` must be one of this recipe's images (400 otherwise).
+- Unknown fields are rejected, as in Phase 1.
+
+##### Image Uploads (D11, S4)
+
+1. **Type:** JPEG, PNG or WebP, recognised from the file's contents rather than its name or `Content-Type`. Anything else, including SVG, GIF and HEIC, is a 415.
+2. **Size:** at most 15 MB (413). The upload is held in memory and never written to disk as uploaded.
+3. **Pixels:** at most 50 megapixels, read from the image's header before it's decoded, so a small file that would expand into an enormous image is refused (400).
+4. **Re-encoding:** sharp turns the image upright using its orientation tag, then writes two WebP files: the image, at most 2,000 px on its longest side, and a 400 px thumbnail. Re-encoding drops all metadata, including the GPS position phones record. The upload itself is discarded.
+5. **Names:** the files are `<imageId>.webp` and `<imageId>-thumb.webp`, after the new row's UUID. Nothing from the upload's own name is used.
+6. **Limit:** 10 images per recipe (409).
+7. **Order of work:** the files are written first, then the row is inserted and the recipe's `updatedAt` set, in one transaction. If the transaction fails, the files are deleted. Deleting an image, or its recipe, deletes its files.
+
+Image files are served with `Cache-Control: public, max-age=31536000, immutable`. A file's contents never change, because a new upload gets a new id.
+
+| Status | When | Body |
+|--------|------|------|
+| 400 | Over 50 megapixels, not a readable image, or `primaryImageId` isn't this recipe's | `{ "error": "<what was wrong>" }` |
+| 409 | The recipe already has 10 images | `{ "error": "A recipe can have at most 10 images." }` |
+| 409 | A tag or equipment name already exists (Prisma `P2002`) | `{ "error": "That name already exists." }` |
+| 409 | Deleting equipment a recipe uses | `{ "error": "Cannot delete equipment that is used in recipes." }` |
+| 413 | The upload is over 15 MB | `{ "error": "Images can be at most 15 MB." }` |
+| 415 | Not JPEG, PNG or WebP | `{ "error": "Only JPEG, PNG and WebP images are accepted." }` |
+
+#### Phase 3c: Offline Reading
+
+| Resource | Method | Endpoint | Description |
+|----------|--------|----------|-------------|
+| Sync | GET | `/api/sync` | Everything a client needs offline, with an `ETag`; 304 when unchanged (§3.3) |
+
 #### Phase 6: Enhanced Features
  
 | Resource | Method | Endpoint | Description |
@@ -607,34 +697,111 @@ Routes map the Prisma errors they expect themselves. `P2002` is mapped once, in 
 | Shopping Lists | POST | `/api/mealplans/:id/generatelist` | Generate shopping list from meal plan |
 | Nutrition | GET | `/api/recipes/:id/nutrition` | Get nutritional info for a recipe |
 | Nutrition | POST | `/api/recipes/:id/nutrition/refresh` | Trigger nutrition data refresh |
+| Recipe Links | GET | `/api/recipes/:id/links` | Get linked recipes (moved from Phase 3, M1) |
+| Recipe Links | POST | `/api/recipes/:id/links` | Link two recipes |
+| Recipe Links | DELETE | `/api/links/:id` | Remove a link |
  
-### 3.3 Sync Strategy
- 
-For offline-capable clients, the API supports timestamp-based synchronization:
- 
-**Endpoint:** `GET /api/sync?since=:timestamp`
- 
+
+### 3.3 Sync Strategy (Phase 3c, D8)
+
+Offline clients keep a full copy of the data, refreshed from one snapshot endpoint.
+
+**Endpoint:** `GET /api/sync`
+
 **Response:**
 ```json
 {
-  "syncedAt": "2025-05-29T12:00:00Z",
-  "recipes": {
-    "updated": [...],
-    "deleted": []
-  },
-  "ingredients": {
-    "updated": [...],
-    "deleted": []
-  }
+  "recipes": [...],
+  "ingredients": [...],
+  "tags": [...],
+  "equipment": [...]
 }
 ```
- 
-**Implementation Notes:**
-- Returns all records where `updatedAt > since`
-- Client stores `syncedAt` from response for next sync
-- Deleted IDs returned when soft delete is implemented
-- Single-user model avoids conflict resolution complexity
- 
+
+Each recipe is as `GET /api/recipes/:id` returns it, and each shared list holds every row.
+
+**Implementation:**
+- The response is deterministic. Every array is sorted (recipes and the shared lists by name, then id; everything inside a recipe by `orderIndex`), and the body holds no timestamp of its own, so the same data always gives the same bytes.
+- The `ETag` is a SHA-256 hash of the body. A client sends its last ETag in `If-None-Match`; if nothing has changed, the API answers 304 with no body.
+- The response is gzip-compressed.
+- Image files aren't in the snapshot. The client's service worker caches them (§3.4).
+
+**Rationale:**
+- A snapshot can't miss anything. Timestamp-based delta sync misses rows without an `updatedAt`, edits made through child endpoints, and deletes, unless every write bumps its parent and every delete leaves a tombstone (F2). Replacing the whole copy makes deleted recipes disappear on their own.
+- At personal scale the snapshot is small: a few hundred kilobytes for hundreds of recipes, less once compressed, and nothing at all when unchanged.
+- Offline use is read-only (D9), so data only flows from the server to the client, and there's nothing to reconcile.
+- Delta sync (`?since=`) with a tombstone table stays possible if the collection ever outgrows this, without changing the client's offline model.
+
+### 3.4 Web Client (Phase 3)
+
+The web client is a React single-page app, installable as a PWA, and the only user interface: Electron was dropped (D7).
+
+**Browsers:** the main target is Firefox on Android, installed to the Home Screen. Chromium-based browsers, on the phone or a desktop, are supported too.
+
+**Stack:**
+
+| Concern | Choice | Why |
+|---------|--------|-----|
+| Build | Vite, TypeScript in strict mode | A fast dev server, and the same language and strictness as the API |
+| UI | React | As planned in the design document |
+| Routing | React Router | Deep links such as `/recipes/<id>` work, and survive a reload |
+| Server data | TanStack Query | Caching, refetching and request state while online |
+| Offline copy (3c) | IndexedDB, through idb-keyval | One record holding the latest snapshot. It never expires (see Offline below) |
+| PWA | vite-plugin-pwa (Workbox) | Generates the manifest and the service worker |
+| Unit and component tests | Vitest, Testing Library | Vite-native, with Jest-style syntax |
+| End-to-end tests | Playwright | Real browsers (Firefox, the phone's engine, and Chromium), phone-sized viewports, and an offline mode for 3c (§5.6) |
+
+**Layout:** the client lives in `web/`, in this repository, with its own `package.json`. Code both sides use lives in `shared/`: the units list, moved from `src/units.ts`, and the quantity formatting below. One repository means one CI run, one deploy and one copy of the units list.
+
+**One origin (F1):** in production, the Express app serves the built client from the same `https://<name>.<tailnet>.ts.net` address as the API. The client needs no CORS, and the phone gets one install and one offline cache. In development, Vite serves the client on port 5173 and forwards `/api` and `/media` to the API on port 3000, so development is same-origin too.
+
+**Caching:** built files carry a content hash in their names and are cached for a year. `index.html` and the service worker are always revalidated, so a deploy reaches every device on its next visit.
+
+**Quantities (F5):** `shared/quantity.ts` formats and parses amounts, tested once for both sides.
+- Spoon and cup measures, and counts, are shown as fractions to the nearest eighth: 0.5 is ½, 1.25 is 1¼, 0.33 is ⅓. Metric units are shown as decimals: 250 g, 1.5 l.
+- A range is shown as "2–3". A line with no quantity shows only the ingredient and its note.
+- The editor accepts "1 1/2", "1½", "1.5" and "2-3", and sends numbers, so the API stays numeric.
+
+**Pages (3a):**
+- **Recipes:** the list, with the API's fuzzy search and a "load more" button driven by `X-Total-Count`.
+- **Recipe:** ingredients and method, servings and times, with buttons for cooking mode, editing and printing.
+- **Recipe editor:** creates and edits. The ingredient picker searches as you type, and can create a missing ingredient on the spot. Units come from the shared list. The API's `fields` errors appear next to their inputs. Saving sends `If-Match`, and a 412 offers to reload the recipe.
+- **Ingredients:** list, search, rename and delete. A delete refused with 409 says the ingredient is in use.
+- **Cooking mode:** a switch on the recipe page that keeps the screen on, and at heart that's all it is. The page itself doesn't change: the whole recipe stays readable and scrollable, so cooking takes no more taps than reading. The Screen Wake Lock API keeps the screen on (Firefox 126 and later, and Chromium) until the switch is turned off or you leave the recipe, and the lock is taken again whenever the page becomes visible. Where the API is missing, the switch says the screen may sleep, rather than failing silently. A one-step-at-a-time view is optional, and waits for Phase 5.
+- **Timers:** for mid-length waits such as "stir every 15 minutes", not for short steps, or for the oven, which has its own. Most recipes won't need one, so they stay small and out of the way:
+  - A small button adds a timer, with a length and an optional label. Several can run at once.
+  - Running timers are small chips at the edge of the screen, and never cover the recipe.
+  - A timer that finishes plays a sound, vibrates where supported, and grows until it's dismissed.
+  - Each counts from its end time rather than counting ticks, so it stays right if the screen locks.
+  - A timer must alert at zero even when another app is open. A web page can't do that by itself on Android, because the browser pauses it soon after you switch away. How it's done is decision D14.
+  - In 3b, a step with a `timerSeconds` gets a small button beside it that starts that timer.
+- **Printing:** a print stylesheet reduces a recipe to its ingredients and method, without navigation or buttons.
+
+3b adds the section, step, tag, equipment and image editors, and tag filtering on the list.
+
+**Keeping devices in step:** the app may be open on the laptop and the phone at the same time. From 3a:
+- A device refreshes its data when the app opens, when it comes back to the foreground (switching back to the app or its tab), when its connection returns, and right after it saves a change of its own. Nothing refreshes in the background, and nothing polls on a timer.
+- A **Refresh** button refreshes at any time.
+- So with the app open on both, a recipe added on the laptop appears on the phone the next time the phone's app comes to the front, or when Refresh is tapped. The same holds the other way round.
+- If the recipe on screen was changed elsewhere, the page shows the new version at the next refresh. If it was deleted, the page says so instead of failing. An edit started before the change gets a 412 when saved, with an offer to reload (§3.1, principle 7).
+- In 3a these refreshes are TanStack Query's refetch on focus and reconnect. From 3c, the same moments also fetch the snapshot.
+
+**Offline (3c, D9):** the copy on the device must survive weeks without the app being opened.
+- **The app's files:** from 3a, the service worker caches them, so the app opens with no connection, however long it's been since it was last used.
+- **The data:** the offline copy is the latest snapshot, kept in IndexedDB as one record with its ETag and the time it was fetched. It has no expiry. It's replaced only when a newer snapshot has fully arrived, so a failed or partial refresh never leaves the device with less than it had. TanStack Query's own persistence isn't used for this, because by default it silently discards anything older than 24 hours.
+- **Refreshing:** the client fetches `/api/sync` at the moments listed under "Keeping devices in step". Offline, every page reads from the stored snapshot. Editing controls are disabled, with a banner showing when the copy was last refreshed.
+- **Retrying:** if a refresh fails, the client tries again while the app is on screen: after 15 seconds, then at doubling intervals up to every 5 minutes, until one succeeds. The browser's "online" signal only means the phone has a network, not that the Pi is reachable (Tailscale may be off, for example), so the client retries rather than waiting for that signal alone. Refresh tries straight away.
+- **Keeping the browser from clearing it:** the client asks for persistent storage with `navigator.storage.persist()`, so the browser won't clear the copy when the device runs low on space.
+  - Firefox asks you to allow it, and only in response to a tap, so the request comes from a **Protect** button on the "Offline copy" line rather than happening silently.
+  - Chrome decides by itself, without asking, and grants it to installed apps.
+  - Neither Firefox nor Chrome puts a time limit on a site's data, and Safari's seven-day limit doesn't apply to Home Screen apps.
+  - Firefox's "Delete browsing data on quit" setting would erase the copy, so it must stay off.
+- **Visible state:** an "Offline copy" line shows how many recipes are stored, when they were last refreshed, and whether storage is protected, with the Refresh button and, until storage is protected, the Protect button.
+- **What can still remove it:** clearing the browser's data for the site, or removing the app from the Home Screen.
+- **Images:** thumbnails are cached ahead of time. Full images are cached as they're viewed, up to a limit.
+
+**Accessibility:** semantic HTML, labelled form controls, visible focus, and text that scales with the browser's font size. Cooking mode must work one-handed.
+
 ## 4. External API Integration
  
 ### 4.1 Spoonacular API Integration (Phase 6)
@@ -787,21 +954,27 @@ afterAll(async () => { await prisma.$disconnect(); });
 - **Type-checking is separate.** ts-jest only transpiles, so type errors don't fail tests; CI runs `npx tsc --noEmit` as its own step.
 - **Coverage** is printed after `npm test -- --coverage`, written as HTML to `coverage/lcov-report/`, and shown on each CI run's summary page. There's no threshold yet; one will be set once coverage settles.
 
-### 5.6 End-to-End Testing (Phase 3+)
+### 5.6 Web Client and End-to-End Testing (Phase 3)
 
-End-to-End tests will be added when the UI is implemented:
+Phase 3 adds tests at three levels:
 
-1. **Testing Scope**
-   - User workflows (creating and managing recipes)
-   - Cross-component interactions
-   - UI functionality with API communication
+1. **API tests**, in the style of §5.2, for everything the API gains:
+   - 3a: JSON 404s under `/api`, and `If-Match`, where a stale ETag gets 412 and changes nothing
+   - 3b: sections, steps, tags and equipment through the recipe body, including the `sectionIndex` rules; tag and equipment CRUD, including the 409s; and the image rules (D11). A JPEG carrying GPS data must come back without it. SVG, GIF and HEIC must be refused, and so must a file over 15 MB, an image over 50 megapixels and an 11th image
+   - 3c: the snapshot, its ETag and the 304, and that a deleted recipe is missing from the next snapshot
+2. **Unit and component tests:**
+   - `shared/quantity.ts`: formatting and parsing, as `test.each` tables, in the Jest suite beside the units tests, since it needs no browser
+   - Client components with logic, in Vitest with Testing Library: the ingredient-line editor, mapping the API's `fields` errors onto inputs, and the timers, with fake timers
+   - The offline store (3c): with the network down, a snapshot fetched 60 days earlier is still served; a failed or partial refresh leaves it untouched; only a complete new snapshot replaces it
+3. **End-to-end tests** (Playwright):
+   - Against the built client served by the real API, with a `_test` database reset to the base seed before each test (§5.3)
+   - Every flow in Firefox and Chromium, at a phone size and a desktop size. Firefox because it's the phone's browser, and phone sizes because the phone is the main device
+   - 3a: find a recipe by search; create one with lines and a new ingredient; edit it; get the 412 prompt when it changed elsewhere; delete it; turn cooking mode on and off; run two timers at once, and dismiss one when it finishes. With two browser contexts standing in for the laptop and the phone, a recipe added in one appears in the other when it returns to the foreground or presses Refresh
+   - 3b: upload an image and make it the main one; edit sections, steps, tags and equipment; start a step's timer from its button
+   - 3c: load the app, go offline (`context.setOffline(true)`), and check that recipes still open and editing is disabled. Then reload the page while still offline, which is a fresh start from the stored copy rather than the open tab, and check again. Come back online, and see a change made elsewhere arrive. Make a refresh fail by blocking `/api/sync`, unblock it, and check the retry gets the new snapshot without a restart
 
-2. **Testing Approach**
-   - Use Cypress or Playwright for browser-based testing
-   - Implement realistic test scenarios
-   - Test across different screen sizes
-   - Verify offline functionality
- 
+CI runs the client's lint, type-check and unit tests, then the Playwright tests in Firefox and Chromium against the PostgreSQL service, alongside the API's tests. Playwright's Firefox is the desktop build of the same engine as Firefox for Android, so a few things, such as the install prompt and wake lock, are also checked by hand on the phone at the end of 3a and 3c.
+
 ## 6. Deployment Architecture
  
 ### 6.1 Phase 1: Local Development
@@ -878,6 +1051,11 @@ Nothing pulls from GitHub on its own, so every migration runs while someone is w
 - Still to come: backups of the images directory once Phase 3 adds images.
 
 **Storage:** the Pi should boot from an SSD, because PostgreSQL on an SD card is the likeliest way to lose data. "Moving to an SSD" in `docs/deployment.md` covers moving an install that started on an SD card.
+
+**From Phase 3:**
+- **3a:** the Dockerfile gains a stage that builds `web/`, and the API image serves the result (§3.4). `deploy.sh` doesn't change: one image, one deploy.
+- **3b:** image files live in a second named volume, mounted into the `api` container and owned by its `node` user. The backups cover them: `backup.sh` saves the image files beside each dump, and `offsite.sh` sends both to B2, which closes the last item of Step 8.7. sharp ships prebuilt for 64-bit ARM Linux, so nothing extra is installed on the Pi.
+- **3c:** nothing changes on the Pi.
 
 ### 6.3 Phase 4: Hardening and Monitoring
 
@@ -982,35 +1160,34 @@ jobs:
    - Document manual recovery if needed
  
 ### 7.2 Key Migration Examples
- 
-#### Phase 1 to Phase 3: Instruction Structure Transformation
- 
-The migration from simple text instructions to structured sections and steps:
- 
-1. Create RecipeSection and Instruction tables
-2. For each recipe with text instructions:
-   - Create a default section named "Instructions"
-   - Parse text into individual steps (split by newlines or numbered items)
-   - Create Instruction records with proper ordering
-3. Optionally retain original `instructions` field for reference
-4. Validate transformation results
- 
+
+#### Phase 1 to Phase 3b: Instruction Structure Transformation
+
+The move from free-text instructions to sections and steps takes two migrations:
+
+1. The first creates the Phase 3b tables and columns (§2.3) and leaves `Recipe.instructions` in place.
+2. In the same migration's SQL, a data step gives every recipe that has instructions one section named "Method", and turns each non-empty line of the text into a step, in order. Recipes without instructions get no section.
+3. After the deploy, check a few recipes in the UI. The backup `deploy.sh` took before migrating is the way back.
+4. A later migration drops `Recipe.instructions`, once nothing reads it.
+
+Two migrations keep the original text until the new structure has been seen to be right.
+
 #### Adding Soft Delete (Future)
- 
-When implementing soft delete:
- 
-1. Add `deletedAt` column to Recipe table
-2. Update all queries to filter `WHERE deletedAt IS NULL`
-3. Modify DELETE endpoints to set `deletedAt` instead of removing
-4. Create cleanup job for permanent deletion after retention period
- 
+
+Offline sync doesn't need soft delete: the Phase 3c snapshot leaves deleted recipes out, so they disappear from devices at the next refresh (D8). Soft delete would only come with a "recently deleted" feature:
+
+1. Add a `deletedAt` column to Recipe
+2. Filter `WHERE "deletedAt" IS NULL` in every query, including the snapshot
+3. Make DELETE set `deletedAt` instead of removing the row
+4. Purge rows deleted longer ago than a set period
+
 ## 8. Conclusion
  
 This technical specification outlines the implementation plan for the Recipe App across six development phases. The approach prioritizes:
  
 1. **Working Software First** - Phase 1 delivers a complete, testable API
 2. **Incremental Deployment** - Pi deployment in Phase 2 establishes the production environment early, with Tailscale HTTPS from day one
-3. **User Interface** - Phases 3 and 5 add desktop and mobile interfaces
+3. **User Interface** - Phase 3 adds the web UI in three parts (the UI and cooking mode, then structured recipes and images, then offline reading), installable as a PWA on phone and desktop. Phase 5 polishes it for mobile
 4. **Hardening** - Phase 4 adds alerts, monitoring and dependency updates
 5. **Enhanced Features** - Phase 6 adds advanced functionality
  
