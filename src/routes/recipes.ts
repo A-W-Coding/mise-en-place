@@ -2,9 +2,10 @@
  * @module src/routes/recipes
  * CRUD endpoints for the Recipe resource.
  *
- * Recipes are always returned with their nested recipeIngredients
- * (including the related Ingredient record) so clients get a
- * complete picture in a single request.
+ * A single recipe is returned with its nested recipeIngredients (including
+ * the related Ingredient record), so the recipe page needs one request.
+ * The list returns lighter summaries, without the lines or instructions,
+ * so the client can load page after page quickly (Phase 3a).
  *
  * Deleting a recipe cascades to its RecipeIngredient rows but
  * leaves the underlying Ingredient records intact.
@@ -34,6 +35,21 @@ const RECIPE_INCLUDE = {
         include: { ingredient: true },
         orderBy: { orderIndex: 'asc' },
     },
+} as const;
+
+/**
+ * The fields of a recipe in a list: everything but its ingredient lines and
+ * instructions. From 3b, its tags and primary image join these.
+ */
+const RECIPE_SUMMARY_SELECT = {
+    id: true,
+    name: true,
+    description: true,
+    servings: true,
+    prepTime: true,
+    cookTime: true,
+    createdAt: true,
+    updatedAt: true,
 } as const;
 
 /**
@@ -88,7 +104,10 @@ async function sendMissOrStale(res: Response, id: string, expected: Date[] | und
  * rank, then name, then id. The `X-Total-Count` header gives the number of
  * recipes (or matches) across all pages (D6).
  *
- * @returns 200 with an array of Recipe objects (may be empty), or 400 for a bad query.
+ * Each recipe is a summary (`RECIPE_SUMMARY_SELECT`): the recipe page fetches
+ * the lines and instructions with `GET /api/recipes/:id`.
+ *
+ * @returns 200 with an array of recipe summaries (may be empty), or 400 for a bad query.
  */
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -102,7 +121,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
             const ids = matches.map((m) => m.id);
             const recipes = await prisma.recipe.findMany({
                 where: { id: { in: ids } },
-                include: RECIPE_INCLUDE,
+                select: RECIPE_SUMMARY_SELECT,
             });
 
             // Preserve similarity ranking from the fuzzy search
@@ -113,7 +132,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 
         const [recipes, total] = await Promise.all([
             prisma.recipe.findMany({
-                include: RECIPE_INCLUDE,
+                select: RECIPE_SUMMARY_SELECT,
                 orderBy: [{ name: 'asc' }, { id: 'asc' }],
                 take: limit,
                 skip: offset,

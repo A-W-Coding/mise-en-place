@@ -1,9 +1,9 @@
 /**
  * @module tests/quantity.test
- * Unit tests for `formatQuantity()` and `parseQuantity()` (F5).
+ * Unit tests for `formatQuantity()`, `formatAmount()` and `parseQuantity()` (F5).
  */
 
-import { formatQuantity, parseQuantity } from '../shared/quantity.js';
+import { formatAmount, formatQuantity, parseQuantity } from '../shared/quantity.js';
 
 describe('formatQuantity', () => {
     test.each([
@@ -42,6 +42,35 @@ describe('formatQuantity', () => {
     test('shows nothing when there is no quantity ("to taste")', () => {
         expect(formatQuantity(null, null, null)).toBe('');
         expect(formatQuantity(null, null, 'pinch')).toBe('');
+    });
+});
+
+describe('formatAmount', () => {
+    test.each([
+        // Symbols never change
+        [100, null, 'g', '100 g'],
+        [1.5, null, 'l', '1.5 l'],
+        [1, 2, 'tsp', '1–2 tsp'],
+        [2, null, 'tbsp', '2 tbsp'],
+        [2, null, 'fl oz', '2 fl oz'],
+        // Word units are plural over 1, including the top of a range
+        [1, null, 'clove', '1 clove'],
+        [2, null, 'clove', '2 cloves'],
+        [0.5, null, 'cup', '½ cup'],
+        [1.5, null, 'cup', '1½ cups'],
+        [1, 2, 'can', '1–2 cans'],
+        [2, null, 'pinch', '2 pinches'],
+        [3, null, 'bunch', '3 bunches'],
+        [2, null, 'handful', '2 handfuls'],
+        [2, null, 'slice', '2 slices'],
+        // Counts have no unit, and "to taste" has no amount at all
+        [3, null, null, '3'],
+        [0.5, null, null, '½'],
+        [2, 3, null, '2–3'],
+        [null, null, null, ''],
+        [null, null, 'pinch', ''],
+    ])('formatAmount(%p, %p, %p) is %p', (quantity, quantityMax, unit, expected) => {
+        expect(formatAmount(quantity, quantityMax, unit)).toBe(expected);
     });
 });
 

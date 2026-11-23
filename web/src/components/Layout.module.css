@@ -12,7 +12,7 @@
 .headerInner {
     max-width: var(--page-width);
     margin: 0 auto;
-    height: 56px;
+    min-height: 56px;
     padding: 0 6px 0 var(--gutter);
     display: flex;
     align-items: center;
@@ -27,18 +27,50 @@
     text-decoration: none;
 }
 
-.iconLink {
-    width: var(--tap);
+/* On a phone, an icon alone; on a wider screen, an outlined button with its name */
+.headerButton {
+    min-width: var(--tap);
     height: var(--tap);
+    padding: 0;
+    border: none;
     border-radius: 10px;
+    background: transparent;
     color: var(--text);
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 8px;
+    text-decoration: none;
+    cursor: pointer;
 }
 
-.iconLink:hover {
+.headerButton:hover {
     background: var(--surface);
+}
+
+.label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.spinning {
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .spinning {
+        animation-duration: 2.4s;
+    }
 }
 
 .main {
@@ -46,5 +78,37 @@
     width: 100%;
     max-width: var(--page-width);
     margin: 0 auto;
-    padding: 20px var(--gutter) 32px;
+    padding: 16px var(--gutter) 32px;
+}
+
+@media (min-width: 768px) {
+    .headerInner {
+        min-height: 64px;
+        padding: 0 var(--gutter);
+        gap: 8px;
+    }
+
+    .title {
+        font-size: 1.25rem;
+    }
+
+    .headerButton {
+        height: 40px;
+        padding: 0 14px;
+        border: 1px solid var(--border);
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+
+    .label {
+        position: static;
+        width: auto;
+        height: auto;
+        overflow: visible;
+        clip-path: none;
+    }
+
+    .main {
+        padding: 28px var(--gutter) 48px;
+    }
 }

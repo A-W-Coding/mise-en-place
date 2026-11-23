@@ -68,7 +68,9 @@ The mise-en-place API as of Phase 1, plus Phase 3a's JSON 404s and recipe ETags.
 | `instructions` | string or null | Plain text |
 | `createdAt` | timestamp | |
 | `updatedAt` | timestamp | Changes on every PATCH, including one that only changes the lines |
-| `recipeIngredients` | array of lines | Always included, sorted by `orderIndex` |
+| `recipeIngredients` | array of lines | Sorted by `orderIndex`. Included in single-recipe responses, not in lists |
+
+In a list, each recipe is a **summary**: every field above except `instructions` and `recipeIngredients`. The recipe page fetches those with `GET /api/recipes/:id`, so each page of a list stays small.
 
 ### Ingredient line
 
@@ -148,9 +150,9 @@ Runs `SELECT 1` against the database.
 
 ### `GET /api/recipes`
 
-Lists recipes, each with its lines. Takes `search`, `limit` and `offset` (see [Lists](#lists-search-and-pagination)).
+Lists recipes as summaries, without their lines or instructions (see [Recipe](#recipe)). Takes `search`, `limit` and `offset` (see [Lists](#lists-search-and-pagination)).
 
-**Responses:** 200 with an array of [Recipe](#recipe) and `X-Total-Count`; 400 for a bad query.
+**Responses:** 200 with an array of recipe summaries and `X-Total-Count`; 400 for a bad query.
 
 ### `GET /api/recipes/:id`
 

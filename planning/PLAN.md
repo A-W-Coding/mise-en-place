@@ -3,8 +3,8 @@
 # Mise en place: hardening plan (Phase 1 to Phase 3a)
 
 > **Status**
-> - Current step: **Step 11: reading recipes, and keeping devices in step**, ready to start. Step 10 is done (2026-11-23), with the Firefox end-to-end runs and CI to be confirmed when its PR opens. Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
-> - Last updated: 2026-11-23 (Step 10: the client's skeleton)
+> - Current step: **Step 12: editing recipes and ingredients**, ready to start. Step 11 is done (2026-11-23), with its Firefox end-to-end runs and CI to be confirmed when its PR opens. Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
+> - Last updated: 2026-11-23 (Step 11: reading recipes)
 > - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
@@ -518,18 +518,18 @@ Before starting (done 2026-11-23): the UI wireframes, made and reviewed together
 
 **Why:** reading on the phone while cooking is the main use. Doing reading before editing gives a usable app early.
 
-- [ ] Lighter lists: `GET /api/recipes` drops the ingredient lines (§3.2, Phase 3a), so the client can load page after page quickly. Update the API tests and `docs/api.md`
-- [ ] Recipe list: the API's fuzzy search, more loading automatically as you scroll (no button), and empty and no-results states. Rows leave room for 3b's tag pills and thumbnail, and become tiles on a desktop
-- [ ] Recipe page: ingredients through `formatQuantity()`, the method from `instructions`, and servings and times. The cooking mode switch, and a ⋮ menu (Edit, Print, Delete) on the page and on each list row, wired up in Steps 12 and 13
-- [ ] Options page: theme (system, light or dark) and text size, saved on the device, and the connection's state. Its Advanced section opens Ingredients: list and search, with renaming and deleting in Step 12
-- [ ] Phone first: readable one-handed, with large tap targets and text that scales with the browser's font size. Semantic HTML, labelled controls and visible focus (§3.4)
-- [ ] Keeping devices in step (§3.4):
+- [x] Lighter lists: `GET /api/recipes` drops the ingredient lines (§3.2, Phase 3a), so the client can load page after page quickly. Update the API tests and `docs/api.md`
+- [x] Recipe list: the API's fuzzy search, more loading automatically as you scroll (no button), and empty and no-results states. Rows leave room for 3b's tag pills and thumbnail, and become tiles on a desktop
+- [x] Recipe page: ingredients through `formatQuantity()`, the method from `instructions`, and servings and times. A ⋮ menu (Edit, Print, Delete) on the page and on each list row, wired up in Steps 12 and 13. The cooking mode switch moved to Step 13, where it gets its wake lock: a switch that did nothing would only mislead
+- [x] Options page: theme (system, light or dark) and text size, saved on the device, and the connection's state. Its Advanced section opens Ingredients: list and search, with renaming and deleting in Step 12
+- [x] Phone first: readable one-handed, with large tap targets and text that scales with the browser's font size. Semantic HTML, labelled controls and visible focus (§3.4)
+- [x] Keeping devices in step (§3.4):
   - refetch when the app opens, comes back to the front or reconnects
   - a Refresh button
   - a recipe deleted elsewhere shows "This recipe was deleted" rather than an error
-- [ ] Loading and error states, including "Can't reach the server"
-- [ ] Component tests for the list and the recipe page
-- [ ] Playwright:
+- [x] Loading and error states, including "Can't reach the server"
+- [x] Component tests for the list and the recipe page
+- [x] Playwright:
   - find a recipe by search and open it, and scroll the list until the next page loads
   - with two browser contexts standing in for the laptop and the phone, a recipe added through the API in one appears in the other when that one comes back to the front, and when Refresh is pressed
 
@@ -1080,3 +1080,54 @@ Before starting (done 2026-11-23): the UI wireframes, made and reviewed together
   - **Docs:** the README's structure and test count, and the 404 row in `docs/api.md`. The README's development section and `docs/architecture.md` wait for Step 14, as planned.
 
   Next: Step 11, reading recipes.
+- **2026-11-23:** Step 10's PR (#12) merged; CI run #25 passed all three jobs, including Playwright in Firefox. Nothing needed doing on the Pi: it gets the client at the next deploy (Step 14).
+- **2026-11-23:** Step 11 done: reading recipes, and keeping devices in step.
+  - **Lighter lists:**
+    - `GET /api/recipes` now returns summaries: id, name, description, servings, times and timestamps, without the lines or `instructions` (a Prisma `select`).
+    - The recipe page fetches the whole recipe. The API tests and `docs/api.md` say so.
+  - **`formatAmount()`** in `shared/quantity.ts`: the quantity and unit together, as a recipe writes them ("1 clove", "1–2 tsp", "½").
+    - Word units become plural over 1 ("2 cloves", "1½ cups"); symbols such as g and tsp never do.
+    - Tested in Jest beside `formatQuantity()`.
+  - **Recipe list:**
+    - The API's fuzzy search. The box updates at once, and the search runs 250 ms after you stop typing.
+    - The search is kept in the address as `?q=`, so the recipe page's "Recipes" link returns to the same results.
+    - Pages of 20, the next fetched when the end of the list is within about a screen (an IntersectionObserver).
+    - Empty and no-match states, and a count.
+    - Rows on a phone, tiles from 768 px. Each row has room beside the name for 3b's pills.
+  - **Recipe page:**
+    - Name, description, servings and times; then ingredients and method, side by side on a desktop.
+    - Phase 1's instructions are split into steps, one per line, with any leading "1." dropped, since the page numbers them.
+    - Edit sits beside the ⋮ on a desktop; on a phone it's in the menu.
+    - The cooking mode switch moved to Step 13, which gives it its wake lock.
+  - **The ⋮ menu:**
+    - Follows the WAI-ARIA menu button pattern: arrow keys, Home, End, Escape, and a tap outside closes it.
+    - Edit opens the editor (still a placeholder until Step 12).
+    - Print opens the recipe with `?print`, which prints once the recipe has loaded. The print stylesheet comes in Step 13.
+    - Delete is shown but disabled, marked "Coming in Step 12".
+  - **Options:**
+    - Theme and text size, saved in the browser's storage on this device and applied to `<html>` before the first render, so there's no flash of the wrong theme.
+    - The connection: "Server reachable", "Can't reach the server" (check Tailscale), or the server up with its database down (a 503 from `/api/health`), with the time of the last check and a Check again button.
+    - Advanced › Ingredients: a list and search, loading more as you scroll.
+  - **Keeping devices in step:**
+    - TanStack Query refetches when a page opens, when the app comes back to the front, and when the connection returns. The header's Refresh refetches everything on screen, and its icon spins while anything loads.
+    - 4xx responses aren't retried. A 404 on the recipe page, on first load or at a later refresh, shows "This recipe was deleted".
+    - A failed refresh keeps what's on screen under a "Can't reach the server" banner, with Retry.
+  - **Accessibility:**
+    - Sizes are in rem, so text follows the browser's font size and the Options text size.
+    - Tap targets are 44 px. Searches and icon buttons have labels; focus is visible.
+    - Back links are named "Back to Recipes" for screen readers, so they aren't confused with the header's links.
+  - **Tests:**
+    - API: 345 in 15 files. The `GET /` test now checks only that `/` isn't a health answer, since `/` is the client's whenever `web/dist` is built.
+    - Client: 63 Vitest tests in 9 files. They render the real routes against a fake `fetch`, with a stand-in IntersectionObserver.
+    - End-to-end: 9 tests in each project:
+      - search and read a recipe
+      - scroll until page 2 loads
+      - two contexts, where a recipe added in one appears in the other on coming back to the front and on Refresh
+      - a recipe deleted in one context
+      - the theme surviving a reload
+    - All pass in Chromium here. Firefox runs in CI.
+  - **Small fixes:**
+    - The client's Node-side TypeScript config needed the DOM types for code Playwright runs inside the page.
+    - A simulated `visibilitychange` must bubble to `window`, where TanStack Query listens.
+
+  Next: Step 12, editing recipes and ingredients.

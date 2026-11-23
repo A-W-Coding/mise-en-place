@@ -1,0 +1,29 @@
+.banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 12px 12px 16px;
+    border-radius: 14px;
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
+.message {
+    flex-grow: 1;
+    font-size: 0.875rem;
+    line-height: 1.45;
+    font-weight: 500;
+}
+
+.retry {
+    flex-shrink: 0;
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid var(--danger);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--danger);
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+}

@@ -42,9 +42,12 @@ describe('Health check', () => {
         }
     });
 
-    test('should no longer answer GET /', async () => {
+    // GET / was the health check before Phase 1. It now belongs to the web client:
+    // its page when web/dist is built, else a 404. Either way, not a health answer.
+    test('should not answer GET / as a health check', async () => {
         const response = await request.get('/');
 
-        expect(response.status).toBe(404);
+        expect(response.type).not.toBe('application/json');
+        expect(response.body).not.toEqual({ status: 'ok' });
     });
 });

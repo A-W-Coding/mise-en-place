@@ -1,0 +1,116 @@
+/* Pieces several pages share: the back link, search box, notices and list states */
+
+.backLink {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 36px;
+    margin-left: -4px;
+    color: var(--muted);
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-decoration: none;
+}
+
+.backLink:hover {
+    color: var(--text);
+}
+
+.search {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 48px;
+    padding: 0 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--muted);
+}
+
+.search:focus-within {
+    border-color: var(--accent);
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+}
+
+.searchInput {
+    flex-grow: 1;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-size: 1rem;
+    outline: none;
+}
+
+.searchInput::placeholder {
+    color: var(--muted);
+}
+
+.count {
+    font-size: 0.875rem;
+    color: var(--muted);
+}
+
+/* "No recipes yet", "No matches", "This recipe was deleted": a quiet card in the page */
+.notice {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 20px;
+    border-radius: 14px;
+    background: var(--surface);
+    text-align: center;
+}
+
+.noticeTitle {
+    margin: 0;
+    font-size: 1.0625rem;
+    font-weight: 700;
+}
+
+.noticeText {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--muted);
+}
+
+.textButton {
+    min-height: 40px;
+    padding: 0 12px;
+    border: none;
+    background: transparent;
+    color: var(--accent);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    text-decoration: underline;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.primaryButton {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: var(--tap);
+    padding: 0 16px;
+    border: none;
+    border-radius: var(--radius-pill);
+    background: var(--accent);
+    color: var(--accent-text);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.status {
+    padding: 16px 0;
+    color: var(--muted);
+    font-size: 0.9375rem;
+    text-align: center;
+}

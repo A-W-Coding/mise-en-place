@@ -127,14 +127,14 @@ describe('Fuzzy Search', () => {
             expect(response.body[0].name).toBe('Beef Chili');
         });
 
-        test('should include recipeIngredients in search results', async () => {
+        test('should return summaries, without ingredient lines or instructions', async () => {
             const response = await request.get('/api/recipes?search=beef');
 
             expect(response.status).toBe(200);
             expect(response.body.length).toBeGreaterThanOrEqual(1);
-            expect(response.body[0].recipeIngredients).toBeDefined();
-            expect(response.body[0].recipeIngredients).toBeInstanceOf(Array);
-            expect(response.body[0].recipeIngredients[0].ingredient).toBeDefined();
+            expect(response.body[0].name).toBe('Beef Chili');
+            expect(response.body[0]).not.toHaveProperty('recipeIngredients');
+            expect(response.body[0]).not.toHaveProperty('instructions');
         });
 
         test('should return an empty array for a completely unrelated term', async () => {
