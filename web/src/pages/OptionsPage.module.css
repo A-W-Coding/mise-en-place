@@ -1,0 +1,164 @@
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-width: 40rem;
+}
+
+.heading {
+    margin: -8px 0 0;
+    font-size: 1.75rem;
+    font-weight: 700;
+}
+
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.sectionTitle {
+    margin: 0;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.card {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+}
+
+.hint {
+    margin: 0;
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    color: var(--muted);
+}
+
+.choice {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.choiceLabel {
+    font-size: 0.9375rem;
+    font-weight: 600;
+}
+
+.segments {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    padding: 4px;
+    border-radius: var(--radius);
+    background: var(--surface-2);
+}
+
+.segment {
+    min-height: 40px;
+    border: none;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.segment[aria-pressed='true'] {
+    background: var(--bg);
+    color: var(--text);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 15%);
+}
+
+.connection {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.connectionRow {
+    align-self: stretch;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.connectionTitle {
+    flex-grow: 1;
+    font-size: 0.9375rem;
+    font-weight: 600;
+}
+
+.dot {
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+    border-radius: 50%;
+}
+
+.ok {
+    background: var(--accent);
+}
+
+.down {
+    background: var(--danger);
+}
+
+.checking {
+    background: var(--muted);
+}
+
+.smallButton {
+    min-height: 36px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.smallButton:disabled {
+    color: var(--muted);
+    cursor: default;
+}
+
+.linkCard {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 12px 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    color: var(--text);
+    text-decoration: none;
+}
+
+.linkCard:hover {
+    background: var(--surface);
+}
+
+.linkText {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.linkTitle {
+    font-size: 0.9375rem;
+    font-weight: 600;
+}

@@ -62,12 +62,14 @@ describe('Recipe API', () => {
             expect(response.body.length).toBeGreaterThan(0);
         });
 
-        test('should include nested recipeIngredients', async () => {
+        test('should return summaries without ingredient lines or instructions', async () => {
             const response = await request.get('/api/recipes');
 
             expect(response.status).toBe(200);
-            expect(response.body[0].recipeIngredients).toBeDefined();
-            expect(response.body[0].recipeIngredients).toBeInstanceOf(Array);
+            expect(Object.keys(response.body[0]).sort()).toEqual(
+                ['cookTime', 'createdAt', 'description', 'id', 'name', 'prepTime', 'servings', 'updatedAt'],
+            );
+            expect(response.body[0]).toMatchObject({ name: 'Beef Chili', servings: expect.any(Number) });
         });
 
         test('should return a specific recipe with ingredients by ID', async () => {

@@ -1,0 +1,199 @@
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.intro {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.titleRow {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.title {
+    flex-grow: 1;
+    min-width: 0;
+    margin: 0;
+    font-size: 1.75rem;
+    font-weight: 700;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+}
+
+/* On a phone, Edit lives in the ⋮ menu */
+.editButton {
+    display: none;
+}
+
+.menuButton {
+    margin: -6px -10px 0 0;
+    color: var(--text);
+}
+
+.description {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.5;
+    color: var(--muted);
+}
+
+.meta {
+    margin: 0;
+    font-size: 0.9375rem;
+    font-weight: 500;
+}
+
+.columns {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    margin-top: 4px;
+}
+
+.sectionTitle {
+    margin: 0 0 10px;
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.empty {
+    margin: 0;
+    color: var(--muted);
+}
+
+.lines {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+/* Reading size: a step bigger than body text, since the phone sits on the counter */
+.line {
+    display: flex;
+    gap: 12px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 1.0625rem;
+    line-height: 1.4;
+}
+
+.amount {
+    width: 5.25rem;
+    flex-shrink: 0;
+    font-weight: 600;
+}
+
+.note {
+    color: var(--muted);
+}
+
+.steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.step {
+    display: flex;
+    gap: 12px;
+    font-size: 1.0625rem;
+    line-height: 1.5;
+}
+
+.stepNumber {
+    width: 1.75rem;
+    height: 1.75rem;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 0.875rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+@media (min-width: 768px) {
+    .page {
+        gap: 20px;
+    }
+
+    .title {
+        font-size: 2.25rem;
+        line-height: 1.1;
+    }
+
+    .titleRow {
+        align-items: center;
+        gap: 12px;
+    }
+
+    .editButton {
+        display: flex;
+        align-items: center;
+        height: 40px;
+        padding: 0 16px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        color: var(--text);
+        font-size: 0.875rem;
+        font-weight: 600;
+        text-decoration: none;
+    }
+
+    .editButton:hover {
+        background: var(--surface);
+    }
+
+    .menuButton {
+        width: 40px;
+        height: 40px;
+        margin: 0;
+        border: 1px solid var(--border);
+    }
+
+    .description {
+        font-size: 1.0625rem;
+    }
+
+    /* Ingredients beside the method, wrapping back to one column when there's no room */
+    .columns {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 32px;
+        margin-top: 8px;
+    }
+
+    .ingredients {
+        flex: 1 1 18rem;
+        min-width: 0;
+        padding: 20px;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+    }
+
+    .method {
+        flex: 999 1 28rem;
+        min-width: 0;
+        padding-top: 20px;
+    }
+
+    .steps {
+        gap: 14px;
+    }
+
+    .step {
+        font-size: 1.125rem;
+    }
+}

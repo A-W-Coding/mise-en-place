@@ -98,7 +98,7 @@ Run tests with `npm test`, which sets up the environment Jest needs. It:
 3. runs the test files one at a time, because they share one database
 4. resets the database to the sample data before each test, and empties it after
 
-There are 326 tests in [`tests/`](tests): integration tests that send real requests to the API with Supertest, and unit tests for the request schemas, the units list, the quantity formatting and the helpers. `npm test -- --coverage` prints a coverage table and writes an HTML report to `coverage/lcov-report/index.html`.
+There are 345 tests in [`tests/`](tests): integration tests that send real requests to the API with Supertest, and unit tests for the request schemas, the units list, the quantity formatting and the helpers. `npm test -- --coverage` prints a coverage table and writes an HTML report to `coverage/lcov-report/index.html`.
 
 The tests don't type-check (ts-jest only transpiles), so run `npx tsc --noEmit` as well.
 

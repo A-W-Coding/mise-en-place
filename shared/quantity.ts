@@ -69,6 +69,35 @@ export function formatQuantity(quantity: number | null, quantityMax: number | nu
     return quantityMax === null ? format(quantity) : `${format(quantity)}–${format(quantityMax)}`;
 }
 
+/** Units written as words, which take a plural: "2 cloves", "1–2 cans". Symbols such as g and tsp don't. */
+const PLURALS: Readonly<Record<string, string>> = {
+    cup: 'cups',
+    pinch: 'pinches',
+    clove: 'cloves',
+    slice: 'slices',
+    can: 'cans',
+    bunch: 'bunches',
+    handful: 'handfuls',
+};
+
+/**
+ * Show a line's whole amount, quantity and unit together, as a recipe writes it.
+ * A word unit becomes plural when the amount, or the top of a range, is over 1.
+ * A line with no quantity shows nothing, even if it has a unit.
+ *
+ * @example
+ * formatAmount(100, null, 'g');    // '100 g'
+ * formatAmount(1, 2, 'tsp');       // '1–2 tsp'
+ * formatAmount(2, null, 'clove');  // '2 cloves'
+ * formatAmount(0.5, null, null);   // '½'
+ */
+export function formatAmount(quantity: number | null, quantityMax: number | null, unit: string | null): string {
+    const amount = formatQuantity(quantity, quantityMax, unit);
+    if (amount === '' || unit === null) return amount;
+    const plural = (quantityMax ?? quantity ?? 0) > 1 ? PLURALS[unit] : undefined;
+    return `${amount} ${plural ?? unit}`;
+}
+
 /** The result of reading an amount: numbers for the API, or a message to show next to the input. */
 export type ParsedQuantity =
     | { quantity: number | null; quantityMax: number | null }

@@ -1,0 +1,150 @@
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Phone: the heading and New recipe on one line, the search under them */
+.toolbar {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+        'heading new'
+        'search search';
+    align-items: center;
+    gap: 12px;
+}
+
+.heading {
+    grid-area: heading;
+    margin: 0;
+    font-size: 1.75rem;
+    font-weight: 700;
+    line-height: 1.15;
+}
+
+.search {
+    grid-area: search;
+}
+
+.newRecipe {
+    grid-area: new;
+}
+
+.noticeAction {
+    margin-top: 6px;
+}
+
+.list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--border);
+}
+
+.list[aria-busy='true'] {
+    opacity: 0.6;
+}
+
+.row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+}
+
+.rowLink {
+    flex-grow: 1;
+    min-width: 0;
+    padding: 11px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    color: var(--text);
+    text-decoration: none;
+}
+
+.rowLink:focus-visible {
+    outline-offset: -3px;
+}
+
+.nameLine {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.name {
+    font-size: 1rem;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.meta {
+    font-size: 0.8125rem;
+    color: var(--muted);
+}
+
+.rowMenu {
+    margin-right: -10px;
+}
+
+/* Wider screens: one line of heading, search and New recipe; the list becomes tiles */
+@media (min-width: 768px) {
+    .page {
+        gap: 20px;
+    }
+
+    .toolbar {
+        grid-template-columns: 1fr minmax(0, 22rem) auto;
+        grid-template-areas: 'heading search new';
+        gap: 16px;
+    }
+
+    .search {
+        min-height: 44px;
+    }
+
+    .list {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+        gap: 20px;
+        border-top: none;
+    }
+
+    .row {
+        align-items: stretch;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: var(--bg);
+    }
+
+    .row:hover {
+        border-color: var(--muted);
+    }
+
+    .rowLink {
+        padding: 14px 52px 16px 16px;
+        gap: 6px;
+        border-radius: 14px;
+    }
+
+    .name {
+        font-size: 1.0625rem;
+    }
+
+    .row > :last-child {
+        position: absolute;
+        right: 6px;
+        bottom: 8px;
+    }
+
+    .rowMenu {
+        width: 40px;
+        height: 40px;
+        margin-right: 0;
+    }
+}

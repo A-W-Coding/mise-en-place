@@ -1,12 +1,21 @@
 /**
  * @module web/src/components/Layout
  * The frame around every page: the header, then the page itself.
+ *
+ * The header's Refresh button refetches everything on screen at once
+ * ("Keeping devices in step", technical spec §3.4). Its icon spins while any
+ * request is in flight, including the automatic refreshes.
  */
 
-import { Link, Outlet } from 'react-router';
+import { useIsFetching, useQueryClient } from '@tanstack/react-query';
+import { Link, Outlet, ScrollRestoration } from 'react-router';
+import { OptionsIcon, RefreshIcon } from './Icons';
 import styles from './Layout.module.css';
 
 export function Layout() {
+    const queryClient = useQueryClient();
+    const fetching = useIsFetching() > 0;
+
     return (
         <div className={styles.app}>
             <header className={styles.header}>
@@ -14,29 +23,25 @@ export function Layout() {
                     <Link to="/" className={styles.title}>
                         Mise en place
                     </Link>
-                    <Link to="/options" className={styles.iconLink} aria-label="Options">
-                        <svg
-                            width="20"
-                            height="20"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            aria-hidden="true"
-                        >
-                            <path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1" />
-                            <circle cx="15" cy="6" r="2" />
-                            <circle cx="9" cy="12" r="2" />
-                            <circle cx="17" cy="18" r="2" />
-                        </svg>
+                    <button
+                        type="button"
+                        className={styles.headerButton}
+                        onClick={() => void queryClient.refetchQueries({ type: 'active' })}
+                    >
+                        <RefreshIcon className={fetching ? styles.spinning : undefined} />
+                        <span className={styles.label}>Refresh</span>
+                    </button>
+                    <Link to="/options" className={styles.headerButton}>
+                        <OptionsIcon />
+                        <span className={styles.label}>Options</span>
                     </Link>
                 </div>
             </header>
             <main className={styles.main}>
                 <Outlet />
             </main>
+            {/* Back to the list returns to where you were in it */}
+            <ScrollRestoration />
         </div>
     );
 }
