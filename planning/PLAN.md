@@ -3,9 +3,9 @@
 # Mise en place: hardening plan (Phase 1 to Phase 3a)
 
 > **Status**
-> - Current step: **Step 10: the client's skeleton**, after the UI mockups and the rest of D13. Step 9 is done (2026-11-22). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
-> - Last updated: 2026-11-22 (Step 9 done: `shared/`, JSON 404s, recipe ETags and `If-Match`)
-> - Blockers: the UI mockups and the rest of D13 before Step 10 (together); the SSD for 8.1, about a month away
+> - Current step: **Step 10: the client's skeleton**, once D13 is settled. Step 9 is done (2026-11-22), and the UI wireframes are reviewed (2026-11-23). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
+> - Last updated: 2026-11-23 (Phase 3a: the wireframe review's changes)
+> - Blockers: the rest of D13 before Step 10 (you); the SSD for 8.1, about a month away
 
 ## How to use this file
 - Work through the steps in order. Each step gives a goal, why it matters, tasks as checkboxes, and a "done when" test.
@@ -518,9 +518,10 @@ Before starting: make the UI mockups together (the recipe list, recipe page, edi
 
 **Why:** reading on the phone while cooking is the main use. Doing reading before editing gives a usable app early.
 
-- [ ] Recipe list: the API's fuzzy search, a "load more" button driven by `X-Total-Count`, and empty and no-results states
-- [ ] Recipe page: ingredients through `formatQuantity()`, the method from `instructions`, and servings and times. Buttons for cooking mode, editing and printing, wired up in Steps 12 and 13
-- [ ] Ingredients page: list and search. Renaming and deleting come in Step 12
+- [ ] Lighter lists: `GET /api/recipes` drops the ingredient lines (§3.2, Phase 3a), so the client can load page after page quickly. Update the API tests and `docs/api.md`
+- [ ] Recipe list: the API's fuzzy search, more loading automatically as you scroll (no button), and empty and no-results states. Rows leave room for 3b's tag pills and thumbnail, and become tiles on a desktop
+- [ ] Recipe page: ingredients through `formatQuantity()`, the method from `instructions`, and servings and times. The cooking mode switch, and a ⋮ menu (Edit, Print, Delete) on the page and on each list row, wired up in Steps 12 and 13
+- [ ] Options page: theme (system, light or dark) and text size, saved on the device, and the connection's state. Its Advanced section opens Ingredients: list and search, with renaming and deleting in Step 12
 - [ ] Phone first: readable one-handed, with large tap targets and text that scales with the browser's font size. Semantic HTML, labelled controls and visible focus (§3.4)
 - [ ] Keeping devices in step (§3.4):
   - refetch when the app opens, comes back to the front or reconnects
@@ -529,7 +530,7 @@ Before starting: make the UI mockups together (the recipe list, recipe page, edi
 - [ ] Loading and error states, including "Can't reach the server"
 - [ ] Component tests for the list and the recipe page
 - [ ] Playwright:
-  - find a recipe by search and open it
+  - find a recipe by search and open it, and scroll the list until the next page loads
   - with two browser contexts standing in for the laptop and the phone, a recipe added through the API in one appears in the other when that one comes back to the front, and when Refresh is pressed
 
 **Done when:** the tests pass in CI.
@@ -541,16 +542,16 @@ Before starting: make the UI mockups together (the recipe list, recipe page, edi
 
 - [ ] Recipe editor, for create and edit: name, description, servings, times and instructions
 - [ ] Ingredient lines:
-  - add, remove, and reorder with Move up and Move down buttons, which work by touch and keyboard
+  - every line shown, each on one row: Amount, Ingredient and a ⋮ menu (Move up, Move down, Add note, Remove) that works by touch and keyboard. A note shows under its line only when it has one
+  - one Amount box per line, with the amount and unit typed together ("100 g", "1½ tbsp", "2-3"). A new `parseAmount()` in `shared/quantity.ts` reads it, canonicalising the unit, and errors show inline
   - an ingredient picker that searches as you type, and can create a missing ingredient on the spot
-  - the quantity typed as text and read with `parseQuantity()`, with any error shown inline
-  - a unit picker from the shared list, and a note
+- [ ] The Ingredients and Method sections collapse, to jump between them
 - [ ] The API's `fields` errors shown next to their inputs, including line errors such as `ingredients.2.unit`
 - [ ] Saving sends `If-Match`. A 412 says the recipe changed elsewhere and offers to reload it
-- [ ] Deleting a recipe, after a confirmation
-- [ ] Ingredients page: rename (409 when the name is taken) and delete (409 says it's in use)
+- [ ] Deleting a recipe, from its ⋮ menu or the bottom of the editor, always after a confirmation
+- [ ] Ingredients, under Options › Advanced: rename (409 when the name is taken) and delete (409 says it's in use)
 - [ ] A warning before leaving the editor with unsaved changes
-- [ ] Component tests: the line editor, quantity parsing in the form, and mapping `fields` onto inputs
+- [ ] Tests: `parseAmount()` as `test.each` tables in Jest; component tests for the line editor, amount parsing in the form, and mapping `fields` onto inputs
 - [ ] Playwright:
   - create a recipe with lines and a new ingredient, edit it, and delete it
   - get the 412 prompt after changing the recipe in a second context
@@ -572,10 +573,11 @@ Before starting: make the UI mockups together (the recipe list, recipe page, edi
   - one that finishes plays a sound, vibrates where supported, and grows until dismissed
   - each works from its end time rather than counting ticks, so it stays right if the screen locks
   - timers ring only while the app is on screen (D14), and a short note by them says so. Alerts while another app is open come in Phase 5
+- [ ] A timer sound switch in Options, with a test button
 - [ ] Component tests for the timers, with fake timers. Playwright: turn cooking mode on and off, and run two timers at once
 
 ### 13.2 Printing
-- [ ] A print stylesheet: the recipe's name, ingredients and method, without navigation or buttons. Checked in the print preview of Firefox and Chromium
+- [ ] A print stylesheet: the recipe's name, ingredients and method, without navigation, buttons or a footer. Checked in the print preview of Firefox and Chromium
 
 ### 13.3 Installing
 - [ ] vite-plugin-pwa: the manifest (name, short name, icons, theme colour, `display: standalone`, start URL) and a service worker that caches the app's own files, so the app opens without a connection. Offline data comes in 3c
@@ -607,6 +609,7 @@ Before starting: make the UI mockups together (the recipe list, recipe page, edi
 |---|---|
 | Any time after Step 6 | M6: a JSON export of all data (small, and cheap insurance) |
 | Phase 3 | 3a: Steps 9–14. 3b and 3c get their steps when each starts, following the Phase 3 gate's decisions |
+| Later, unscheduled | Ingredient usage, from your wireframe review: see which recipes use an ingredient, then either replace it in all of them at once (a merge) so it can be deleted, or delete those recipes with it |
 | Phase 4 | Uptime and disk-space alerts, log rotation, and automated dependency updates (Dependabot or Renovate). V5: the Prisma upgrade, as its own task |
 | Phase 5 | F7: the shopping-list tables must exist before Phase 5 can deliver shopping lists. D14: timer alerts while another app is open, through Web Push from the Pi (test it on the phone first, because Firefox for Android has had push bugs) |
 | Phase 6 | V1/D12: USDA FoodData Central. F5: unit conversion using ingredient densities. F7: fixes to the meal-plan and shopping-list schema, and ingredient categories. M5: safe URL import. M1: RecipeLink and timers each appear in two phases |
@@ -1014,3 +1017,23 @@ Before starting: make the UI mockups together (the recipe list, recipe page, edi
   - Alerts while another app is open move to Phase 5, which already lists push notifications. The Phase 5 backlog row, technical spec §2.5 and §3.4, and the design spec's Phase 5 now say so.
 
   Next: the UI mockups and the rest of D13, then Step 10.
+- **2026-11-23:** Phase 3a: the UI wireframes, and your review of them.
+  - **The wireframes:** a canvas of 14 artboards: phone and desktop for the recipe list, recipe page, editor and Options; Ingredients; cooking mode with timers; the ⋮ menu; adding a timer; other states; and the print sheet. They use Inter and a green accent, with light and dark themes and no yellow.
+  - **Your answers on the flow:**
+    - Separate pages on both, with desktop just wider: the list becomes tiles, and the recipe page puts ingredients beside the method.
+    - Delete sits in each recipe's ⋮ menu and at the bottom of the editor, always behind a confirmation.
+    - Ingredients move under a new Options page, in its Advanced section, because they're shared data rather than everyday work.
+    - Light and dark themes, with no yellow in the main UI. Tags can be any colour.
+  - **Changes from your review:**
+    - **No "load more":** the list loads more as you scroll. To keep that fast, list responses drop the ingredient lines (a Step 11 task).
+    - **Tags on the list:** a recipe's first two tags show as coloured pills beside its name, on phone and desktop, and the recipe page shows them all. Which two is set by the order of the recipe's tags (`RecipeTag.orderIndex`, from the `tagIds` array), so Banana Bread can lead with Dessert and still be tagged Vegetarian. Tags arrive in 3b, so 3a's rows just leave room.
+    - **Editor:**
+      - Every ingredient line is shown (the wireframe's "6 more lines" was only an abbreviation), and the Ingredients and Method sections collapse.
+      - Each line is one row: Amount, Ingredient and a ⋮ menu. The amount and unit are typed together in one box ("100 g", "1½ tbsp"), which removes the unit picker and answers how to decide when a unit is needed: you type it when the recipe has one. A new `parseAmount()` does the reading.
+      - The phone wireframe's boxes ran off the screen, because a fieldset grows to fit its widest content. That's fixed in the wireframe and noted for the real form.
+    - **Print sheet:** no "Printed from" footer.
+  - **For later:** seeing which recipes use an ingredient, and replacing it everywhere or deleting those recipes, is in the backlog.
+  - **Updated to match:** technical spec §2.3 (RecipeTag order), §3.2 (lighter lists, `tagIds` order), §3.4 (pages, Options, the Amount box, tag pills) and §5.6; the design spec's Phase 3a and 3b; and Steps 11–13.
+  - **D13 is still open:** CSS Modules or plain stylesheets, to settle before Step 10.
+
+  Next: settle D13, then Step 10.

@@ -297,8 +297,9 @@ The files live on disk, not in the database (§6.2). There's no `filePath` colum
 |------------|-----------|-------------|-------------|
 | recipeId | UUID | Foreign Key, Cascade | References Recipe |
 | tagId | UUID | Foreign Key, Cascade | References Tag |
+| orderIndex | Integer | Required, set by the server | The tag's position on this recipe |
 
-The primary key is `(recipeId, tagId)`, so a tag can't be applied to a recipe twice. Deleting a tag removes it from every recipe: unlike an ingredient, a tag carries nothing a recipe depends on.
+The primary key is `(recipeId, tagId)`, so a tag can't be applied to a recipe twice. The order comes from the `tagIds` array. The recipe list shows a recipe's first two tags as pills beside its name, and the recipe page shows them all, so a dessert can lead with Dessert while still being tagged Vegetarian. Deleting a tag removes it from every recipe: unlike an ingredient, a tag carries nothing a recipe depends on.
 
 ##### Equipment Entity
 
@@ -606,11 +607,12 @@ Routes map the Prisma errors they expect themselves. `P2002` is mapped once, in 
  
 #### Phase 3a: Web UI
 
-3a adds no endpoints. The UI uses the Phase 1 API, with three changes to how the app answers:
+3a adds no endpoints. The UI uses the Phase 1 API, with four changes to how the app answers:
 
 - **The UI's files.** The Express app serves the built web client (§3.4). A GET outside `/api` and `/media` that matches no file returns the client's `index.html`, so a deep link such as `/recipes/<id>` loads the app.
 - **JSON 404s under `/api`.** An unknown `/api` path returns 404 `{ "error": "Not found." }`, not Express's HTML page.
 - **Concurrency headers.** `GET /api/recipes/:id` returns an `ETag`, and recipe `PATCH` and `DELETE` honour `If-Match` (§3.1, principle 7).
+- **Lighter lists.** `GET /api/recipes` returns each recipe without its ingredient lines: its id, name, description, servings, times and timestamps, and from 3b its tags and `primaryImageId`. The recipe page fetches the full recipe. Each page of the list stays small, so the client can load page after page as you scroll.
 
 | Status | When | Body |
 |--------|------|------|
@@ -647,7 +649,7 @@ This closes the gaps in the original Phase 3 API (F6): every part of a recipe ca
 |-------|---------------------------------------------------|
 | `sections` | Replaces every section and step: an array of `{ name, steps: [{ text, timerSeconds }] }` |
 | `ingredients[].sectionIndex` | Puts the line in the section at that position in `sections`; null or absent means no section |
-| `tagIds` | Replaces the recipe's tags: unique UUIDs of existing tags |
+| `tagIds` | Replaces the recipe's tags: unique UUIDs of existing tags, in order. The list shows the first two |
 | `equipment` | Replaces the equipment lines: an array of `{ equipmentId, quantity, optional }` |
 | `primaryImageId` | Sets the main image to one of this recipe's images, or clears it with null |
 
@@ -760,13 +762,19 @@ The web client is a React single-page app, installable as a PWA, and the only us
 **Quantities (F5):** `shared/quantity.ts` formats and parses amounts, tested once for both sides.
 - Spoon and cup measures, and counts, are shown as fractions to the nearest eighth: 0.5 is ½, 1.25 is 1¼, 0.33 is ⅓. Metric units are shown as decimals: 250 g, 1.5 l.
 - A range is shown as "2–3". A line with no quantity shows only the ingredient and its note.
-- The editor accepts "1 1/2", "1½", "1.5" and "2-3", and sends numbers, so the API stays numeric.
+- Each line in the editor has one Amount box, with the amount and unit typed together as the recipe writes them: "100 g", "1½ tbsp", "2-3", "1 can". `parseAmount()` splits it into `quantity`, `quantityMax` and a canonical unit (through `canonicaliseUnit()`), and the client sends numbers, so the API stays numeric. With no separate unit picker, a line without a unit spends no space on one.
 
 **Pages (3a):**
-- **Recipes:** the list, with the API's fuzzy search and a "load more" button driven by `X-Total-Count`.
-- **Recipe:** ingredients and method, servings and times, with buttons for cooking mode, editing and printing.
-- **Recipe editor:** creates and edits. The ingredient picker searches as you type, and can create a missing ingredient on the spot. Units come from the shared list. The API's `fields` errors appear next to their inputs. Saving sends `If-Match`, and a 412 offers to reload the recipe.
-- **Ingredients:** list, search, rename and delete. A delete refused with 409 says the ingredient is in use.
+- **Recipes:** the list, with the API's fuzzy search. More loads as you scroll, with no button: the next page is fetched before you reach the end. Each row shows the recipe's name and times, and from 3b its first two tags as pills beside the name and a thumbnail. On a desktop the rows become tiles. Each recipe has a ⋮ menu: Edit, Print, Delete.
+- **Recipe:** ingredients and method, servings and times, the cooking mode switch, and the same ⋮ menu. From 3b it also shows all of the recipe's tags.
+- **Recipe editor:** creates and edits.
+  - Every ingredient line is shown, each on one row: Amount, Ingredient, and a ⋮ menu with Move up, Move down, Add note and Remove. A note shows under its line only when it has one.
+  - The Ingredients and Method sections collapse, to jump between them.
+  - The ingredient picker searches as you type, and can create a missing ingredient on the spot.
+  - The API's `fields` errors appear next to their inputs. Saving sends `If-Match`, and a 412 offers to reload the recipe.
+  - Delete recipe sits at the bottom.
+- **Deleting a recipe:** from its ⋮ menu or the bottom of the editor, always after a confirmation.
+- **Options:** theme (system, light or dark) and text size, saved on the device; the timer sound, with a test; and the connection's state, to which 3c adds the offline copy's. Its Advanced section holds **Ingredients**: list, search, rename and delete, where a delete refused with 409 says the ingredient is in use. Ingredients are shared data, so they're kept out of the everyday screens.
 - **Cooking mode:** a switch on the recipe page that keeps the screen on, and at heart that's all it is. The page itself doesn't change: the whole recipe stays readable and scrollable, so cooking takes no more taps than reading. The Screen Wake Lock API keeps the screen on (Firefox 126 and later, and Chromium) until the switch is turned off or you leave the recipe, and the lock is taken again whenever the page becomes visible. Where the API is missing, the switch says the screen may sleep, rather than failing silently. A one-step-at-a-time view is optional, and waits for Phase 5.
 - **Timers:** for mid-length waits such as "stir every 15 minutes", not for short steps, or for the oven, which has its own. Most recipes won't need one, so they stay small and out of the way:
   - A small button adds a timer, with a length and an optional label. Several can run at once.
@@ -775,9 +783,9 @@ The web client is a React single-page app, installable as a PWA, and the only us
   - Each counts from its end time rather than counting ticks, so it stays right if the screen locks.
   - Timers ring while the app is on screen, which cooking mode keeps it (D14). On Android the browser pauses a page soon after you switch away, so a timer can't ring while another app is open. A short note by the timers says so, and alerts in the background wait for Phase 5's push notifications.
   - In 3b, a step with a `timerSeconds` gets a small button beside it that starts that timer.
-- **Printing:** a print stylesheet reduces a recipe to its ingredients and method, without navigation or buttons.
+- **Printing:** a print stylesheet reduces a recipe to its ingredients and method, without navigation, buttons or a footer.
 
-3b adds the section, step, tag, equipment and image editors, and tag filtering on the list.
+3b adds the section, step, tag, equipment and image editors, tag filtering on the list, and tag pills. A pill uses its tag's colour as the background, with dark or light text chosen for contrast.
 
 **Keeping devices in step:** the app may be open on the laptop and the phone at the same time. From 3a:
 - A device refreshes its data when the app opens, when it comes back to the foreground (switching back to the app or its tab), when its connection returns, and right after it saves a change of its own. Nothing refreshes in the background, and nothing polls on a timer.
@@ -959,7 +967,7 @@ afterAll(async () => { await prisma.$disconnect(); });
 Phase 3 adds tests at three levels:
 
 1. **API tests**, in the style of §5.2, for everything the API gains:
-   - 3a: JSON 404s under `/api`, and `If-Match`, where a stale ETag gets 412 and changes nothing
+   - 3a: JSON 404s under `/api`; `If-Match`, where a stale ETag gets 412 and changes nothing; and list responses without ingredient lines
    - 3b: sections, steps, tags and equipment through the recipe body, including the `sectionIndex` rules; tag and equipment CRUD, including the 409s; and the image rules (D11). A JPEG carrying GPS data must come back without it. SVG, GIF and HEIC must be refused, and so must a file over 15 MB, an image over 50 megapixels and an 11th image
    - 3c: the snapshot, its ETag and the 304, and that a deleted recipe is missing from the next snapshot
 2. **Unit and component tests:**
@@ -969,7 +977,7 @@ Phase 3 adds tests at three levels:
 3. **End-to-end tests** (Playwright):
    - Against the built client served by the real API, with a `_test` database reset to the base seed before each test (§5.3)
    - Every flow in Firefox and Chromium, at a phone size and a desktop size. Firefox because it's the phone's browser, and phone sizes because the phone is the main device
-   - 3a: find a recipe by search; create one with lines and a new ingredient; edit it; get the 412 prompt when it changed elsewhere; delete it; turn cooking mode on and off; run two timers at once, and dismiss one when it finishes. With two browser contexts standing in for the laptop and the phone, a recipe added in one appears in the other when it returns to the foreground or presses Refresh
+   - 3a: find a recipe by search; scroll the list until the next page loads; create one with lines and a new ingredient; edit it; get the 412 prompt when it changed elsewhere; delete it; turn cooking mode on and off; run two timers at once, and dismiss one when it finishes. With two browser contexts standing in for the laptop and the phone, a recipe added in one appears in the other when it returns to the foreground or presses Refresh
    - 3b: upload an image and make it the main one; edit sections, steps, tags and equipment; start a step's timer from its button
    - 3c: load the app, go offline (`context.setOffline(true)`), and check that recipes still open and editing is disabled. Then reload the page while still offline, which is a fresh start from the stored copy rather than the open tab, and check again. Come back online, and see a change made elsewhere arrive. Make a refresh fail by blocking `/api/sync`, unblock it, and check the retry gets the new snapshot without a restart
 
