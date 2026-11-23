@@ -10,6 +10,23 @@ globalThis.IntersectionObserver = MockIntersectionObserver as unknown as typeof 
 window.scrollTo = vi.fn() as unknown as typeof window.scrollTo;
 window.print = vi.fn();
 
+// jsdom has <dialog> but not its methods: enough of them for ConfirmDialog
+if (typeof HTMLDialogElement.prototype.showModal !== 'function') {
+    Object.defineProperty(HTMLDialogElement.prototype, 'open', {
+        configurable: true,
+        get(this: HTMLDialogElement) {
+            return this.hasAttribute('open');
+        },
+    });
+    HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+        this.setAttribute('open', '');
+    };
+    HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+        this.removeAttribute('open');
+        this.dispatchEvent(new Event('close'));
+    };
+}
+
 afterEach(() => {
     cleanup();
     MockIntersectionObserver.reset();

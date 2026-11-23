@@ -27,5 +27,104 @@
     align-items: center;
     min-height: 48px;
     border-bottom: 1px solid var(--border);
+}
+
+.name {
+    flex-grow: 1;
     font-size: 1rem;
+}
+
+.refused {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 8px 10px 14px;
+    border-radius: 12px;
+    background: var(--danger-soft);
+    color: var(--danger);
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.45;
+}
+
+.refused > span {
+    flex-grow: 1;
+}
+
+.dismiss {
+    min-height: 36px;
+    padding: 0 12px;
+    border: 1px solid var(--danger);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--danger);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.renameRow {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.renameForm {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.renameLabel {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--muted);
+}
+
+.renameInput {
+    min-height: var(--tap);
+    padding: 0 12px;
+    border: 2px solid var(--accent);
+    border-radius: 10px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 1rem;
+}
+
+.renameInput[aria-invalid='true'] {
+    border-color: var(--danger);
+}
+
+.renameError {
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--danger);
+}
+
+.renameActions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.cancelButton,
+.saveButton {
+    min-height: 40px;
+    padding: 0 16px;
+    border-radius: var(--radius-pill);
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.cancelButton {
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+}
+
+.saveButton {
+    border: none;
+    background: var(--accent);
+    color: var(--accent-text);
 }

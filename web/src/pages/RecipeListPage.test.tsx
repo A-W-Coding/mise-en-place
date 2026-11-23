@@ -3,7 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { PAGE_SIZE } from '../api/queries';
 import { beefChiliSummary, summary } from '../test/fixtures';
 import { scrollNearEnd } from '../test/intersectionObserver';
-import { json, mockApi, page, renderApp, requestedUrls, unreachable } from '../test/renderApp';
+import { json, mockApi, page, renderApp, requestedUrls, sent, unreachable } from '../test/renderApp';
 
 const bananaBread = summary('Banana Bread', { servings: 8, prepTime: 15, cookTime: 60 });
 
@@ -136,10 +136,9 @@ describe('RecipeListPage', () => {
         await user.click(button);
         const menu = screen.getByRole('menu', { name: 'More options for Beef Chili' });
         const items = within(menu).getAllByRole('menuitem');
-        expect(items.map((item) => item.textContent)).toEqual(['Edit', 'Print', 'Delete recipe…Coming in Step 12']);
+        expect(items.map((item) => item.textContent)).toEqual(['Edit', 'Print', 'Delete recipe…']);
         expect(items[0]).toHaveAttribute('href', `/recipes/${beefChiliSummary.id}/edit`);
         expect(items[1]).toHaveAttribute('href', `/recipes/${beefChiliSummary.id}?print`);
-        expect(items[2]).toHaveAttribute('aria-disabled', 'true');
         expect(items[0]).toHaveFocus();
 
         await user.keyboard('{ArrowDown}');
@@ -163,5 +162,37 @@ describe('RecipeListPage', () => {
 
         await user.click(screen.getByRole('heading', { name: 'Recipes' }));
         expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    });
+    test("Delete in a row's menu asks first, then deletes and refreshes the list", async () => {
+        let recipes = [bananaBread, beefChiliSummary];
+        const fetchMock = mockApi([
+            ['GET', '/api/recipes', () => page(recipes)],
+            [
+                'DELETE',
+                `/api/recipes/${beefChiliSummary.id}`,
+                () => {
+                    recipes = [bananaBread];
+                    return json({ message: 'Recipe deleted successfully.' });
+                },
+            ],
+        ]);
+        const { user } = renderApp('/');
+
+        await user.click(await screen.findByRole('button', { name: 'More options for Beef Chili' }));
+        await user.click(screen.getByRole('menuitem', { name: 'Delete recipe…' }));
+        const dialog = screen.getByRole('alertdialog', { name: 'Delete Beef Chili?' });
+
+        await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+        expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+        expect(sent(fetchMock, 'DELETE')).toEqual([]);
+
+        await user.click(screen.getByRole('button', { name: 'More options for Beef Chili' }));
+        await user.click(screen.getByRole('menuitem', { name: 'Delete recipe…' }));
+        await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
+
+        await waitFor(() => expect(screen.queryByRole('link', { name: /Beef Chili/ })).not.toBeInTheDocument());
+        expect(screen.getByText('1 recipe')).toBeInTheDocument();
+        // From the list there's no ETag to send
+        expect(sent(fetchMock, 'DELETE')[0]?.headers['If-Match']).toBeUndefined();
     });
 });

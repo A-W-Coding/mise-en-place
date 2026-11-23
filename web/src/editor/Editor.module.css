@@ -1,0 +1,364 @@
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-width: 48rem;
+}
+
+/* Phone: Cancel, the title and Save stay at the top while you scroll the form */
+.toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    margin: -16px calc(-1 * var(--gutter)) 0;
+    padding: 8px var(--gutter);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 8px;
+}
+
+.heading {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    text-align: center;
+}
+
+.cancel {
+    min-height: var(--tap);
+    padding: 0 10px;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-size: 0.9375rem;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.save {
+    min-height: 40px;
+    padding: 0 18px;
+    border: none;
+    border-radius: var(--radius-pill);
+    background: var(--accent);
+    color: var(--accent-text);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.save:disabled {
+    opacity: 0.7;
+    cursor: default;
+}
+
+.summary {
+    padding: 12px 16px;
+    border-radius: 14px;
+    background: var(--danger-soft);
+    color: var(--danger);
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.fields {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px 10px;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.wide {
+    grid-column: 1 / -1;
+}
+
+.label {
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.quietLabel {
+    font-size: 0.8125rem;
+    color: var(--muted);
+}
+
+.input {
+    width: 100%;
+    min-width: 0;
+    min-height: var(--tap);
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 1rem;
+}
+
+textarea.input {
+    padding: 10px 12px;
+    line-height: 1.5;
+    resize: vertical;
+}
+
+.input:focus {
+    border-color: var(--accent);
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+}
+
+.input[aria-invalid='true'] {
+    border: 2px solid var(--danger);
+}
+
+.error {
+    margin: 0;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    font-weight: 500;
+    color: var(--danger);
+}
+
+.hint {
+    margin: 0;
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    color: var(--muted);
+}
+
+/* Collapsible sections */
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+
+.sectionHeading {
+    margin: 0;
+}
+
+.sectionToggle {
+    width: 100%;
+    min-height: var(--tap);
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 1.125rem;
+    font-weight: 700;
+    text-align: left;
+    cursor: pointer;
+}
+
+.sectionTitle {
+    flex-grow: 1;
+}
+
+.sectionCount {
+    font-weight: 500;
+    color: var(--muted);
+}
+
+.chevron {
+    transform: rotate(-90deg);
+}
+
+.chevronOpen {
+    transform: none;
+}
+
+.sectionBody {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+
+.sectionBody[hidden] {
+    display: none;
+}
+
+/* Ingredient lines */
+.lines {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.line {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+}
+
+.lineInvalid {
+    border-color: var(--danger);
+}
+
+/* The suggestions open under the whole row, not just the narrow Ingredient box */
+.lineRow {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    min-width: 0;
+}
+
+.amount {
+    width: 6.5rem;
+    flex-shrink: 0;
+    padding: 0 10px;
+}
+
+.note {
+    font-size: 0.9375rem;
+}
+
+.lineMenu {
+    width: 40px;
+}
+
+.addLine {
+    min-height: 48px;
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+    background: transparent;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.addLine:hover {
+    background: var(--surface);
+}
+
+/* The ingredient picker and its suggestions */
+.picker {
+    flex-grow: 1;
+    min-width: 0;
+}
+
+.options {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 6;
+    list-style: none;
+    margin: 0;
+    padding: 4px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg);
+    box-shadow: var(--shadow);
+}
+
+.option {
+    min-height: 44px;
+    padding: 0 10px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9375rem;
+    cursor: pointer;
+}
+
+.option:hover,
+.option[aria-selected='true'] {
+    background: var(--surface);
+}
+
+.createOption {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.dangerZone {
+    margin-top: 12px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+}
+
+.deleteRecipe {
+    width: 100%;
+    min-height: 48px;
+    border: 1px solid var(--danger);
+    border-radius: 12px;
+    background: transparent;
+    color: var(--danger);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+/* Wider screens: an ordinary heading row, with Cancel and Save beside it */
+@media (min-width: 768px) {
+    .page {
+        gap: 24px;
+    }
+
+    .toolbar {
+        margin: 0;
+        padding: 0 0 12px;
+        grid-template-columns: 1fr auto auto;
+        grid-template-areas: 'heading cancel save';
+        gap: 12px;
+    }
+
+    .heading {
+        grid-area: heading;
+        font-size: 1.875rem;
+        font-weight: 700;
+        text-align: left;
+    }
+
+    .cancel {
+        grid-area: cancel;
+        padding: 0 18px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-pill);
+        font-weight: 600;
+    }
+
+    .save {
+        grid-area: save;
+        min-height: var(--tap);
+        padding: 0 22px;
+    }
+
+    .fields {
+        gap: 16px;
+    }
+
+    .deleteRecipe {
+        width: auto;
+        padding: 0 20px;
+    }
+}
