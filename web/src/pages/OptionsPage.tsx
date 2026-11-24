@@ -1,8 +1,8 @@
 /**
  * @module web/src/pages/OptionsPage
  * `/options`: how the app looks on this device, the timer sound, whether it
- * can reach the server, and Advanced › Ingredients (technical spec §3.4). The
- * offline copy's state joins in 3c.
+ * can reach the server, the offline copy (3c), and Advanced › Ingredients
+ * (technical spec §3.4).
  */
 
 import { useId } from 'react';
@@ -11,6 +11,11 @@ import { useHealth } from '../api/queries';
 import { BackLink } from '../components/BackLink';
 import { ChevronRightIcon } from '../components/Icons';
 import { useDocumentTitle } from '../components/useDocumentTitle';
+import { useNow } from '../components/useNow';
+import { formatAge } from '../format';
+import { useOfflineCopy } from '../offline/copy';
+import { useStorageProtection, type Protection } from '../offline/protection';
+import { requestSync, useSyncStatus } from '../offline/sync';
 import { usePreferences, type TextSize, type Theme } from '../preferences';
 import { playChime, unlockAudio, vibrate } from '../timers/sound';
 import styles from './OptionsPage.module.css';
@@ -101,6 +106,15 @@ export function OptionsPage() {
                 </h2>
                 <div className={styles.card}>
                     <Connection />
+                </div>
+            </section>
+
+            <section aria-labelledby="offline-heading" className={styles.section}>
+                <h2 id="offline-heading" className={styles.sectionTitle}>
+                    Offline copy
+                </h2>
+                <div className={styles.card}>
+                    <OfflineCopyStatus />
                 </div>
             </section>
 
@@ -195,6 +209,62 @@ function Connection() {
             >
                 Check again
             </button>
+        </div>
+    );
+}
+
+const PROTECTION_TEXT: Record<Exclude<Protection, 'checking'>, string> = {
+    protected: "Protected: the browser won't clear it to free up space.",
+    unprotected: 'Not protected: the browser may clear it if this device runs low on space.',
+    refused: "Not protected: the browser didn't allow it.",
+    unsupported: "This browser can't protect it, so it may be cleared if this device runs low on space.",
+};
+
+/**
+ * The offline copy: how many recipes it holds, when it was last refreshed,
+ * whether the browser will keep it, and Protect and Refresh now (technical
+ * spec §3.4, "Visible state"). Step 17 adds the changes waiting to upload.
+ */
+function OfflineCopyStatus() {
+    const { status, copy } = useOfflineCopy();
+    const sync = useSyncStatus();
+    const { protection, protect } = useStorageProtection();
+    const now = useNow();
+
+    let title: string;
+    let detail: string;
+    if (status === 'loading') {
+        title = 'Checking…';
+        detail = '';
+    } else if (copy) {
+        const count = copy.data.recipes.length;
+        title = `${count === 1 ? '1 recipe' : `${count} recipes`} on this device`;
+        detail = `Refreshed ${formatAge(copy.checkedAt, now)}. They open with no connection, and cooking mode works.`;
+    } else {
+        title = 'Not saved yet';
+        detail = 'Every recipe is saved on this device the next time the app reaches the server.';
+    }
+
+    return (
+        <div className={styles.connection}>
+            <span className={styles.connectionTitle}>{title}</span>
+            {detail && <p className={styles.hint}>{detail}</p>}
+            {sync.lastError && (
+                <p className={styles.hint}>
+                    The last refresh failed: {sync.lastError} It tries again by itself while the app is open.
+                </p>
+            )}
+            {protection !== 'checking' && <p className={styles.hint}>{PROTECTION_TEXT[protection]}</p>}
+            <div className={styles.buttons}>
+                {(protection === 'unprotected' || protection === 'refused') && (
+                    <button type="button" className={styles.smallButton} onClick={protect}>
+                        Protect
+                    </button>
+                )}
+                <button type="button" className={styles.smallButton} onClick={requestSync} disabled={sync.refreshing}>
+                    Refresh now
+                </button>
+            </div>
         </div>
     );
 }

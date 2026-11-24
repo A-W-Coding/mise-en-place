@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { ApiError, NETWORK_ERROR_MESSAGE, apiRequest } from './client';
+import { ApiError, NETWORK_ERROR_MESSAGE, apiRequest, apiRequestIfChanged } from './client';
 
 /** Make `fetch` answer once with this status, body and headers. */
 function answer(status: number, body: unknown, headers: Record<string, string> = {}) {
@@ -52,6 +52,16 @@ describe('apiRequest', () => {
         expect(init.method).toBe('POST');
         expect(init.body).toBe('{"name":"Toast"}');
         expect(init.headers).toMatchObject({ 'Content-Type': 'application/json', Accept: 'application/json' });
+    });
+
+    test("never uses the browser's HTTP cache, which Firefox would answer from when offline", async () => {
+        const fetchMock = answer(200, []);
+        await apiRequest('/api/recipes');
+        expect(fetchMock.mock.calls[0][1].cache).toBe('no-store');
+
+        const write = answer(201, {});
+        await apiRequest('/api/recipes', { method: 'POST', body: { name: 'Toast' } });
+        expect(write.mock.calls[0][1].cache).toBe('no-store');
     });
 
     test('sends If-Match when given an ETag, and nothing otherwise', async () => {
@@ -127,5 +137,59 @@ describe('apiRequest', () => {
         const result = await apiRequest('/api/recipes/x', { method: 'DELETE' });
 
         expect(result.data).toBeNull();
+    });
+
+    test('turns an answer cut off partway into a network error', async () => {
+        // The headers arrived, then the connection dropped during the body
+        const body = new ReadableStream({
+            start(controller) {
+                controller.enqueue(new TextEncoder().encode('{"recipes": ['));
+                controller.error(new TypeError('network error'));
+            },
+        });
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body, { status: 200 })));
+
+        const error = await errorFrom(apiRequest('/api/sync'));
+
+        expect(error.status).toBe(0);
+        expect(error.isNetworkError).toBe(true);
+    });
+});
+
+describe('apiRequestIfChanged', () => {
+    test('sends the ETag held as If-None-Match, and a 304 means it is still current', async () => {
+        const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 304, headers: { ETag: '"abc"' } }));
+        vi.stubGlobal('fetch', fetchMock);
+
+        const result = await apiRequestIfChanged('/api/sync', '"abc"');
+
+        expect(result).toEqual({ changed: false });
+        const [path, init] = fetchMock.mock.calls[0];
+        expect(path).toBe('/api/sync');
+        expect(init.headers['If-None-Match']).toBe('"abc"');
+    });
+
+    test('returns the new data and its ETag when it changed', async () => {
+        answer(200, { recipes: [], ingredients: [] }, { ETag: '"def"' });
+
+        const result = await apiRequestIfChanged('/api/sync', '"abc"');
+
+        expect(result).toEqual({ changed: true, data: { recipes: [], ingredients: [] }, etag: '"def"', totalCount: null });
+    });
+
+    test('sends no If-None-Match when no copy is held', async () => {
+        const fetchMock = answer(200, { recipes: [], ingredients: [] });
+
+        await apiRequestIfChanged('/api/sync', null);
+
+        expect(fetchMock.mock.calls[0][1].headers).not.toHaveProperty('If-None-Match');
+    });
+
+    test('fails as apiRequest does', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+        expect((await errorFrom(apiRequestIfChanged('/api/sync', '"abc"'))).isNetworkError).toBe(true);
+
+        answer(500, { error: 'Something went wrong.' });
+        expect((await errorFrom(apiRequestIfChanged('/api/sync', '"abc"'))).status).toBe(500);
     });
 });

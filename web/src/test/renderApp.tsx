@@ -9,9 +9,10 @@
 
 import { render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createMemoryRouter, type InitialEntry } from 'react-router';
 import { vi } from 'vitest';
+import { createQueryClient } from '../queryClient';
 import { routes } from '../routes';
 
 /** A JSON response, as the API sends it. */
@@ -81,8 +82,10 @@ export function sent(fetchMock: ReturnType<typeof mockApi>, method: string): Sen
 }
 
 export function renderApp(entry: InitialEntry) {
-    // No retries, so a failure shows at once
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    // The app's own client, but with no retries, so a failure shows at once
+    const queryClient = createQueryClient();
+    const defaults = queryClient.getDefaultOptions();
+    queryClient.setDefaultOptions({ ...defaults, queries: { ...defaults.queries, retry: false } });
     const router = createMemoryRouter(routes, { initialEntries: [entry] });
     const user = userEvent.setup();
     render(

@@ -3,8 +3,8 @@
 # Mise en place: hardening plan (Phase 1 to Phase 3c)
 
 > **Status**
-> - Current step: **Step 16: the offline copy**, ready to start. Step 15 is done (2026-11-24), with CI to be confirmed when its PR opens. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
-> - Last updated: 2026-11-24 (Step 15: the snapshot, and ids chosen by the client)
+> - Current step: **Step 17: saving offline, and uploading**, ready to start once one question is settled: offline edits need each recipe's ETag, which the snapshot doesn't carry yet (see the Progress log for 2026-11-24). Step 16 is done (2026-11-24); its PR #19 failed in Firefox on the first run (the browser's HTTP cache, see the Progress log), fixed, with CI to be confirmed. Step 15 merged as PR #18, CI green. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
+> - Last updated: 2026-11-24 (Step 16: the offline copy)
 > - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
@@ -642,14 +642,14 @@ Phase 3c comes before 3b (D15). Each device keeps a full snapshot of the data (D
 
 **Why:** reading offline is the base that offline editing builds on, and on its own it already covers cooking with the phone off the tailnet.
 
-- [ ] The store: the latest snapshot in IndexedDB, through idb-keyval (a new dependency, named in §3.4), as one record with its ETag and when it was fetched. It has no expiry, and it's replaced only once a complete newer snapshot has arrived. TanStack Query's own persistence isn't used for it, because it drops anything older than a day by default
-- [ ] Refreshing, with `If-None-Match`: at the moments the app already refetches (it opens, comes to the front, reconnects, or saves something), and from Refresh. A failed refresh is retried while the app is on screen, after 15 seconds and then at doubling intervals up to every 5 minutes. The browser's "online" signal isn't trusted alone, since the phone can have a network while the Pi is out of reach
-- [ ] When the Pi can't be reached, the list, search, the recipe page, cooking mode and Options › Ingredients read from the copy, with a banner saying so and how old the copy is. Search then matches names on the device
-- [ ] Options › "Offline copy": how many recipes it holds, when it was last refreshed, whether storage is protected, and the Protect button. `navigator.storage.persist()` is called from the tap, as Firefox requires
-- [ ] Saving while offline still says "Can't reach the server" until Step 17
-- [ ] Unit tests for the store, with fake time: a snapshot fetched 60 days earlier is still served offline; a failed or partial refresh leaves the copy untouched; only a complete one replaces it; the retry schedule
-- [ ] Component tests: the pages read from the copy, the banner, and the Offline copy line
-- [ ] Playwright:
+- [x] The store: the latest snapshot in IndexedDB, through idb-keyval (a new dependency, named in §3.4), as one record with its ETag and when it was fetched. It has no expiry, and it's replaced only once a complete newer snapshot has arrived. TanStack Query's own persistence isn't used for it, because it drops anything older than a day by default
+- [x] Refreshing, with `If-None-Match`: at the moments the app already refetches (it opens, comes to the front, reconnects, or saves something), and from Refresh. A failed refresh is retried while the app is on screen, after 15 seconds and then at doubling intervals up to every 5 minutes. The browser's "online" signal isn't trusted alone, since the phone can have a network while the Pi is out of reach
+- [x] When the Pi can't be reached, the list, search, the recipe page, cooking mode and Options › Ingredients read from the copy, with a banner saying so and how old the copy is. Search then matches names on the device
+- [x] Options › "Offline copy": how many recipes it holds, when it was last refreshed, whether storage is protected, and the Protect button. `navigator.storage.persist()` is called from the tap, as Firefox requires
+- [x] Saving while offline still says "Can't reach the server" until Step 17
+- [x] Unit tests for the store, with fake time: a snapshot fetched 60 days earlier is still served offline; a failed or partial refresh leaves the copy untouched; only a complete one replaces it; the retry schedule
+- [x] Component tests: the pages read from the copy, the banner, and the Offline copy line
+- [x] Playwright:
   - load the app, go offline (`context.setOffline(true)`), then open recipes, search and use cooking mode. Reload while still offline, a fresh start from the copy, and check again
   - come back online, and see a change made elsewhere arrive
   - block `/api/sync`, unblock it, and check the retry gets the new snapshot without a restart
@@ -1377,3 +1377,41 @@ Phase 3c comes before 3b (D15). Each device keeps a full snapshot of the data (D
   - **Docs:** `docs/api.md` (the snapshot, the `id`, compression), and the README (endpoints, structure, test count).
 
   Next: Step 16, the offline copy.
+- **2026-11-24:** Step 15 merged (PR #18, CI green, Firefox e2e included). The branches already merged into `main` were deleted, locally and on GitHub. Step 16 done.
+  - **The store** (`web/src/offline/storage.ts`, `copy.ts`):
+    - The snapshot in IndexedDB through idb-keyval 6.3.0 (released 2026-07-08, no dependencies of its own), in a database of its own, `mise-en-place`.
+    - One record, `{ data, etag, fetchedAt }`, plus `snapshotCheckedAt`, so a 304 writes a timestamp rather than the whole snapshot again. Nothing expires it.
+    - Only a snapshot that parsed and has the right shape is stored; a body cut off partway, or a captive portal's page, isn't. The copy in memory changes only once it's stored.
+  - **Refreshing** (`offline/sync.ts`):
+    - A conditional GET (`apiRequestIfChanged()`) with `If-None-Match` and `cache: 'no-store'`: the device keeps its own copy, so the browser's cache needn't keep another.
+    - It follows TanStack Query's own focus and online signals, so its moments are the pages' own, plus every save and the Refresh button.
+    - A failed refresh is retried after 15 s, doubling up to every 5 minutes, only while the app is visible; each moment starts the schedule afresh. A moment during a refresh brings another after it, so a save made meanwhile isn't missed.
+    - Once a refresh gets through, the pages that came from the copy fetch again from the API.
+  - **Reading offline** (`api/queries.ts`, `offline/read.ts`):
+    - The recipe list, a recipe and the ingredient list fall back to the copy on a network error (no answer, or Tailscale's 502 or 504), marked `fromCopy`.
+    - Search on the device: every word typed appears in the name, ignoring case and accents.
+    - With no copy yet, or a recipe the copy hasn't got, the 3a error shows as before.
+    - A banner above the page (in `Layout`) shows while anything on screen came from the copy: "Can't reach the server. Showing the copy saved on this device, refreshed 3 days ago.", with Retry.
+  - **Options › Offline copy:** how many recipes, when it was refreshed, the last failure, whether storage is protected, Protect (`navigator.storage.persist()` straight from the tap), and Refresh now.
+  - **Two things fixed on the way:**
+    - TanStack Query's default `networkMode: 'online'` holds requests back while the browser says it's offline. In airplane mode a page would have stayed on "Loading…" instead of reading the copy, and a save would have waited forever instead of saying it can't reach the server. Queries and saves now use `'always'`; a test fails with the old setting.
+    - `apiRequest()` let a body cut off mid-download escape as a bare TypeError. It's now a network error, like no answer at all.
+  - **The editor doesn't edit the copy.** The API's recipe ETags are opaque (`docs/api.md`), so the copy has none, and a save from it after the connection came back would have gone without `If-Match`, over any change made elsewhere. Offline, the editor says it can't reach the server, as in 3a.
+  - **To settle before Step 17:** an offline edit keeps "the ETag it started from", but the snapshot doesn't carry each recipe's ETag. Recommended: `GET /api/sync` adds them (for example `etags: { "<recipe id>": "<etag>" }`), so they stay opaque and the client never works one out from `updatedAt`.
+  - **Tests:** the client has 183, 71 of them new.
+    - `copy.test.ts`: a copy fetched 60 days ago is still there, a newer one replaces it whole, a 304 moves only `checkedAt`, storage that can't be read.
+    - `sync.test.ts`: the 304, five kinds of failed refresh leaving the copy untouched, storage that's full, the retry schedule over 20 minutes, hidden and visible, the connection returning, the pages fetching again, a moment during a refresh, and a page's fallback bringing a retry.
+    - `read.test.ts`: device search, paging and `fromCopy`.
+    - `OfflinePages.test.tsx`: each page from the copy, the banner, the editor, a save while the browser says it's offline, catching up by itself, Retry and Refresh, and Options' line with Protect.
+    - `client.test.ts`: a body cut off partway, and the conditional GET. `format.test.ts`: `formatAge()`.
+    - Playwright: `offline.spec.ts`, three tests. Offline in the open app and after a fresh start (search, a recipe, cooking mode, Ingredients); coming back online; a blocked `/api/sync` retried, with `page.clock`. Chromium: all 44 pass. Firefox runs in CI.
+    - Playwright found what the unit tests missed: `loadOfflineCopy()` kept answering with what its first read found (nothing) after a refresh had stored a copy, so pages offline showed the error. Fixed, with a unit test.
+  - Checked in the Browser pane: Options › Offline copy at phone width, and the banner over the list with the API stopped.
+  - **CI on PR #19 (run 39) failed in Firefox:** "coming back online" never showed the banner, in both viewports; the other 84 tests passed.
+    - The cause: Firefox, when it's offline, answers from its HTTP cache however old the entry is, instead of failing. The list had loaded from the API before going offline, so its refresh got that old answer and never fell back to the copy. Chromium fails the request, so it passed here. The tests that passed in Firefox only made requests offline that it had never made online.
+    - It would have happened on the phone in airplane mode too: an old answer shown as current, with no banner.
+    - The fix: every API request uses `cache: 'no-store'`, with a unit test. TanStack Query and the offline copy are the app's caches, and the browser's revalidation of small, gzipped answers saved little.
+    - Chromium: all 44 still pass. Firefox won't start on this PC, so CI confirms the fix there.
+  - **Docs:** the README's structure. `docs/architecture.md` still says recipes come from the API until 3c; Step 19 updates it, as planned.
+
+  Next: Step 17, saving offline, once the snapshot's ETags are settled.

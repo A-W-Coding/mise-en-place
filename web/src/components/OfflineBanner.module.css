@@ -1,0 +1,38 @@
+/* Calmer than ErrorBanner: nothing has gone wrong with the page, it's just reading the copy */
+.banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding: 12px 12px 12px 16px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface);
+    color: var(--text);
+}
+
+.message {
+    flex-grow: 1;
+    margin: 0;
+    font-size: 0.875rem;
+    line-height: 1.45;
+}
+
+.retry {
+    flex-shrink: 0;
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+@media print {
+    .banner {
+        display: none;
+    }
+}

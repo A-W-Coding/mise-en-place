@@ -11,6 +11,10 @@
  *   recipe changed elsewhere since, the API answers 412 and a dialog offers
  *   to reload it (F3).
  * - Leaving with unsaved changes asks first, and so does closing the tab.
+ * - A recipe from the offline copy isn't edited: it has no ETag, so its save
+ *   couldn't be checked against a change made elsewhere. With no connection,
+ *   the editor says it can't reach the server. Step 17 makes offline edits
+ *   wait on the device instead.
  */
 
 import { useEffect, useReducer, useRef, useState, type FormEvent, type ReactNode } from 'react';
@@ -18,7 +22,7 @@ import { Link, useBlocker, useLocation, useNavigate, useParams } from 'react-rou
 import { errorMessage } from '../api/errorMessage';
 import { useSaveRecipe } from '../api/mutations';
 import { useRecipe } from '../api/queries';
-import type { ApiError } from '../api/client';
+import { ApiError, NETWORK_ERROR_MESSAGE } from '../api/client';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DeleteRecipeDialog } from '../components/DeleteRecipeDialog';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -52,14 +56,17 @@ function EditRecipe({ id }: { id: string }) {
     // Bumped by "Reload recipe", which starts the form again from the latest version
     const [version, setVersion] = useState(0);
 
+    // Only the API's version can be edited, never the offline copy's (see the module comment)
+    const loaded = recipe.data && !recipe.data.fromCopy ? recipe.data : undefined;
+
     // Once the form has the recipe, later refreshes don't touch it: it edits the version it opened
-    if (recipe.data) {
+    if (loaded) {
         return (
             <RecipeEditor
                 key={version}
                 recipeId={id}
-                initial={draftFromRecipe(recipe.data.data)}
-                etag={recipe.data.etag}
+                initial={draftFromRecipe(loaded.data)}
+                etag={loaded.etag}
                 onReload={async () => {
                     await recipe.refetch();
                     setVersion((value) => value + 1);
@@ -79,11 +86,15 @@ function EditRecipe({ id }: { id: string }) {
         );
     }
 
+    // The copy answered because the API didn't
+    const unreachable = recipe.data && !recipe.isFetching ? new ApiError(0, NETWORK_ERROR_MESSAGE) : null;
+    const error = recipe.error ?? unreachable;
+
     return (
         <div className={styles.page}>
             <h1 className={styles.heading}>Edit recipe</h1>
-            {recipe.error ? (
-                <ErrorBanner error={recipe.error} onRetry={() => void recipe.refetch()} />
+            {error ? (
+                <ErrorBanner error={error} onRetry={() => void recipe.refetch()} />
             ) : (
                 <p role="status" className={page.status}>
                     Loading recipe…

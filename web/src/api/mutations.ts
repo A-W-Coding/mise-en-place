@@ -5,11 +5,12 @@
  * Each refreshes what it changed: a saved recipe goes straight into the
  * cache from the response, and the lists it might appear in are refetched.
  * "Right after it saves a change of its own" is one of the moments a device
- * refreshes (technical spec §3.4).
+ * refreshes (technical spec §3.4), so the offline copy refreshes too.
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { RecipeBody } from '../editor/draft';
+import { requestSync } from '../offline/sync';
 import { apiRequest } from './client';
 import { queryKeys } from './queries';
 import type { Ingredient, Recipe } from './types';
@@ -36,6 +37,7 @@ export function useSaveRecipe() {
         onSuccess: (result) => {
             queryClient.setQueryData(queryKeys.recipe(result.data.id), result);
             void queryClient.invalidateQueries({ queryKey: RECIPE_LISTS });
+            requestSync();
         },
     });
 }
@@ -46,7 +48,10 @@ export function useDeleteRecipe() {
     return useMutation({
         mutationFn: ({ id, etag }: { id: string; etag?: string | null }) =>
             apiRequest<unknown>(`/api/recipes/${encodeURIComponent(id)}`, { method: 'DELETE', ifMatch: etag }),
-        onSuccess: () => void queryClient.invalidateQueries({ queryKey: RECIPE_LISTS }),
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: RECIPE_LISTS });
+            requestSync();
+        },
     });
 }
 
@@ -55,7 +60,10 @@ export function useCreateIngredient() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: (name: string) => apiRequest<Ingredient>('/api/ingredients', { method: 'POST', body: { name } }),
-        onSuccess: () => void queryClient.invalidateQueries({ queryKey: INGREDIENTS }),
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: INGREDIENTS });
+            requestSync();
+        },
     });
 }
 
@@ -68,6 +76,7 @@ export function useRenameIngredient() {
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: INGREDIENTS });
             void queryClient.invalidateQueries({ queryKey: queryKeys.recipes });
+            requestSync();
         },
     });
 }
@@ -77,6 +86,9 @@ export function useDeleteIngredient() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: (id: string) => apiRequest<unknown>(`/api/ingredients/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-        onSuccess: () => void queryClient.invalidateQueries({ queryKey: INGREDIENTS }),
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: INGREDIENTS });
+            requestSync();
+        },
     });
 }
