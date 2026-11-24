@@ -175,7 +175,7 @@ shared/                  Code the API and the web client share
   units.ts               The canonical unit list and canonicaliseUnit()
   quantity.ts            Shows and reads amounts as fractions (1½, 2–3)
 web/                     The web client: Vite, React and TypeScript, with its own package.json
-  src/                   Pages, components, the API module and the theme
+  src/                   Pages, components, the API module, the offline copy and the theme
   e2e/                   Playwright end-to-end tests
   icons/, public/        The app's icons: SVG sources, and the PNGs scripts/make-icons.mjs draws from them
 prisma/

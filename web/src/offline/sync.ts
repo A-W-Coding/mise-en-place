@@ -1,0 +1,201 @@
+/**
+ * @module web/src/offline/sync
+ * Keeping the offline copy fresh (technical spec §3.4, "Offline").
+ *
+ * - **When:** at the moments every page already refreshes: the app starts,
+ *   comes back to the front, or gets its connection back, this device saves
+ *   a change, or Refresh is tapped. It follows TanStack Query's own focus
+ *   and online signals, so the moments are exactly the same ones.
+ * - **Retrying:** a refresh that fails is tried again while the app is on
+ *   screen, after 15 seconds, then at doubling intervals up to every 5
+ *   minutes, until one gets through. It doesn't wait for the browser's
+ *   "online" signal, which only means the device has a network: the Pi may
+ *   still be out of reach, with Tailscale off, say. Nothing retries while
+ *   the app is hidden; coming back to it is a refresh moment of its own,
+ *   and each moment starts the schedule afresh.
+ * - **Afterwards:** once a refresh succeeds, any page showing the copy
+ *   fetches again from the API.
+ *
+ * Step 17 uploads changes waiting on the device at the start of each round.
+ */
+
+import { focusManager, onlineManager, type QueryClient } from '@tanstack/react-query';
+import { useSyncExternalStore } from 'react';
+import { ApiError, NETWORK_ERROR_MESSAGE, apiRequestIfChanged } from '../api/client';
+import { confirmOfflineCopy, isSnapshot, loadOfflineCopy, replaceOfflineCopy } from './copy';
+import { servedFromCopy } from './read';
+
+export const FIRST_RETRY_MS = 15_000;
+export const MAX_RETRY_MS = 5 * 60_000;
+
+/** How long to wait after the nth failure in a row: 15 s, 30 s, 1, 2 and 4 min, then 5 min each time. */
+export function retryDelay(failures: number): number {
+    return Math.min(FIRST_RETRY_MS * 2 ** (failures - 1), MAX_RETRY_MS);
+}
+
+/**
+ * Fetch the snapshot, unless the copy is current, and keep it only if it
+ * arrived whole.
+ *
+ * @returns 'replaced' for a new snapshot, 'current' for a 304.
+ * @throws ApiError when the API can't be reached or answers with an error,
+ *         or an Error when the new snapshot can't be stored. The copy is
+ *         left as it was.
+ */
+export async function refreshOfflineCopy(): Promise<'replaced' | 'current'> {
+    const copy = await loadOfflineCopy();
+    const result = await apiRequestIfChanged<unknown>('/api/sync', copy?.etag ?? null);
+    if (!result.changed) {
+        await confirmOfflineCopy();
+        return 'current';
+    }
+    // A body cut off partway, or a page that isn't the API's: either way, the snapshot didn't arrive
+    if (!isSnapshot(result.data)) throw new ApiError(0, NETWORK_ERROR_MESSAGE);
+    try {
+        await replaceOfflineCopy(result.data, result.etag);
+    } catch (error) {
+        throw new Error("Couldn't store the copy on this device.", { cause: error });
+    }
+    return 'replaced';
+}
+
+export interface SyncStatus {
+    /** A refresh is on its way. */
+    refreshing: boolean;
+    /** Why the last refresh failed, or null if it succeeded or none has finished. */
+    lastError: string | null;
+}
+
+let client: QueryClient | null = null;
+let unsubscribe: (() => void)[] = [];
+let inFlight: Promise<void> | null = null;
+// A moment that came while a refresh was on its way: another follows it, so a
+// change saved meanwhile isn't missed
+let again = false;
+let retryTimer: ReturnType<typeof setTimeout> | undefined;
+let failures = 0;
+let status: SyncStatus = { refreshing: false, lastError: null };
+const listeners = new Set<() => void>();
+
+function setStatus(next: Partial<SyncStatus>): void {
+    status = { ...status, ...next };
+    for (const listener of listeners) listener();
+}
+
+function cancelRetry(): void {
+    clearTimeout(retryTimer);
+    retryTimer = undefined;
+}
+
+function scheduleRetry(): void {
+    cancelRetry();
+    if (!focusManager.isFocused()) return;
+    retryTimer = setTimeout(() => {
+        retryTimer = undefined;
+        if (!inFlight) void attempt();
+    }, retryDelay(failures));
+}
+
+function attempt(): Promise<void> {
+    const owner = client;
+    if (!owner) return Promise.resolve();
+    setStatus({ refreshing: true });
+    const run = (async () => {
+        try {
+            await refreshOfflineCopy();
+            if (client !== owner) return;
+            failures = 0;
+            setStatus({ lastError: null });
+            void owner.invalidateQueries({ predicate: (query) => servedFromCopy(query.state.data) });
+        } catch (error) {
+            if (client !== owner) return;
+            failures += 1;
+            setStatus({ lastError: error instanceof Error ? error.message : String(error) });
+            scheduleRetry();
+        }
+    })();
+    const settled = run.finally(() => {
+        // stopSync() let go of this one
+        if (inFlight !== settled) return;
+        inFlight = null;
+        setStatus({ refreshing: false });
+        if (again && client === owner) {
+            again = false;
+            cancelRetry();
+            failures = 0;
+            void attempt();
+        }
+    });
+    inFlight = settled;
+    return settled;
+}
+
+/**
+ * A refresh moment: refresh now, starting the retry schedule afresh. Does
+ * nothing until `startSync()`, so component tests that don't start it see
+ * the pages alone.
+ */
+export function requestSync(): void {
+    if (!client) return;
+    failures = 0;
+    cancelRetry();
+    if (inFlight) {
+        again = true;
+        return;
+    }
+    void attempt();
+}
+
+/**
+ * A page couldn't reach the API and showed the copy instead: make sure a
+ * retry is coming, so the page catches up by itself once the API answers.
+ */
+export function noteUnreachable(): void {
+    if (!client || inFlight || retryTimer !== undefined) return;
+    failures += 1;
+    scheduleRetry();
+}
+
+/** Start keeping the copy fresh, with a first refresh now: the app has just started. */
+export function startSync(queryClient: QueryClient): () => void {
+    stopSync();
+    client = queryClient;
+    unsubscribe = [
+        focusManager.subscribe((focused) => (focused ? requestSync() : cancelRetry())),
+        onlineManager.subscribe((online) => {
+            if (online) requestSync();
+        }),
+    ];
+    requestSync();
+    return stopSync;
+}
+
+/** Stop, for tests. A refresh already on its way finishes, but changes nothing more. */
+export function stopSync(): void {
+    for (const stop of unsubscribe) stop();
+    unsubscribe = [];
+    cancelRetry();
+    client = null;
+    inFlight = null;
+    again = false;
+    failures = 0;
+    status = { refreshing: false, lastError: null };
+}
+
+/** For tests: resolves once no refresh is on its way. */
+export async function syncSettled(): Promise<void> {
+    while (inFlight) await inFlight;
+}
+
+export function getSyncStatus(): SyncStatus {
+    return status;
+}
+
+function subscribe(listener: () => void): () => void {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+}
+
+export function useSyncStatus(): SyncStatus {
+    return useSyncExternalStore(subscribe, getSyncStatus);
+}

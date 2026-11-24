@@ -219,3 +219,9 @@
         transition: none;
     }
 }
+
+.buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}

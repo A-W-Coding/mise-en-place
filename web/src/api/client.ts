@@ -8,7 +8,10 @@
  *   for a 400, its per-field messages (`fields`), so forms can show each one
  *   next to its input.
  * - A request that gets no answer at all (offline, or the Pi unreachable)
- *   becomes an `ApiError` with status 0 and "Can't reach the server."
+ *   becomes an `ApiError` with status 0 and "Can't reach the server." So
+ *   does an answer cut off partway, when the connection drops mid-download.
+ * - `apiRequestIfChanged()` is the conditional GET the offline copy uses
+ *   (3c): it sends `If-None-Match`, and a 304 means the copy is current.
  *
  * Paths are relative ("/api/recipes"): the client is served from the same
  * origin as the API, in production and in development (F1).
@@ -75,33 +78,47 @@ function isFieldErrors(value: unknown): value is FieldErrors {
     return isObject(value) && Object.values(value).every((message) => typeof message === 'string');
 }
 
-/**
- * Make a request to the API.
- *
- * @param path - An API path, such as "/api/recipes?search=chili".
- * @returns The parsed body with its `ETag` and `X-Total-Count`.
- * @throws ApiError for an error response or no response; an aborted request
- *         rethrows the browser's AbortError, which TanStack Query expects.
- */
-export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<ApiResult<T>> {
+function isAbort(error: unknown): boolean {
+    return error instanceof DOMException && error.name === 'AbortError';
+}
+
+interface SendOptions extends RequestOptions {
+    ifNoneMatch?: string | null;
+    cache?: RequestCache;
+}
+
+/** Send a request, turning no answer at all into a network error. */
+async function send(path: string, options: SendOptions): Promise<Response> {
     const headers: Record<string, string> = { Accept: 'application/json' };
     if (options.body !== undefined) headers['Content-Type'] = 'application/json';
     if (options.ifMatch) headers['If-Match'] = options.ifMatch;
+    if (options.ifNoneMatch) headers['If-None-Match'] = options.ifNoneMatch;
 
-    let response: Response;
     try {
-        response = await fetch(path, {
+        return await fetch(path, {
             method: options.method ?? 'GET',
             headers,
             body: options.body === undefined ? undefined : JSON.stringify(options.body),
             signal: options.signal,
+            ...(options.cache ? { cache: options.cache } : {}),
         });
     } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') throw error;
+        if (isAbort(error)) throw error;
+        throw new ApiError(0, NETWORK_ERROR_MESSAGE);
+    }
+}
+
+/** Read a response into an `ApiResult`, or throw the `ApiError` it stands for. */
+async function readResult<T>(response: Response): Promise<ApiResult<T>> {
+    let body: unknown;
+    try {
+        body = await readJson(response);
+    } catch (error) {
+        // The answer began but never finished arriving: the connection dropped partway
+        if (isAbort(error)) throw error;
         throw new ApiError(0, NETWORK_ERROR_MESSAGE);
     }
 
-    const body = await readJson(response);
     if (!response.ok) {
         const message = isObject(body) && typeof body.error === 'string' ? body.error : null;
         const fields = isObject(body) && isFieldErrors(body.fields) ? body.fields : {};
@@ -120,4 +137,34 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
         etag: response.headers.get('ETag'),
         totalCount: total === null ? null : Number(total),
     };
+}
+
+/**
+ * Make a request to the API.
+ *
+ * @param path - An API path, such as "/api/recipes?search=chili".
+ * @returns The parsed body with its `ETag` and `X-Total-Count`.
+ * @throws ApiError for an error response or no response; an aborted request
+ *         rethrows the browser's AbortError, which TanStack Query expects.
+ */
+export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<ApiResult<T>> {
+    return readResult<T>(await send(path, options));
+}
+
+/** A conditional GET's answer: new data, or word that the copy you have is still current. */
+export type IfChangedResult<T> = { changed: false } | ({ changed: true } & ApiResult<T>);
+
+/**
+ * GET a resource unless it still has the ETag of the copy you hold.
+ *
+ * The browser's own cache is skipped (`no-store`): the caller keeps its own
+ * copy, so a second one in the HTTP cache would only take up room.
+ *
+ * @param etag - The ETag of the copy you hold, sent as `If-None-Match`; null to fetch it whatever it is.
+ * @throws ApiError, as `apiRequest()` does.
+ */
+export async function apiRequestIfChanged<T>(path: string, etag: string | null): Promise<IfChangedResult<T>> {
+    const response = await send(path, { ifNoneMatch: etag, cache: 'no-store' });
+    if (response.status === 304 && etag) return { changed: false };
+    return { changed: true, ...(await readResult<T>(response)) };
 }

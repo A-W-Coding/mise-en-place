@@ -1,9 +1,11 @@
 /**
  * @module web/src/test/fixtures
- * Recipes for the component tests, shaped like the API's responses.
+ * Recipes for the component tests, shaped like the API's responses, and
+ * offline copies made from them.
  */
 
 import type { Recipe, RecipeIngredient, RecipeSummary } from '../api/types';
+import { replaceOfflineCopy, type Snapshot } from '../offline/copy';
 
 const STAMP = '2026-11-23T10:00:00.000Z';
 export const BEEF_CHILI_ID = '0b9e6a52-6c1f-4a1e-9f0a-5b7d3c2e1a90';
@@ -70,3 +72,33 @@ export const beefChili: Recipe = {
         line(6, 'sweetcorn', 2, 'can', { note: 'drained' }),
     ],
 };
+
+/** Another whole recipe, for a copy with more than one. */
+export const lemonDrizzle: Recipe = {
+    id: '0c1d2e3f-4a5b-4c6d-8e7f-901a2b3c4d5e',
+    name: 'Lemon Drizzle Cake',
+    description: null,
+    servings: 8,
+    prepTime: 15,
+    cookTime: 45,
+    createdAt: STAMP,
+    updatedAt: STAMP,
+    instructions: 'Bake.',
+    recipeIngredients: [],
+};
+
+/** What `GET /api/sync` would return for these recipes: their ingredients, each once, sorted by name. */
+export function snapshotOf(recipes: Recipe[]): Snapshot {
+    const ingredients = new Map(recipes.flatMap((recipe) => recipe.recipeIngredients.map((line) => [line.ingredient.id, line.ingredient])));
+    return {
+        recipes: [...recipes].sort((a, b) => a.name.localeCompare(b.name)),
+        ingredients: [...ingredients.values()].sort((a, b) => a.name.localeCompare(b.name)),
+    };
+}
+
+export const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Store an offline copy of these recipes, made `ageMs` ago. */
+export function seedCopy(recipes: Recipe[], ageMs = 0, etag = '"snapshot-1"'): Promise<void> {
+    return replaceOfflineCopy(snapshotOf(recipes), etag, Date.now() - ageMs);
+}

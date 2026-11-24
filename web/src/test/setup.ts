@@ -2,7 +2,11 @@
 // a clean DOM after every test, and stand-ins for browser features jsdom lacks.
 import '@testing-library/jest-dom/vitest';
 import { cleanup } from '@testing-library/react';
-import { afterEach, vi } from 'vitest';
+import { focusManager, onlineManager } from '@tanstack/react-query';
+import { afterEach, beforeEach, vi } from 'vitest';
+import { resetOfflineCopy } from '../offline/copy';
+import { memoryStorage, setOfflineStorage } from '../offline/storage';
+import { stopSync } from '../offline/sync';
 import { resetPreferencesCache } from '../preferences';
 import { resetTimers } from '../timers/timerStore';
 import { MockIntersectionObserver } from './intersectionObserver';
@@ -29,8 +33,18 @@ if (typeof HTMLDialogElement.prototype.showModal !== 'function') {
     };
 }
 
+// jsdom has no IndexedDB: each test gets an empty offline copy in memory
+beforeEach(() => {
+    setOfflineStorage(memoryStorage());
+});
+
 afterEach(() => {
     cleanup();
+    // The offline copy and its refreshes live outside React too
+    stopSync();
+    resetOfflineCopy();
+    focusManager.setFocused(undefined);
+    onlineManager.setOnline(true);
     MockIntersectionObserver.reset();
     // The timers and preferences live outside React, so each test starts them afresh
     resetTimers();

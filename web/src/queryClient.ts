@@ -8,6 +8,12 @@
  * listens for `visibilitychange`) and when the connection returns
  * (`refetchOnReconnect`). Data counts as stale at once, so each of those
  * moments really fetches. Nothing polls on a timer.
+ *
+ * `networkMode: 'always'` (3c) lets every request go out even when the
+ * browser says it's offline. Otherwise TanStack Query holds requests back
+ * until the browser says it's online again: a page would wait on "Loading…"
+ * instead of reading the offline copy, and a save would never say it can't
+ * reach the server. The request failing is the real test either way.
  */
 
 import { QueryClient } from '@tanstack/react-query';
@@ -33,7 +39,8 @@ export function shouldRetry(failureCount: number, error: unknown): boolean {
 export function createQueryClient(): QueryClient {
     return new QueryClient({
         defaultOptions: {
-            queries: { retry: shouldRetry },
+            queries: { retry: shouldRetry, networkMode: 'always' },
+            mutations: { networkMode: 'always' },
         },
     });
 }
