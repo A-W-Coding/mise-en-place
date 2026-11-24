@@ -61,9 +61,12 @@ test('offline, a new recipe and an edit wait on the device, survive a fresh star
         );
         expect(await recipesNamed(laptop.request, 'Sourdough Toast')).toEqual([]);
 
-        // Back online, with no tap: both reach the laptop
+        // Back online, with no tap: both reach the laptop. Firefox's emulated
+        // reconnect can need the app's retry, so allow time for one
         await context.setOffline(false);
-        await expect.poll(async () => (await recipesNamed(laptop.request, 'Sourdough Toast')).length).toBe(1);
+        await expect
+            .poll(async () => (await recipesNamed(laptop.request, 'Sourdough Toast')).length, { timeout: 20_000 })
+            .toBe(1);
         await expect
             .poll(async () => (await recipesNamed(laptop.request, 'Beef Chili'))[0]?.description)
             .toBe('Hotter, with chipotle.');

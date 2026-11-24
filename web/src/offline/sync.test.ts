@@ -180,34 +180,28 @@ describe('the refresh schedule', () => {
         expect(times).toEqual([0, 15_000, 45_000, back, back + 15_000]);
     });
 
-    test('the connection coming back refreshes at once, even after the app started with none', async () => {
-        const { times } = syncRoute(() => unreachable());
+    test("an app started with no connection tells TanStack Query so, and its pages refetch when it's back", async () => {
+        syncRoute(() => unreachable());
         Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false });
         try {
             startSync(new QueryClient());
-            await vi.advanceTimersByTimeAsync(5_000);
-
-            // The browser's own event, with no offline event before it
-            Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => true });
-            window.dispatchEvent(new Event('online'));
-            await vi.advanceTimersByTimeAsync(0);
-
-            expect(times).toEqual([0, 5_000]);
+            expect(onlineManager.isOnline()).toBe(false);
         } finally {
             delete (navigator as { onLine?: boolean }).onLine;
         }
     });
 
-    test('the connection coming back refreshes at once', async () => {
+    test('the connection coming back refreshes at once, and a failure just then is retried after 3 s', async () => {
         const { times } = syncRoute(() => unreachable());
         startSync(new QueryClient());
         await vi.advanceTimersByTimeAsync(5_000);
 
-        onlineManager.setOnline(false);
-        onlineManager.setOnline(true);
-        await vi.advanceTimersByTimeAsync(0);
+        // The browser's own event, whatever TanStack Query believed before it
+        window.dispatchEvent(new Event('online'));
+        await vi.advanceTimersByTimeAsync(30_000);
 
-        expect(times).toEqual([0, 5_000]);
+        // Then the usual schedule, from the start: 15 s, then 30 s
+        expect(times).toEqual([0, 5_000, 8_000, 23_000]);
     });
 
     test('once a refresh gets through, retries stop and pages showing the copy fetch again', async () => {

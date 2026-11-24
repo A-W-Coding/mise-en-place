@@ -3,7 +3,7 @@
 # Mise en place: hardening plan (Phase 1 to Phase 3c)
 
 > **Status**
-> - Current step: **Step 18: when an upload can't go through**, ready to start. Step 17 is done (2026-11-24), with CI to be confirmed when its PR opens. Step 16 merged as PR #19, CI green after a fix for Firefox's HTTP cache; Step 15 merged as PR #18. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
+> - Current step: **Step 18: when an upload can't go through**, ready to start. Step 17 is done (2026-11-24); its PR #20 failed in Firefox on the first run (reconnecting, see the Progress log), fixed, with CI to be confirmed. Step 16 merged as PR #19, CI green after a fix for Firefox's HTTP cache; Step 15 merged as PR #18. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
 > - Last updated: 2026-11-24 (Step 17: saving offline, and uploading)
 > - Blockers: the SSD for 8.1, about a month away
 
@@ -1443,5 +1443,11 @@ Phase 3c comes before 3b (D15). Each device keeps a full snapshot of the data (D
     - Playwright: `offline-editing.spec.ts`, two tests. Offline, a new recipe with a new ingredient and an edit to another, a fresh start, then back online with no tap; and a create whose answer is lost, with no second copy. Chromium: all 48 pass. Firefox runs in CI.
   - Checked in the Browser pane: the recipe's notice and the list's waiting section at phone width, with the API stopped. That throwaway change was deleted from the pane's storage before the API came back, so it never uploaded.
   - **Docs:** `docs/api.md` (the limits, the snapshot's `etags`), and the README.
+  - **CI on PR #20 (run 42) failed in Firefox:** in the first Playwright test, nothing reached the server within 5 s of coming back online, in both viewports; the other 92 tests passed, and everything offline worked.
+    - Without the logs (they need a sign-in), the cause is one of two: Firefox's emulated reconnect fires no "online" event for a page that started offline, or fires it a moment before requests get through. Either way the upload waited for the next retry, 15 s or more away.
+    - The second is what a phone does too: the network comes back a few seconds before Tailscale has reconnected.
+    - The fix: the sync hears the browser's "online" event itself, rather than through TanStack Query, and a refresh that fails just after it is tried again after 3 s, before the usual schedule. TanStack Query is still told the state at start, for the pages' own refetch.
+    - The test allows 20 s, time for one retry, since what it checks is "with no tap", not "at once".
+    - Unit tests for both; Chromium: all 48 still pass. CI confirms Firefox.
 
   Next: Step 18, when an upload can't go through.
