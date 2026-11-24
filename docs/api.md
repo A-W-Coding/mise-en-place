@@ -36,7 +36,7 @@ The mise-en-place API as of Phase 1, plus Phase 3a's JSON 404s and recipe ETags,
   "servings": 2,
   "prepTime": 20,
   "cookTime": 120,
-  "instructions": "1. Put the Beef stock pot in a jug…",
+  "primaryImageId": null,
   "createdAt": "2026-11-02T11:18:50.876Z",
   "updatedAt": "2026-11-02T11:18:50.876Z",
   "recipeIngredients": [
@@ -49,12 +49,30 @@ The mise-en-place API as of Phase 1, plus Phase 3a's JSON 404s and recipe ETags,
       "quantityMax": null,
       "unit": null,
       "note": "diced",
+      "sectionId": null,
       "ingredient": {
         "id": "3308532b-ec81-4c05-9def-8cd595f0f035",
         "name": "onion",
         "createdAt": "2026-11-02T11:18:50.876Z",
         "updatedAt": "2026-11-02T11:18:50.876Z"
       }
+    }
+  ],
+  "sections": [
+    {
+      "id": "8d3f0b1e-2c4a-4f6b-9e8d-7c6b5a4f3e2d",
+      "recipeId": "09b75162-d37f-476c-b87a-30bbba971058",
+      "name": "Method",
+      "orderIndex": 0,
+      "steps": [
+        {
+          "id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+          "sectionId": "8d3f0b1e-2c4a-4f6b-9e8d-7c6b5a4f3e2d",
+          "orderIndex": 0,
+          "text": "Put the Beef stock pot in a jug and add the correct amount of boiling water.",
+          "timerSeconds": null
+        }
+      ]
     }
   ]
 }
@@ -67,12 +85,15 @@ The mise-en-place API as of Phase 1, plus Phase 3a's JSON 404s and recipe ETags,
 | `description` | string or null | |
 | `servings` | integer | 1 to 1000. Defaults to 1 |
 | `prepTime`, `cookTime` | integer or null | Minutes, 0 to 99999 |
-| `instructions` | string or null | Plain text |
+| `primaryImageId` | string (UUID) or null | The main image (3b). Always null until images arrive |
 | `createdAt` | timestamp | |
-| `updatedAt` | timestamp | Changes on every PATCH, including one that only changes the lines |
+| `updatedAt` | timestamp | Changes on every PATCH, including one that only changes the lines or the method |
 | `recipeIngredients` | array of lines | Sorted by `orderIndex`. Included in single-recipe responses, not in lists |
+| `sections` | array of [sections](#section) | The method (3b), sorted by `orderIndex`. Included in single-recipe responses, not in lists |
 
-In a list, each recipe is a **summary**: every field above except `instructions` and `recipeIngredients`. The recipe page fetches those with `GET /api/recipes/:id`, so each page of a list stays small.
+In a list, each recipe is a **summary**: every field above except `primaryImageId`, `recipeIngredients` and `sections`. The recipe page fetches those with `GET /api/recipes/:id`, so each page of a list stays small.
+
+Phase 1's `instructions` (the method as one block of text) is gone from requests and responses. A migration turned each recipe's text into one section, "Method", with a step for each line (technical spec §7.2).
 
 ### Ingredient line
 
@@ -88,9 +109,32 @@ One line of a recipe's ingredient list. In responses each line includes its `ing
 | `quantityMax` | number or null | Upper end of a range ("2–3"). Only set when `quantity` is |
 | `unit` | string or null | A canonical unit symbol (see [Units](#units)). Null means a count, as in "3 eggs" |
 | `note` | string or null | Preparation, such as "finely diced". Up to 200 characters |
+| `sectionId` | string (UUID) or null | The [section](#section) the line is grouped under, as in "for the sauce", or null for none. Responses only: requests send `sectionIndex` |
 | `ingredient` | Ingredient | Responses only |
 
 The same ingredient may appear on more than one line.
+
+### Section
+
+A part of a recipe's method, such as "Sauce" or "Base", with its steps in order (3b). A section with no steps can still group ingredient lines.
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | string (UUID) | New ids each time a recipe's sections are replaced |
+| `recipeId` | string (UUID) | |
+| `name` | string | 1–100 characters, stored trimmed |
+| `orderIndex` | integer | Position in the recipe, from 0, set by the server |
+| `steps` | array of steps | Sorted by `orderIndex` |
+
+Each step:
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | string (UUID) | |
+| `sectionId` | string (UUID) | |
+| `orderIndex` | integer | Position in the section, from 0, set by the server |
+| `text` | string | 1–2,000 characters, stored trimmed |
+| `timerSeconds` | integer or null | A timer cooking mode can start for this step: 1 to 86,400 seconds (a day) |
 
 ### Ingredient
 
@@ -152,7 +196,7 @@ Runs `SELECT 1` against the database.
 
 ### `GET /api/recipes`
 
-Lists recipes as summaries, without their lines or instructions (see [Recipe](#recipe)). Takes `search`, `limit` and `offset` (see [Lists](#lists-search-and-pagination)).
+Lists recipes as summaries, without their lines or method (see [Recipe](#recipe)). Takes `search`, `limit` and `offset` (see [Lists](#lists-search-and-pagination)).
 
 **Responses:** 200 with an array of recipe summaries and `X-Total-Count`; 400 for a bad query.
 
@@ -171,7 +215,7 @@ Creates a recipe and its lines in one write.
 | `description` | no | String or null |
 | `servings` | no | Integer, 1 to 1000. Default 1. Not null |
 | `prepTime`, `cookTime` | no | Integer, 0 to 99999 (about 69 days), or null |
-| `instructions` | no | String or null |
+| `sections` | no | Array of `{ name, steps: [{ text, timerSeconds }] }`, in order (3b). Only with `ingredients`. Default: none |
 | `ingredients` | no | Array of lines, in recipe order. Default: none |
 
 Each line in `ingredients`:
@@ -183,6 +227,11 @@ Each line in `ingredients`:
 | `quantityMax` | no | Number or null. Only allowed with `quantity`, and at least `quantity` |
 | `unit` | no | A unit symbol or alias (see [Units](#units)), converted to the symbol. Null, absent or blank means a count |
 | `note` | no | String of up to 200 characters, or null |
+| `sectionIndex` | no | The line's section, by its position in this body's `sections`, or null for none. Only with `sections` |
+
+Each section in `sections` has a `name` (1–100 characters after trimming) and `steps`, an array that may be empty. Each step has `text` (1–2,000 characters after trimming) and an optional `timerSeconds` (a whole number from 1 to 86,400, or null).
+
+A body with `sections` must also have `ingredients`. New sections get new ids, so the lines are written again with them; without `ingredients`, they'd lose their sections without a word.
 
 ```http
 POST /api/recipes
@@ -213,15 +262,15 @@ The second line is stored with `"unit": "clove"`, and the lines get `orderIndex`
 
 Changes only the fields in the body; the rules are the same as for POST, but every field is optional, and `id` can't be sent. An empty body changes nothing except `updatedAt`.
 
-`ingredients` works like this:
+`ingredients` and `sections` work like this:
 
-| In the body | Effect on the lines |
+| In the body | Effect |
 |---|---|
 | Absent | Left untouched |
-| An array | All lines are replaced by the array, in its order, in one atomic write |
-| `[]` | All lines are removed |
+| An array | All of them are replaced by the array, in its order |
+| `[]` | All of them are removed |
 
-There's no way to change a single line: send the whole list.
+There's no way to change a single line, section or step: send the whole list. Everything in one PATCH is written in one transaction, so a refused or stale request changes nothing.
 
 Send `If-Match` to make sure you're not overwriting a change made elsewhere (see [ETags and `If-Match`](#etags-and-if-match)).
 

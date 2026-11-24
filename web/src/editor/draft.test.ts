@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { beefChili } from '../test/fixtures';
+import { beefChili, section } from '../test/fixtures';
 import {
     apiBody,
     buildRecipeBody,
@@ -10,8 +10,10 @@ import {
     lineErrorKey,
     mapServerErrors,
     newDraft,
+    sectionErrorKey,
     type LineDraft,
     type RecipeDraft,
+    type SectionDraft,
 } from './draft';
 
 const garlic = { id: '11111111-1111-4111-8111-111111111111', name: 'garlic' };
@@ -29,6 +31,11 @@ function line(key: string, amount: string, ingredient: LineDraft['ingredient'], 
     };
 }
 
+/** A method section as the editor holds it: one box of text, a step per line. */
+function method(text: string, extra: Partial<SectionDraft> = {}): SectionDraft {
+    return { key: 'm', name: 'Method', text, timers: {}, ...extra };
+}
+
 function draft(overrides: Partial<RecipeDraft> = {}): RecipeDraft {
     return { ...newDraft(), name: 'Soup', lines: [], ...overrides };
 }
@@ -42,7 +49,7 @@ describe('buildRecipeBody', () => {
                 servings: '2',
                 prepTime: '10',
                 cookTime: '',
-                instructions: 'Chop.\nSimmer.',
+                sections: [method('1. Chop.\n\nSimmer.')],
                 lines: [
                     line('a', '2 cloves', garlic, { note: ' crushed ', showNote: true }),
                     line('b', '', onion),
@@ -57,7 +64,16 @@ describe('buildRecipeBody', () => {
                 servings: 2,
                 prepTime: 10,
                 cookTime: null,
-                instructions: 'Chop.\nSimmer.',
+                // A step per line, numbered by the page rather than the text
+                sections: [
+                    {
+                        name: 'Method',
+                        steps: [
+                            { text: 'Chop.', timerSeconds: null },
+                            { text: 'Simmer.', timerSeconds: null },
+                        ],
+                    },
+                ],
                 ingredients: [
                     {
                         ingredientId: garlic.id,
@@ -66,11 +82,21 @@ describe('buildRecipeBody', () => {
                         quantityMax: null,
                         unit: 'clove',
                         note: 'crushed',
+                        sectionIndex: null,
                     },
-                    { ingredientId: onion.id, ingredientName: 'onion', quantity: null, quantityMax: null, unit: null, note: null },
+                    {
+                        ingredientId: onion.id,
+                        ingredientName: 'onion',
+                        quantity: null,
+                        quantityMax: null,
+                        unit: null,
+                        note: null,
+                        sectionIndex: null,
+                    },
                 ],
             },
             lineKeys: ['a', 'b'],
+            sectionKeys: ['m'],
         });
     });
 
@@ -81,9 +107,10 @@ describe('buildRecipeBody', () => {
     });
 
     test('clearing a box sends null, so the field is cleared', () => {
-        const result = buildRecipeBody(draft({ description: '   ', instructions: '' }));
+        const result = buildRecipeBody(draft({ description: '   ', sections: [method('  \n ')] }));
 
-        expect(result).toMatchObject({ body: { description: null, instructions: null } });
+        // An empty method saves no sections at all, as a recipe without one has
+        expect(result).toMatchObject({ body: { description: null, sections: [] }, sectionKeys: [] });
     });
 
     test('an untouched amount sends the numbers it was saved with, not the rounded ones shown', () => {
@@ -186,10 +213,11 @@ describe('a new ingredient picked offline', () => {
             quantityMax: null,
             unit: 'g',
             note: null,
+            sectionIndex: null,
         });
         expect(apiBody(result.body, (name) => (name === 'sourdough' ? 'new-id' : '')).ingredients).toEqual([
-            { ingredientId: 'new-id', quantity: 200, quantityMax: null, unit: 'g', note: null },
-            { ingredientId: garlic.id, quantity: 1, quantityMax: null, unit: null, note: null },
+            { ingredientId: 'new-id', quantity: 200, quantityMax: null, unit: 'g', note: null, sectionIndex: null },
+            { ingredientId: garlic.id, quantity: 1, quantityMax: null, unit: null, note: null, sectionIndex: null },
         ]);
     });
 });
@@ -208,6 +236,103 @@ describe('draftFromBody', () => {
             ['3', { id: null, name: 'sourdough' }, 'sourdough'],
         ]);
         expect(buildRecipeBody(reopened)).toMatchObject({ body: first.body });
+    });
+});
+
+describe('sections of the method (3b)', () => {
+    // A recipe the API made with two sections: a timer on one step, and a line in the second
+    const twoSections = {
+        ...beefChili,
+        sections: [
+            section(beefChili.id, 0, 'Sauce', ['Fry the onions.', ['Simmer.', 1200]]),
+            section(beefChili.id, 1, 'To serve', ['Ladle out.']),
+        ],
+    };
+    twoSections.recipeIngredients = beefChili.recipeIngredients.map((l, index) => ({
+        ...l,
+        sectionId: index === 0 ? twoSections.sections[1]!.id : null,
+    }));
+
+    test('a recipe with several sections opens with a box for each, and saves back as it was', () => {
+        const loaded = draftFromRecipe(twoSections);
+
+        expect(loaded.sections.map((s) => [s.name, s.text])).toEqual([
+            ['Sauce', 'Fry the onions.\nSimmer.'],
+            ['To serve', 'Ladle out.'],
+        ]);
+        const result = buildRecipeBody(loaded);
+        if ('errors' in result) throw new Error('Expected a body.');
+        expect(result.body.sections).toEqual([
+            {
+                name: 'Sauce',
+                steps: [
+                    { text: 'Fry the onions.', timerSeconds: null },
+                    { text: 'Simmer.', timerSeconds: 1200 },
+                ],
+            },
+            { name: 'To serve', steps: [{ text: 'Ladle out.', timerSeconds: null }] },
+        ]);
+        // The first line stays in "To serve", the rest in none
+        expect(result.body.ingredients.map((l) => l.sectionIndex)).toEqual([1, null, null, null, null, null, null]);
+    });
+
+    test('a step kept as it was keeps its timer; a step changed loses it', () => {
+        const loaded = draftFromRecipe(twoSections);
+        const sauce = loaded.sections[0]!;
+        const edited = draftReducer(loaded, { type: 'sectionText', key: sauce.key, text: 'Fry the onions well.\nSimmer.' });
+        const retimed = draftReducer(loaded, { type: 'sectionText', key: sauce.key, text: 'Fry the onions.\nSimmer gently.' });
+
+        const steps = (d: RecipeDraft) => {
+            const result = buildRecipeBody(d);
+            if ('errors' in result) throw new Error('Expected a body.');
+            return result.body.sections[0]!.steps;
+        };
+        expect(steps(edited)).toEqual([
+            { text: 'Fry the onions well.', timerSeconds: null },
+            { text: 'Simmer.', timerSeconds: 1200 },
+        ]);
+        expect(steps(retimed)[1]).toEqual({ text: 'Simmer gently.', timerSeconds: null });
+    });
+
+    test("a section with no steps is kept while a line is in it, and dropped once none is", () => {
+        const grouping = draft({
+            sections: [method('Stir.'), method('', { key: 'dressing', name: 'Dressing' })],
+            lines: [line('a', '1', garlic, { sectionKey: 'dressing' })],
+        });
+        const kept = buildRecipeBody(grouping);
+        const dropped = buildRecipeBody({ ...grouping, lines: [line('a', '1', garlic)] });
+
+        expect(kept).toMatchObject({ body: { sections: [{ name: 'Method' }, { name: 'Dressing', steps: [] }] }, sectionKeys: ['m', 'dressing'] });
+        expect(kept).toMatchObject({ body: { ingredients: [{ sectionIndex: 1 }] } });
+        expect(dropped).toMatchObject({ body: { sections: [{ name: 'Method' }] }, sectionKeys: ['m'] });
+    });
+
+    test('a step over 2,000 characters is refused before the API sees it', () => {
+        const result = buildRecipeBody(draft({ sections: [method(`Fine.\n${'x'.repeat(2001)}`)] }));
+
+        expect(result).toEqual({ errors: { [sectionErrorKey('m', 'steps')]: 'Keep each step to 2000 characters or fewer.' } });
+    });
+
+    test("the API's messages about a section land on its box", () => {
+        const errors = mapServerErrors(
+            { 'sections.1.steps.0.text': 'Must not be empty.', 'sections.0.name': 'Must not be empty.' },
+            [],
+            ['first', 'second'],
+        );
+
+        expect(errors).toEqual({
+            [sectionErrorKey('second', 'steps')]: 'Must not be empty.',
+            [sectionErrorKey('first', 'name')]: 'Must not be empty.',
+        });
+    });
+
+    test('a version saved on the device reopens with its sections and grouping', () => {
+        const first = buildRecipeBody(draftFromRecipe(twoSections));
+        if ('errors' in first) throw new Error('Expected a body.');
+
+        const reopened = buildRecipeBody(draftFromBody(first.body));
+
+        expect(reopened).toMatchObject({ body: first.body });
     });
 });
 

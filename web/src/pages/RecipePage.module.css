@@ -97,6 +97,18 @@
     color: var(--muted);
 }
 
+/* A section of the method (3b); Step 22 gives these their final look */
+.methodSection + .methodSection {
+    margin-top: 20px;
+}
+
+.methodSectionName {
+    margin: 0 0 10px;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--muted);
+}
+
 .steps {
     list-style: none;
     margin: 0;

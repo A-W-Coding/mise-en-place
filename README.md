@@ -109,7 +109,7 @@ Run tests with `npm test`, which sets up the environment Jest needs. It:
 3. runs the test files one at a time, because they share one database
 4. resets the database to the sample data before each test, and empties it after
 
-There are 426 tests in [`tests/`](tests): integration tests that send real requests to the API with Supertest, and unit tests for the request schemas, the units list, the quantity formatting and the helpers. `npm test -- --coverage` prints a coverage table and writes an HTML report to `coverage/lcov-report/index.html`.
+There are 448 tests in [`tests/`](tests): integration tests that send real requests to the API with Supertest, and unit tests for the request schemas, the units list, the quantity formatting and the helpers. `npm test -- --coverage` prints a coverage table and writes an HTML report to `coverage/lcov-report/index.html`.
 
 The tests don't type-check (ts-jest only transpiles), so run `npx tsc --noEmit` as well.
 
@@ -137,8 +137,8 @@ GitHub Actions runs on every pull request into `main` and every push to `main`, 
 | GET | `/api/health` | 200 `{"status":"ok"}` if the database answers, otherwise 503 |
 | GET | `/api/recipes` | List recipes. `?search=`, `?limit=`, `?offset=` |
 | GET | `/api/recipes/:id` | Get a recipe with its ingredient lines |
-| POST | `/api/recipes` | Create a recipe, optionally with its lines and an `id` chosen by the client. 409 if that id is taken |
-| PATCH | `/api/recipes/:id` | Update a recipe. An `ingredients` array replaces every line |
+| POST | `/api/recipes` | Create a recipe, optionally with its lines, its method's sections and steps, and an `id` chosen by the client. 409 if that id is taken |
+| PATCH | `/api/recipes/:id` | Update a recipe. An `ingredients` array replaces every line, and a `sections` array every section and step |
 | DELETE | `/api/recipes/:id` | Delete a recipe and its lines |
 | GET | `/api/ingredients` | List ingredients. `?search=`, `?limit=`, `?offset=` |
 | GET | `/api/ingredients/:id` | Get an ingredient |

@@ -13,11 +13,16 @@
  * ingredient picked offline may not exist yet: its id is null until the
  * recipe is sent, when it's created by name. `apiBody()` then gives the
  * API's own body, with ids only.
+ *
+ * The method is sections of steps (3b). Until Step 22's screens, each
+ * section is one box of text, a step per line; a step kept as it was keeps
+ * its timer, and a line keeps the section it was in.
  */
 
 import { LIMITS } from '../../../shared/limits';
 import { formatAmount, parseAmount } from '../../../shared/quantity';
 import type { Recipe } from '../api/types';
+import { methodSteps } from '../format';
 
 /** An ingredient picked for a line. A null id is a new one, created by name when the recipe is sent (3c). */
 export interface PickedIngredient {
@@ -43,6 +48,17 @@ export interface LineDraft {
     saved?: { amount: string; quantity: number | null; quantityMax: number | null; unit: string | null };
     /** Which box to focus when the row first appears: after Add ingredient, or Add note. */
     focus?: 'amount' | 'note';
+    /** The section the line is grouped under (a `SectionDraft` key), or none. */
+    sectionKey?: string | null;
+}
+
+/** A section of the method as the editor holds it: its name, and its steps as text, one per line. */
+export interface SectionDraft {
+    key: string;
+    name: string;
+    text: string;
+    /** Each saved step's timer, by its text, so a step kept as it was keeps its timer. */
+    timers: Record<string, number>;
 }
 
 export interface RecipeDraft {
@@ -51,7 +67,7 @@ export interface RecipeDraft {
     servings: string;
     prepTime: string;
     cookTime: string;
-    instructions: string;
+    sections: SectionDraft[];
     lines: LineDraft[];
 }
 
@@ -65,19 +81,45 @@ export type DraftErrors = Record<string, string>;
 export type LineField = 'amount' | 'ingredient' | 'note';
 export const lineErrorKey = (key: string, field: LineField) => `line:${key}:${field}`;
 
+/** Where a section's problem shows: its name, or its box of steps. */
+export type SectionField = 'name' | 'steps';
+export const sectionErrorKey = (key: string, field: SectionField) => `section:${key}:${field}`;
+
 let nextKey = 0;
 export function newLine(focus?: LineDraft['focus']): LineDraft {
     nextKey += 1;
     return { key: `new-${nextKey}`, amount: '', ingredient: null, ingredientText: '', note: '', showNote: false, focus };
 }
 
-/** A new recipe starts with one empty line to fill in. */
+let nextSection = 0;
+/** An empty "Method" section: what a recipe with no method starts with. */
+function newSection(): SectionDraft {
+    nextSection += 1;
+    return { key: `new-section-${nextSection}`, name: 'Method', text: '', timers: {} };
+}
+
+/** A new recipe starts with one empty line, and an empty method, to fill in. */
 export function newDraft(): RecipeDraft {
-    return { name: '', description: '', servings: '1', prepTime: '', cookTime: '', instructions: '', lines: [newLine()] };
+    return {
+        name: '',
+        description: '',
+        servings: '1',
+        prepTime: '',
+        cookTime: '',
+        sections: [newSection()],
+        lines: [newLine()],
+    };
+}
+
+/** A saved section, ready to edit. */
+function sectionDraft(key: string, section: SectionBody): SectionDraft {
+    const timers: Record<string, number> = {};
+    for (const step of section.steps) if (step.timerSeconds !== null) timers[step.text] = step.timerSeconds;
+    return { key, name: section.name, text: section.steps.map((step) => step.text).join('\n'), timers };
 }
 
 /** A saved line, ready to edit. The amount is shown as the recipe page shows it. */
-function lineDraft(key: string, line: LineBody): LineDraft {
+function lineDraft(key: string, line: Omit<LineBody, 'sectionIndex'>, sectionKey: string | null): LineDraft {
     const amount = formatAmount(line.quantity, line.quantityMax, line.unit);
     return {
         key,
@@ -87,33 +129,41 @@ function lineDraft(key: string, line: LineBody): LineDraft {
         note: line.note ?? '',
         showNote: line.note !== null && line.note !== '',
         saved: { amount, quantity: line.quantity, quantityMax: line.quantityMax, unit: line.unit },
+        sectionKey,
     };
 }
 
-function fieldsDraft(saved: Omit<DraftBody, 'ingredients'>): Omit<RecipeDraft, 'lines'> {
+function fieldsDraft(saved: Omit<DraftBody, 'ingredients' | 'sections'>): Omit<RecipeDraft, 'lines' | 'sections'> {
     return {
         name: saved.name,
         description: saved.description ?? '',
         servings: String(saved.servings),
         prepTime: saved.prepTime === null ? '' : String(saved.prepTime),
         cookTime: saved.cookTime === null ? '' : String(saved.cookTime),
-        instructions: saved.instructions ?? '',
     };
 }
 
-/** An existing recipe, ready to edit. */
+/** An existing recipe, ready to edit. Its sections keep their ids as keys, so each line finds its own. */
 export function draftFromRecipe(recipe: Recipe): RecipeDraft {
     return {
         ...fieldsDraft(recipe),
+        sections: recipe.sections.length > 0 ? recipe.sections.map((section) => sectionDraft(section.id, section)) : [newSection()],
         lines: recipe.recipeIngredients.map((line) =>
-            lineDraft(line.id, { ...line, ingredientId: line.ingredient.id, ingredientName: line.ingredient.name }),
+            lineDraft(line.id, { ...line, ingredientId: line.ingredient.id, ingredientName: line.ingredient.name }, line.sectionId),
         ),
     };
 }
 
 /** A version saved on the device and not yet uploaded, ready to edit again (3c). */
 export function draftFromBody(body: DraftBody): RecipeDraft {
-    return { ...fieldsDraft(body), lines: body.ingredients.map((line, index) => lineDraft(`saved-${index}`, line)) };
+    const sectionKey = (index: number) => `saved-section-${index}`;
+    return {
+        ...fieldsDraft(body),
+        sections: body.sections.length > 0 ? body.sections.map((section, index) => sectionDraft(sectionKey(index), section)) : [newSection()],
+        lines: body.ingredients.map((line, index) =>
+            lineDraft(`saved-${index}`, line, line.sectionIndex === null ? null : sectionKey(line.sectionIndex)),
+        ),
+    };
 }
 
 /** True when the draft differs from where it started, ignoring which box wants focus. */
@@ -121,7 +171,14 @@ export function isDirty(initial: RecipeDraft, current: RecipeDraft): boolean {
     const comparable = (draft: RecipeDraft) =>
         JSON.stringify({
             ...draft,
-            lines: draft.lines.map((line) => [line.key, line.amount, line.ingredient?.id ?? null, line.ingredientText, line.note]),
+            lines: draft.lines.map((line) => [
+                line.key,
+                line.amount,
+                line.ingredient?.id ?? null,
+                line.ingredientText,
+                line.note,
+                line.sectionKey ?? null,
+            ]),
         });
     return comparable(initial) !== comparable(current);
 }
@@ -134,7 +191,8 @@ function isBlank(line: LineDraft): boolean {
 // ── Editing ────────────────────────────────────────────────────────────────
 
 export type DraftAction =
-    | { type: 'field'; field: Exclude<keyof RecipeDraft, 'lines'>; value: string }
+    | { type: 'field'; field: Exclude<keyof RecipeDraft, 'lines' | 'sections'>; value: string }
+    | { type: 'sectionText'; key: string; text: string }
     | { type: 'line'; key: string; patch: Partial<Omit<LineDraft, 'key'>> }
     | { type: 'ingredientText'; key: string; text: string }
     | { type: 'add' }
@@ -151,6 +209,11 @@ export function draftReducer(draft: RecipeDraft, action: DraftAction): RecipeDra
     switch (action.type) {
         case 'field':
             return { ...draft, [action.field]: action.value };
+        case 'sectionText':
+            return {
+                ...draft,
+                sections: draft.sections.map((section) => (section.key === action.key ? { ...section, text: action.text } : section)),
+            };
         case 'line':
             return updateLine(action.key, (line) => ({ ...line, ...action.patch }));
         case 'ingredientText':
@@ -187,6 +250,20 @@ export interface LineBody {
     quantityMax: number | null;
     unit: string | null;
     note: string | null;
+    /** Its section, by position in `sections`, or none (3b). */
+    sectionIndex: number | null;
+}
+
+/** One step as it's saved (3b). */
+export interface StepBody {
+    text: string;
+    timerSeconds: number | null;
+}
+
+/** One section of the method as it's saved (3b). */
+export interface SectionBody {
+    name: string;
+    steps: StepBody[];
 }
 
 /** A recipe as the editor saves it, online or kept on the device. */
@@ -196,7 +273,7 @@ export interface DraftBody {
     servings: number;
     prepTime: number | null;
     cookTime: number | null;
-    instructions: string | null;
+    sections: SectionBody[];
     ingredients: LineBody[];
 }
 
@@ -208,6 +285,7 @@ export interface RecipeBody extends Omit<DraftBody, 'ingredients'> {
         quantityMax: number | null;
         unit: string | null;
         note: string | null;
+        sectionIndex: number | null;
     }[];
 }
 
@@ -227,7 +305,7 @@ export function apiBody(body: DraftBody, idOf: (name: string) => string): Recipe
 }
 
 export type BuildResult =
-    | { body: DraftBody; lineKeys: string[] }
+    | { body: DraftBody; lineKeys: string[]; sectionKeys: string[] }
     | { errors: DraftErrors };
 
 const WHOLE_NUMBER = /^\d+$/;
@@ -249,8 +327,13 @@ export function readAmount(line: LineDraft) {
 
 /**
  * Check the draft and build the API's body. Every problem is reported at
- * once, each next to its box. `lineKeys` maps the body's line indexes back to
- * rows, for errors the API finds (`ingredients.2.unit`).
+ * once, each next to its box. `lineKeys` and `sectionKeys` map the body's
+ * indexes back to rows and sections, for errors the API finds
+ * (`ingredients.2.unit`, `sections.0.steps.3.text`).
+ *
+ * A section is saved if it has steps or a line in it; an empty "Method" is
+ * left out, so a recipe with no method has no sections, as the migration
+ * leaves it.
  */
 export function buildRecipeBody(draft: RecipeDraft): BuildResult {
     const errors: DraftErrors = {};
@@ -276,6 +359,24 @@ export function buildRecipeBody(draft: RecipeDraft): BuildResult {
     const prepTime = minutes('prepTime');
     const cookTime = minutes('cookTime');
 
+    const usedSections = new Set(draft.lines.filter((line) => !isBlank(line)).map((line) => line.sectionKey));
+    const sections: SectionBody[] = [];
+    const sectionKeys: string[] = [];
+    for (const section of draft.sections) {
+        const steps = methodSteps(section.text);
+        const name = section.name.trim();
+        if (steps.length === 0 && !usedSections.has(section.key)) continue;
+        if (name === '') errors[sectionErrorKey(section.key, 'name')] = 'Give the section a name.';
+        else if (name.length > LIMITS.sectionName) {
+            errors[sectionErrorKey(section.key, 'name')] = `Keep the section's name to ${LIMITS.sectionName} characters or fewer.`;
+        }
+        if (steps.some((step) => step.length > LIMITS.stepText)) {
+            errors[sectionErrorKey(section.key, 'steps')] = `Keep each step to ${LIMITS.stepText} characters or fewer.`;
+        }
+        sections.push({ name, steps: steps.map((text) => ({ text, timerSeconds: section.timers[text] ?? null })) });
+        sectionKeys.push(section.key);
+    }
+
     const ingredients: LineBody[] = [];
     const lineKeys: string[] = [];
     for (const line of draft.lines) {
@@ -299,7 +400,14 @@ export function buildRecipeBody(draft: RecipeDraft): BuildResult {
         }
 
         if (!('error' in amount) && line.ingredient) {
-            ingredients.push({ ingredientId: line.ingredient.id, ingredientName: line.ingredient.name, ...amount, note });
+            const sectionIndex = line.sectionKey ? sectionKeys.indexOf(line.sectionKey) : -1;
+            ingredients.push({
+                ingredientId: line.ingredient.id,
+                ingredientName: line.ingredient.name,
+                ...amount,
+                note,
+                sectionIndex: sectionIndex === -1 ? null : sectionIndex,
+            });
             lineKeys.push(line.key);
         }
     }
@@ -313,10 +421,11 @@ export function buildRecipeBody(draft: RecipeDraft): BuildResult {
             servings: Number(servings),
             prepTime,
             cookTime,
-            instructions: optionalText(draft.instructions),
+            sections,
             ingredients,
         },
         lineKeys,
+        sectionKeys,
     };
 }
 
@@ -328,14 +437,15 @@ const LINE_FIELDS: Record<string, LineField> = {
     note: 'note',
 };
 
-const RECIPE_FIELDS = new Set(['name', 'description', 'servings', 'prepTime', 'cookTime', 'instructions']);
+const RECIPE_FIELDS = new Set(['name', 'description', 'servings', 'prepTime', 'cookTime']);
 
 /**
  * Put the API's per-field messages next to their boxes. `ingredients.2.unit`
- * is the third line sent, which `lineKeys` turns back into a row. Anything
- * else is shown for the whole form.
+ * is the third line sent, which `lineKeys` turns back into a row, and
+ * `sections.1.steps.0.text` the second section's box, through `sectionKeys`.
+ * Anything else is shown for the whole form.
  */
-export function mapServerErrors(fields: Record<string, string>, lineKeys: string[]): DraftErrors {
+export function mapServerErrors(fields: Record<string, string>, lineKeys: string[], sectionKeys: string[] = []): DraftErrors {
     const errors: DraftErrors = {};
     const unplaced: string[] = [];
 
@@ -343,8 +453,11 @@ export function mapServerErrors(fields: Record<string, string>, lineKeys: string
         const line = /^ingredients\.(\d+)\.(\w+)$/.exec(path);
         const key = line ? lineKeys[Number(line[1])] : undefined;
         const field = line ? LINE_FIELDS[line[2]] : undefined;
+        const section = /^sections\.(\d+)\.(name|steps)\b/.exec(path);
+        const sectionKey = section ? sectionKeys[Number(section[1])] : undefined;
 
         if (key && field) errors[lineErrorKey(key, field)] = message;
+        else if (sectionKey && section) errors[sectionErrorKey(sectionKey, section[2] as SectionField)] = message;
         else if (RECIPE_FIELDS.has(path)) errors[path] = message;
         else unplaced.push(`${path}: ${message}`);
     }

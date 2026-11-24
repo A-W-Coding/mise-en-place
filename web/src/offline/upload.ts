@@ -67,25 +67,45 @@ async function resolveIngredients(body: DraftBody): Promise<RecipeBody> {
     return apiBody(body, (name) => ids.get(name) ?? '');
 }
 
-/** Whether the API's recipe says what this body says. Lines are compared by ingredient name, which new ingredients have before ids. */
+/**
+ * Whether the API's recipe says what this body says: its fields, its
+ * method's sections and steps, and its lines with their sections. Lines are
+ * compared by ingredient name, which new ingredients have before ids.
+ */
 export function sameRecipe(recipe: Recipe, body: DraftBody): boolean {
-    const fields = (value: Omit<DraftBody, 'ingredients'>) => [
+    const fields = (value: Omit<DraftBody, 'ingredients' | 'sections'>) => [
         value.name,
         value.description,
         value.servings,
         value.prepTime,
         value.cookTime,
-        value.instructions,
     ];
-    const lines = body.ingredients.map((line) => [line.ingredientName, line.quantity, line.quantityMax, line.unit, line.note]);
+    const sections = (value: { name: string; steps: { text: string; timerSeconds: number | null }[] }[]) =>
+        value.map((section) => [section.name, section.steps.map((step) => [step.text, step.timerSeconds])]);
+    const lines = body.ingredients.map((line) => [
+        line.ingredientName,
+        line.quantity,
+        line.quantityMax,
+        line.unit,
+        line.note,
+        line.sectionIndex,
+    ]);
+    const sectionIndex = (id: string | null) => {
+        const index = recipe.sections.findIndex((section) => section.id === id);
+        return index === -1 ? null : index;
+    };
     const recipeLines = recipe.recipeIngredients.map((line) => [
         line.ingredient.name,
         line.quantity,
         line.quantityMax,
         line.unit,
         line.note,
+        sectionIndex(line.sectionId),
     ]);
-    return JSON.stringify([fields(recipe), recipeLines]) === JSON.stringify([fields(body), lines]);
+    return (
+        JSON.stringify([fields(recipe), sections(recipe.sections), recipeLines]) ===
+        JSON.stringify([fields(body), sections(body.sections), lines])
+    );
 }
 
 /** What to send: a recipe's change, with the versions sent before whose answers never came. */
@@ -190,12 +210,26 @@ export async function uploadWaitingChanges(queryClient: QueryClient): Promise<vo
  */
 export function recipeFromChange(change: WaitingChange, base?: { createdAt: string }): Recipe {
     const saved = new Date(change.savedAt).toISOString();
-    const { ingredients, ...fields } = change.body;
+    const { ingredients, sections, ...fields } = change.body;
+    const sectionId = (index: number) => `${change.recipeId}:section-${index}`;
     return {
         id: change.recipeId,
         ...fields,
         createdAt: base?.createdAt ?? new Date(change.createdAt).toISOString(),
         updatedAt: saved,
+        sections: sections.map((section, index) => ({
+            id: sectionId(index),
+            recipeId: change.recipeId,
+            name: section.name,
+            orderIndex: index,
+            steps: section.steps.map((step, orderIndex) => ({
+                id: `${sectionId(index)}:${orderIndex}`,
+                sectionId: sectionId(index),
+                orderIndex,
+                text: step.text,
+                timerSeconds: step.timerSeconds,
+            })),
+        })),
         recipeIngredients: ingredients.map((line, index) => {
             const id = line.ingredientId ?? `new:${line.ingredientName}`;
             return {
@@ -207,6 +241,7 @@ export function recipeFromChange(change: WaitingChange, base?: { createdAt: stri
                 quantityMax: line.quantityMax,
                 unit: line.unit,
                 note: line.note,
+                sectionId: line.sectionIndex === null ? null : sectionId(line.sectionIndex),
                 ingredient: { id, name: line.ingredientName, createdAt: saved, updatedAt: saved },
             };
         }),

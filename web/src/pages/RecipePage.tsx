@@ -38,7 +38,7 @@ import { ErrorBanner } from '../components/ErrorBanner';
 import { Menu } from '../components/Menu';
 import { recipeMenuItems } from '../components/recipeMenu';
 import { useDocumentTitle } from '../components/useDocumentTitle';
-import { methodSteps, recipeMeta } from '../format';
+import { recipeMeta } from '../format';
 import page from '../components/Page.module.css';
 import styles from './RecipePage.module.css';
 
@@ -127,7 +127,10 @@ interface RecipeContentProps {
 }
 
 function RecipeContent({ recipe, onDelete, cooking, onCookingChange }: RecipeContentProps) {
-    const steps = methodSteps(recipe.instructions);
+    // A section with no steps only groups ingredient lines; the method leaves it out
+    const method = recipe.sections.filter((section) => section.steps.length > 0);
+    // One section called "Method" needs no heading of its own: it's what a migrated recipe has
+    const named = method.length > 1 || (method.length === 1 && method[0]?.name !== 'Method');
 
     return (
         <>
@@ -179,17 +182,22 @@ function RecipeContent({ recipe, onDelete, cooking, onCookingChange }: RecipeCon
                     <h2 id="method-heading" className={styles.sectionTitle}>
                         Method
                     </h2>
-                    {steps.length === 0 ? (
+                    {method.length === 0 ? (
                         <p className={styles.empty}>No method yet.</p>
                     ) : (
-                        <ol className={styles.steps}>
-                            {steps.map((step, index) => (
-                                <li key={index} className={styles.step}>
-                                    <span className={styles.stepNumber}>{index + 1}</span>
-                                    <span>{step}</span>
-                                </li>
-                            ))}
-                        </ol>
+                        method.map((section) => (
+                            <div key={section.id} className={styles.methodSection}>
+                                {named && <h3 className={styles.methodSectionName}>{section.name}</h3>}
+                                <ol className={styles.steps}>
+                                    {section.steps.map((step, index) => (
+                                        <li key={step.id} className={styles.step}>
+                                            <span className={styles.stepNumber}>{index + 1}</span>
+                                            <span>{step.text}</span>
+                                        </li>
+                                    ))}
+                                </ol>
+                            </div>
+                        ))
                     )}
                 </section>
             </div>

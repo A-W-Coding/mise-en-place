@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import type { DraftBody } from '../editor/draft';
 import { memoryStorage, setOfflineStorage } from './storage';
 import {
+    upgradeBody,
     discardWaitingChange,
     getWaitingState,
     keepWaitingChange,
@@ -16,7 +17,7 @@ const ID_A = 'aaaaaaaa-0000-4000-8000-000000000001';
 const ID_B = 'bbbbbbbb-0000-4000-8000-000000000002';
 
 function body(name: string): DraftBody {
-    return { name, description: null, servings: 1, prepTime: null, cookTime: null, instructions: null, ingredients: [] };
+    return { name, description: null, servings: 1, prepTime: null, cookTime: null, sections: [], ingredients: [] };
 }
 
 /** The changes as a fresh start of the app would read them from storage. */
@@ -97,6 +98,52 @@ describe('waiting changes', () => {
         await markProblem(old!, { kind: 'deleted' });
 
         expect((await afterReload())[0]?.problem).toBeNull();
+    });
+
+    test('a change saved before 3b, with the method as text, is brought up to date on load, as the migration does', async () => {
+        const old = {
+            recipeId: ID_A,
+            kind: 'edit',
+            etag: '"5"',
+            createdAt: 1,
+            savedAt: 1,
+            problem: null,
+            body: {
+                ...body('Toast'),
+                sections: undefined,
+                instructions: '1. Toast it.\n\n2) Butter it.',
+                ingredients: [{ ingredientId: 'b', ingredientName: 'bread', quantity: 2, quantityMax: null, unit: null, note: null }],
+            },
+            sent: [{ ...body('Toast'), sections: undefined, instructions: null, ingredients: [] }],
+        };
+        const storage = memoryStorage();
+        await storage.setMany([['waitingChanges', [old]]]);
+        setOfflineStorage(storage);
+
+        const [change] = await afterReload();
+
+        expect(change?.body).toEqual({
+            ...body('Toast'),
+            sections: [
+                {
+                    name: 'Method',
+                    steps: [
+                        { text: 'Toast it.', timerSeconds: null },
+                        { text: 'Butter it.', timerSeconds: null },
+                    ],
+                },
+            ],
+            ingredients: [
+                { ingredientId: 'b', ingredientName: 'bread', quantity: 2, quantityMax: null, unit: null, note: null, sectionIndex: null },
+            ],
+        });
+        expect(change?.body).not.toHaveProperty('instructions');
+        expect(change?.sent).toEqual([body('Toast')]);
+    });
+
+    test('a body already up to date is left as it is', () => {
+        const current = { ...body('Toast'), sections: [{ name: 'Sauce', steps: [] }] };
+        expect(upgradeBody(current)).toEqual(current);
     });
 
     test('can be discarded', async () => {

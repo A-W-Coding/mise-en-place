@@ -7,18 +7,18 @@
  * ordering (junction tables first, then parent tables).
  */
 
-import { PrismaClient } from '@prisma/client';
-import { prisma } from '../client.js';
+import { prisma, type Database } from '../client.js';
 import { assertSafeDatabase, TEST_ONLY } from './safe-database.js';
 
 /** Shape every seed module must satisfy. */
 interface SeedModule {
-    seed: (prisma: PrismaClient) => Promise<void>;
+    seed: (prisma: Database) => Promise<void>;
 }
 
 /**
  * Delete all rows from every table in foreign-key-safe order.
- * RecipeIngredient → Recipe → Ingredient.
+ * RecipeIngredient → Recipe (taking its sections, steps, images, tags and
+ * equipment lines with it) → the shared Ingredient, Tag and Equipment lists.
  *
  * Refuses to run unless DATABASE_URL names a `_test` database.
  *
@@ -31,6 +31,8 @@ export async function cleanDatabase(): Promise<void> {
         await prisma.recipeIngredient.deleteMany({});
         await prisma.recipe.deleteMany({});
         await prisma.ingredient.deleteMany({});
+        await prisma.tag.deleteMany({});
+        await prisma.equipment.deleteMany({});
     } catch (error) {
         console.error('[cleanDatabase] Failed:', error);
         throw error;
