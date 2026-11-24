@@ -20,22 +20,11 @@ import { isPrismaError } from '../utils/prisma-errors.js';
 import { fuzzySearchByName } from '../utils/fuzzy-search.js';
 import { parseOr400 } from '../utils/validation.js';
 import { recipeEtag, ifMatchDates } from '../utils/etag.js';
+import { RECIPE_INCLUDE } from '../utils/recipe-query.js';
 import { createRecipeSchema, updateRecipeSchema, IngredientLine } from '../schemas/recipes.js';
 import { listQuerySchema } from '../schemas/list-query.js';
 
 const router = Router();
-
-/**
- * Standard Prisma `include` clause used by every recipe query.
- * Nests recipeIngredients → ingredient so the client receives
- * fully-resolved ingredient data, with the lines in recipe order.
- */
-const RECIPE_INCLUDE = {
-    recipeIngredients: {
-        include: { ingredient: true },
-        orderBy: { orderIndex: 'asc' },
-    },
-} as const;
 
 /**
  * The fields of a recipe in a list: everything but its ingredient lines and
@@ -175,10 +164,14 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
  *
  * Body (see `createRecipeSchema`):
  *  - `name` (string, required)
+ *  - `id` (UUID, optional): chosen by the client (3c, D15). A device that
+ *    created the recipe offline sends the same id every time it retries the
+ *    upload, so a retry after a lost answer gets 409 instead of a second copy.
  *  - `description`, `servings`, `prepTime`, `cookTime`, `instructions` (optional)
  *  - `ingredients` (array of `{ ingredientId, quantity, quantityMax, unit, note }`, optional)
  *
- * @returns 201 with the created Recipe and its `ETag`, or 400 on validation failure.
+ * @returns 201 with the created Recipe and its `ETag`, 400 on validation
+ *          failure, or 409 if a recipe already has the given `id`.
  */
 router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -199,7 +192,11 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
 
         res.status(201).set('ETag', recipeEtag(recipe.updatedAt)).json(recipe);
     } catch (error) {
-        if (isPrismaError(error, 'P2003')) {
+        if (isPrismaError(error, 'P2002')) {
+            // A recipe's only unique field is its id, so this is a taken id.
+            // The create and its lines are one statement, so nothing changed.
+            res.status(409).json({ error: 'A recipe with that id already exists.' });
+        } else if (isPrismaError(error, 'P2003')) {
             res.status(400).json({ error: 'One or more ingredient IDs are invalid.' });
         } else {
             next(error);

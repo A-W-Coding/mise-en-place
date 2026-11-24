@@ -3,8 +3,8 @@
 # Mise en place: hardening plan (Phase 1 to Phase 3c)
 
 > **Status**
-> - Current step: **Step 15: the snapshot, and ids chosen by the client**, ready to start once you've reviewed Phase 3c's steps. Phase 3a is done (2026-11-23). D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b), and Phase 3c's Steps 15–19 are written. Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
-> - Last updated: 2026-11-24 (D15 settled; Phase 3c's steps written)
+> - Current step: **Step 16: the offline copy**, ready to start. Step 15 is done (2026-11-24), with CI to be confirmed when its PR opens. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
+> - Last updated: 2026-11-24 (Step 15: the snapshot, and ids chosen by the client)
 > - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
@@ -622,18 +622,18 @@ Phase 3c comes before 3b (D15). Each device keeps a full snapshot of the data (D
 
 **Why:** these are 3c's only server changes (§3.2, Phase 3c). As in Step 9, they're easier to test before the client depends on them.
 
-- [ ] `GET /api/sync` returns `{ recipes, ingredients }`, each recipe as `GET /api/recipes/:id` returns it (§3.3). It's deterministic: every array is sorted (recipes and ingredients by name, then id; lines by `orderIndex`), and the body has no timestamp of its own, so the same data always gives the same bytes. `tags` and `equipment` join it in 3b
-- [ ] Its `ETag` is a SHA-256 hash of the body. `If-None-Match` with the current one gets a 304 with no body
-- [ ] Gzip for the app's responses, through the `compression` package. That's a new dependency, named here as the working rules ask. It's applied to the whole app, so the client's files gain it too, and images, already compressed, are skipped. Check that `tailscale serve` passes it through to the phone
-- [ ] `POST /api/recipes` accepts an optional `id`, a UUID. A taken id gets 409 `{ "error": "A recipe with that id already exists." }` and changes nothing. `PATCH` still refuses `id`
-- [ ] Integration tests:
+- [x] `GET /api/sync` returns `{ recipes, ingredients }`, each recipe as `GET /api/recipes/:id` returns it (§3.3). It's deterministic: every array is sorted (recipes and ingredients by name, then id; lines by `orderIndex`), and the body has no timestamp of its own, so the same data always gives the same bytes. `tags` and `equipment` join it in 3b
+- [x] Its `ETag` is a SHA-256 hash of the body. `If-None-Match` with the current one gets a 304 with no body
+- [x] Gzip for the app's responses, through the `compression` package. That's a new dependency, named here as the working rules ask. It's applied to the whole app, so the client's files gain it too, and images, already compressed, are skipped. Whether `tailscale serve` passes it through to the phone can only be checked once it's deployed, so that check moved to Step 19
+- [x] `POST /api/recipes` accepts an optional `id`, a UUID. A taken id gets 409 `{ "error": "A recipe with that id already exists." }` and changes nothing. `PATCH` still refuses `id`
+- [x] Integration tests:
   - the snapshot's shape and order
   - the same data gives the same ETag; a new recipe, an edit, a delete and an ingredient rename each give a new one
   - a 304 for a matching `If-None-Match`
   - a deleted recipe is missing from the next snapshot
   - a gzip response when the request accepts it
   - `POST` with an id; a taken id (409, nothing changed); an id that isn't a UUID (400); `id` on `PATCH` (400)
-- [ ] `docs/api.md`: `/api/sync`, the `id` on create, and compression
+- [x] `docs/api.md`: `/api/sync`, the `id` on create, and compression
 
 **Done when:** all tests pass locally and in CI, and the API reference describes the changes.
 
@@ -705,6 +705,7 @@ Phase 3c comes before 3b (D15). Each device keeps a full snapshot of the data (D
 **Why:** Playwright's offline mode stands in for the phone's. Being off the tailnet with Proton on, the app being closed by Android, and persistent storage in Firefox need the real phone.
 
 - [ ] Merge to `main`, then run `scripts/deploy.sh` on the Pi
+- [ ] Check that gzip reaches the phone through `tailscale serve` (moved from Step 15): `/api/sync` and the app's script arrive with `Content-Encoding: gzip`
 - [ ] On your phone, in the installed app (you):
   - with Tailscale on, open the app so it fetches the snapshot, then tap Protect in Options and allow it
   - switch to Proton or airplane mode: the app opens from the Home Screen, and recipes open, search and work with cooking mode
@@ -1360,3 +1361,19 @@ Phase 3c comes before 3b (D15). Each device keeps a full snapshot of the data (D
   - **Plan:** Phase 3c's Steps 15–19 are written: the API (15), the offline copy (16), saving offline and uploading (17), uploads that can't go through (18), and the deploy and phone check (19).
 
   Next: review Phase 3c's steps, then Step 15.
+- **2026-11-24:** Phase 3c's plan merged (PR #17, CI green). Step 15 done.
+  - **`GET /api/sync`** (`src/routes/sync.ts`) returns `{ recipes, ingredients }`.
+    - Each recipe is read with the same `RECIPE_INCLUDE` as `GET /api/recipes/:id`. That moved into `src/utils/recipe-query.ts`, so the two can't drift apart.
+    - Both lists are sorted by name, then id, and the lines by `orderIndex`.
+    - The two queries run in one transaction at REPEATABLE READ, so they see the database at a single moment. Otherwise a recipe saved between them could use an ingredient missing from the list.
+  - **The ETag** is the body's SHA-256, in base64url and quoted. `If-None-Match` uses the weak comparison, as HTTP says it should, so `W/"…"`, a list containing the ETag, and `*` also get the 304. The response has `Cache-Control: no-cache`.
+  - **Compression:** `compression` 1.8.2 (released 2026-09-11) and its types are new dependencies. It's the first middleware in `app.ts`, so it covers the client's files too. It skips responses under 1 kB, where it saves little, and types that are already compressed. Whether `tailscale serve` passes it through is checked in Step 19, after the deploy. It's a plain reverse proxy, so it should.
+  - **Ids chosen by the client:** `createRecipeSchema` takes an optional `id`, a UUID, lowercased because ids are stored and compared as text. The POST route turns P2002 into 409 "A recipe with that id already exists.". The create and its lines are one statement, so nothing changes. `PATCH` still refuses `id`, which an existing test checks.
+  - **Tests:** 420 API tests, 35 of them new.
+    - `tests/sync.test.ts`: the shape and order, the ETag across five kinds of change, the 304s, compression, and unit tests of `snapshotEtag()` and `noneMatch()`.
+    - `recipe-api.test.ts`: five for the `id`, including a create sent twice leaving one copy.
+    - `schemas.test.ts`: its "unknown field" example for a new recipe was `id`; it's now `createdAt`, and the `id` has tests of its own.
+    - Playwright in Chromium: all 38 pass, against the rebuilt API, now serving the client's files gzipped.
+  - **Docs:** `docs/api.md` (the snapshot, the `id`, compression), and the README (endpoints, structure, test count).
+
+  Next: Step 16, the offline copy.

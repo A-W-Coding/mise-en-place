@@ -172,6 +172,66 @@ describe('Recipe API', () => {
         });
     });
 
+    // ── POST with an id chosen by the client (3c, D15) ──────────────────────
+
+    describe('POST /api/recipes with an id', () => {
+        test('should create the recipe with that id', async () => {
+            const id = randomUUID();
+
+            const response = await request.post('/api/recipes').send({ id, name: 'Toast' });
+
+            expect(response.status).toBe(201);
+            expect(response.body.id).toBe(id);
+            expect((await request.get(`/api/recipes/${id}`)).body.name).toBe('Toast');
+        });
+
+        test('should store an uppercase id in lowercase', async () => {
+            const id = randomUUID();
+
+            const response = await request.post('/api/recipes').send({ id: id.toUpperCase(), name: 'Toast' });
+
+            expect(response.status).toBe(201);
+            expect(response.body.id).toBe(id);
+        });
+
+        test('should return 409 and change nothing when a recipe has the id already', async () => {
+            const chili = await beefChili();
+            const onion = await idOf('onion');
+
+            const response = await request.post('/api/recipes').send({
+                id: chili.id.toUpperCase(),
+                name: 'Impostor',
+                ingredients: [{ ingredientId: onion, quantity: 1 }],
+            });
+
+            expect(response.status).toBe(409);
+            expect(response.body).toEqual({ error: 'A recipe with that id already exists.' });
+            const after = await request.get(`/api/recipes/${chili.id}`);
+            expect(after.body.name).toBe('Beef Chili');
+            expect(after.body.recipeIngredients).toHaveLength(10);
+            expect(after.headers.etag).toBe(`"${chili.updatedAt.getTime()}"`);
+            expect(await prisma.recipe.count()).toBe(1);
+        });
+
+        test('should leave one copy when a create is sent again', async () => {
+            const body = { id: randomUUID(), name: 'Toast' };
+
+            const first = await request.post('/api/recipes').send(body);
+            const retry = await request.post('/api/recipes').send(body);
+
+            expect(first.status).toBe(201);
+            expect(retry.status).toBe(409);
+            expect(await prisma.recipe.count({ where: { name: 'Toast' } })).toBe(1);
+        });
+
+        test('should return 400 for an id that is not a UUID', async () => {
+            const response = await request.post('/api/recipes').send({ id: 'toast-1', name: 'Toast' });
+
+            expect(response.status).toBe(400);
+            expect(response.body.fields).toEqual({ id: 'Must be a UUID.' });
+        });
+    });
+
     // ── POST validation ─────────────────────────────────────────────────────
 
     describe('POST /api/recipes validation', () => {

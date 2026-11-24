@@ -109,7 +109,7 @@ Run tests with `npm test`, which sets up the environment Jest needs. It:
 3. runs the test files one at a time, because they share one database
 4. resets the database to the sample data before each test, and empties it after
 
-There are 385 tests in [`tests/`](tests): integration tests that send real requests to the API with Supertest, and unit tests for the request schemas, the units list, the quantity formatting and the helpers. `npm test -- --coverage` prints a coverage table and writes an HTML report to `coverage/lcov-report/index.html`.
+There are 420 tests in [`tests/`](tests): integration tests that send real requests to the API with Supertest, and unit tests for the request schemas, the units list, the quantity formatting and the helpers. `npm test -- --coverage` prints a coverage table and writes an HTML report to `coverage/lcov-report/index.html`.
 
 The tests don't type-check (ts-jest only transpiles), so run `npx tsc --noEmit` as well.
 
@@ -137,7 +137,7 @@ GitHub Actions runs on every pull request into `main` and every push to `main`, 
 | GET | `/api/health` | 200 `{"status":"ok"}` if the database answers, otherwise 503 |
 | GET | `/api/recipes` | List recipes. `?search=`, `?limit=`, `?offset=` |
 | GET | `/api/recipes/:id` | Get a recipe with its ingredient lines |
-| POST | `/api/recipes` | Create a recipe, optionally with its lines |
+| POST | `/api/recipes` | Create a recipe, optionally with its lines and an `id` chosen by the client. 409 if that id is taken |
 | PATCH | `/api/recipes/:id` | Update a recipe. An `ingredients` array replaces every line |
 | DELETE | `/api/recipes/:id` | Delete a recipe and its lines |
 | GET | `/api/ingredients` | List ingredients. `?search=`, `?limit=`, `?offset=` |
@@ -145,6 +145,7 @@ GitHub Actions runs on every pull request into `main` and every push to `main`, 
 | POST | `/api/ingredients` | Create an ingredient. 409 if the name exists |
 | PATCH | `/api/ingredients/:id` | Rename an ingredient. 409 if the name exists |
 | DELETE | `/api/ingredients/:id` | Delete an ingredient. 409 while a recipe uses it |
+| GET | `/api/sync` | Every recipe and ingredient, for the offline copy. 304 when `If-None-Match` names the current `ETag` |
 
 Lists return a JSON array, with the total across all pages in the `X-Total-Count` header. [`docs/api.md`](docs/api.md) has every parameter, body, response and error.
 
@@ -164,12 +165,12 @@ From Phase 2 the app runs on a Raspberry Pi, in Docker, on `127.0.0.1:3000` only
 
 ```
 src/
-  app.ts                 The Express app: CORS, JSON parsing, routes, error handler (tests import it)
+  app.ts                 The Express app: compression, CORS, JSON parsing, routes, error handler (tests import it)
   server.ts              Loads .env and starts listening
-  routes/                health, recipes, ingredients
+  routes/                health, recipes, ingredients, sync
   schemas/               Zod schemas for every request body and list query
   middleware/            CORS policy, serving the web client, and the error handler
-  utils/                 Validation, fuzzy search, ETags, Prisma error helpers
+  utils/                 Validation, fuzzy search, ETags, how a whole recipe is read, Prisma error helpers
 shared/                  Code the API and the web client share
   units.ts               The canonical unit list and canonicaliseUnit()
   quantity.ts            Shows and reads amounts as fractions (1½, 2–3)
