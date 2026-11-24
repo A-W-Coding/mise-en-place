@@ -15,7 +15,7 @@ To create a comprehensive recipe management system that combines the joy of cook
 - Implement a modern, responsive user interface that works well on both desktop and mobile devices
 - Establish a robust development environment that follows industry best practices for deployment, testing, and maintenance
 - Build a system that can evolve over time with new features while maintaining stability
-- Provide a seamless user experience with offline capability for recipe viewing
+- Provide a seamless user experience that works offline, for reading recipes and for creating and editing them
  
 ### Target User
  
@@ -111,7 +111,7 @@ The Recipe App is a React web app, installable as a PWA, backed by a Node.js API
 2. **Progressive Web App (PWA)**: The same app, installed
    - Installs from the browser on phone and desktop, with no app store. The main target is Firefox on Android, installed to the Home Screen
    - Opens in its own window, like a native app, which is what replaced Electron (D7)
-   - Offline recipe reading from a full snapshot kept on the device with no expiry, refreshed whenever the app is online (Phase 3c; D8, D9)
+   - Offline use (Phase 3c; D8, D9, D15): every recipe readable from a full snapshot kept on the device with no expiry, refreshed whenever the app is online, and recipes created or edited offline uploaded once the Pi can be reached
    - Touch-friendly responsive controls
    - Keeps the screen on in cooking mode (Screen Wake Lock)
 
@@ -199,14 +199,15 @@ This phase deploys the API to the Raspberry Pi and makes it reachable from the u
 
 ### Phase 3: User Interface
 
-This phase introduces the user interface, mobile-friendly from the start, since the main use is reading a recipe on a phone while cooking. It was the largest phase, so the Phase 3 gate settled its open decisions on 22 Nov 2026 and split it into three parts, each a step of its own (D10).
+This phase introduces the user interface, mobile-friendly from the start, since the main use is reading a recipe on a phone while cooking. It was the largest phase, so the Phase 3 gate settled its open decisions on 22 Nov 2026 and split it into three parts, each a step of its own (D10). On 24 Nov 2026, D15 moved 3c before 3b and let recipes be created and edited offline.
 
-**Decisions (settled at the gate):**
+**Decisions (settled at the gate, and D15 after 3a):**
 - **D7, Electron: dropped.** The installed PWA is the desktop app (V2).
 - **D8, sync: a full snapshot with an ETag.** Delta sync with tombstones only if it's ever needed (F2).
-- **D9, offline: read-only.** Editing waits for a connection, so two devices can't conflict (F3).
+- **D9, offline: read-only.** Editing waits for a connection, so two devices can't conflict (F3). Revised by D15, below.
 - **D10: three parts,** below.
 - **D11, image uploads:** JPEG, PNG and WebP only, up to 15 MB and 50 megapixels, re-encoded to WebP with all metadata stripped, 10 per recipe (S4).
+- **D15, offline edits** (24 Nov 2026, after Phase 3a showed the phone is often off the tailnet): recipes can be created and edited offline. A change waits on the device and uploads by itself once the Pi can be reached, and the F3 check catches a change made elsewhere meanwhile. Deleting, and changing ingredients, still need a connection. 3c, which holds it, comes before 3b.
 
 #### Phase 3a: The UI and Cooking Mode — complete
 
@@ -239,31 +240,37 @@ On the Phase 1 schema, with no new tables. It was completed on 23 November 2026,
 - Tags, with colours and filtering, shown as coloured pills: a recipe's first two beside its name on the list, all of them on the recipe page; and equipment
 - Create, update and delete for every part of a recipe (F6)
 - Images included in the backups
+- The offline copy and waiting changes kept whole as recipes gain sections, steps, tags, equipment and images, since 3c comes first (D15). Thumbnails are cached ahead of time and full images as they're viewed; adding an image needs a connection
 
 **Success Criteria:**
 - A recipe with sections, steps, timers, images, tags and equipment can be created and edited from the phone
 - A phone photo uploads with its GPS data removed
 - A step with a timer starts it with one tap
 
-#### Phase 3c: Offline Reading
+#### Phase 3c: Offline Use
+
+Built before 3b (D15), on the Phase 1 schema.
 
 **Key Deliverables:**
 - A snapshot endpoint, and a client that keeps the snapshot on the device (D8)
 - An offline copy that never expires: it's replaced only by a complete newer snapshot, and a one-tap Protect button asks the browser for persistent storage, so the copy isn't cleared to free space
 - Failed refreshes retried automatically while the app is on screen, and the Refresh button to try at once
-- Every recipe readable, and cooking mode usable, with no connection
-- Editing disabled offline, with the age of the copy shown (D9)
-- Thumbnails cached ahead of time, full images as they're viewed
+- Every recipe readable, and cooking mode usable, with no connection, and a banner giving the copy's age when the Pi can't be reached
+- Recipes created and edited offline (D15): kept on the device, shown at once as waiting, and uploaded by themselves once the Pi can be reached. A new recipe's id is made on the device, so a retried upload can't create it twice
+- A waiting change that meets a change made elsewhere is never saved over it silently: keep mine, keep theirs, or keep both
 
 **Success Criteria:**
 - With the phone in airplane mode, the app opens from the Home Screen, any recipe opens, and cooking mode works
 - The same holds weeks after the app was last opened, with the copy from its last refresh
 - If the first refresh fails and the connection comes back later, the copy updates without restarting the app
 - A recipe deleted on the laptop disappears from the phone at its next refresh
+- With the phone off the tailnet, a new recipe and an edit to another show on the phone at once, survive the app being closed, and reach the laptop once the phone is back on the tailnet, with no extra taps
+- An offline edit to a recipe changed on the laptop meanwhile asks which to keep, and nothing is lost whichever is chosen
+- A connection lost partway through an upload never creates a recipe twice
 
 **Technical Focus:**
 - An intuitive interface that works one-handed on a phone
-- Efficient data loading, and offline reading that stays correct
+- Efficient data loading, and offline use that stays correct and never loses a change
 
 ### Phase 4: Hardening and Monitoring
 
@@ -426,7 +433,7 @@ The project will be considered successful when the following criteria are met:
  
 2. **Network Reliability**
    - **Risk**: VPN connection may be unreliable in certain network conditions
-   - **Mitigation**: Read-only offline use from a full snapshot (Phase 3c), a banner when offline, and a fresh snapshot as soon as the connection returns
+   - **Mitigation**: Offline use from a full snapshot (Phase 3c), with recipes created and edited offline uploading once the Pi can be reached (D15), a banner when offline, and a fresh snapshot as soon as the connection returns
  
 3. **Data Security**
    - **Risk**: Self-hosted solution may have security vulnerabilities
@@ -442,11 +449,11 @@ The project will be considered successful when the following criteria are met:
  
 6. **Sync Complexity**
    - **Risk**: Offline sync could become complex, with conflicts between devices
-   - **Mitigation**: A full snapshot instead of delta sync (D8), and read-only offline use, so there's nothing to reconcile (D9)
+   - **Mitigation**: A full snapshot instead of delta sync (D8). Offline, only recipes can be created and edited, with one waiting change per recipe, uploaded with the F3 check. So the only conflict is one recipe changed on two devices, and the phone then asks which to keep (D15)
  
 ## Conclusion
  
 This design document outlines a comprehensive plan for developing a personal recipe management application using modern web technologies and professional development practices. By following the six-phase approach, the project systematically builds from a functional API through deployment on the Pi with Tailscale, the user interface in three parts, hardening, mobile polish, and finally enhanced features.
  
-The Raspberry Pi serves as the central hub for recipe storage, with clients keeping a read-only offline copy, refreshed from a full snapshot whenever the data has changed. Each phase builds upon the previous one, ensuring that the system evolves in a controlled and tested manner toward the complete vision.
+The Raspberry Pi serves as the central hub for recipe storage, with clients keeping an offline copy, refreshed from a full snapshot whenever the data has changed, and uploading recipes created or edited offline once they can reach it. Each phase builds upon the previous one, ensuring that the system evolves in a controlled and tested manner toward the complete vision.
  

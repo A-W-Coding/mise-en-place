@@ -81,7 +81,7 @@ The same ingredient may appear on more than one line of a recipe, so there is de
    ```
 
    **Rationale:** UUIDs were chosen over auto-incrementing integers because they can be generated anywhere:
-   - A client could create a record offline and choose its id, with no risk of colliding with ids made on another device. Phase 3 keeps offline use read-only (D9), so the API doesn't accept client-generated ids yet, but UUIDs keep that option open.
+   - A client can create a record offline and choose its id, with no risk of colliding with ids made on another device. From Phase 3c, the web client chooses the id of every recipe it creates (D15): an upload retried after a dropped connection then finds the recipe already there, instead of creating it twice.
    - Records keep the same id when data is synced, exported or moved between databases.
 
    UUIDs are **not** a security measure here. `GET /api/recipes` lists every id, and the API has no authentication; access is controlled by the network (localhost in Phase 1, the Tailscale network from Phase 2).
@@ -234,13 +234,13 @@ No schema changes in this phase.
 
 ### 2.3 Phase 3: User Interface
 
-Phase 3 is split into three parts, each a step of its own (D10, V3):
+Phase 3 is split into three parts, each a step of its own (D10, V3). They're built in the order 3a, 3c, 3b: with the phone often off the tailnet, working offline matters more day to day than images and tags (D15).
 
 | Part | What it delivers | Schema changes |
 |------|------------------|----------------|
 | 3a | The web UI and cooking mode, installable as a PWA, on the Phase 1 schema | None |
 | 3b | Structured instructions and sections, images, tags and equipment | The entities below |
-| 3c | Read-only offline use, from a full snapshot (D8, D9) | None |
+| 3c | Offline use: reading from a full snapshot (D8, D9), and recipes created and edited offline, uploaded once the Pi can be reached (D15) | None |
 
 Electron was dropped (D7): the installed PWA is the desktop app. Recipe links moved to Phase 6 (§2.6), where the design document already had them (M1).
 
@@ -491,7 +491,7 @@ The API follows RESTful principles and is implemented using Express.js with Type
 
    **Rationale:**
    - One schema gives the validation rules, the TypeScript type and the normalisation (trimming, lowercase ingredient names, canonical units) in one place.
-   - The schemas are strict: an unknown field is a 400. That allowlist is what stops a client from setting server-owned fields such as `id`, `createdAt` or `orderIndex` (S3).
+   - The schemas are strict: an unknown field is a 400. That allowlist is what stops a client from setting server-owned fields such as `id`, `createdAt` or `orderIndex` (S3). The one exception is the `id` of a new recipe, which the client may choose from 3c (D15). Nothing can change an existing id.
 
 4. **Performance**
    - Every list endpoint is paginated, with a stable order, so the response size is bounded however many recipes there are
@@ -518,7 +518,7 @@ The API follows RESTful principles and is implemented using Express.js with Type
 
    **Implementation:** `GET /api/recipes/:id` returns an `ETag` header made from the recipe's `updatedAt`. A recipe `PATCH` or `DELETE` may send it back in `If-Match`. If the recipe has changed since, the API returns 412 and changes nothing.
 
-   **Rationale:** one person with the editor open on a phone and a laptop could otherwise save one edit over the other without knowing. The header is optional, so curl and scripts keep working; the web client always sends it. Editing offline would need far more, such as queued edits and conflict resolution, which is why offline use stays read-only (D9).
+   **Rationale:** one person with the editor open on a phone and a laptop could otherwise save one edit over the other without knowing. The header is optional, so curl and scripts keep working; the web client always sends it. The same check covers editing offline (3c, D15): a change saved on the device uploads with the ETag of the version it started from, so a change made elsewhere in the meantime is caught rather than overwritten (§3.4).
 
 ### 3.2 API Endpoints by Phase
  
@@ -682,11 +682,14 @@ Image files are served with `Cache-Control: public, max-age=31536000, immutable`
 | 413 | The upload is over 15 MB | `{ "error": "Images can be at most 15 MB." }` |
 | 415 | Not JPEG, PNG or WebP | `{ "error": "Only JPEG, PNG and WebP images are accepted." }` |
 
-#### Phase 3c: Offline Reading
+#### Phase 3c: Offline Use
 
 | Resource | Method | Endpoint | Description |
 |----------|--------|----------|-------------|
 | Sync | GET | `/api/sync` | Everything a client needs offline, with an `ETag`; 304 when unchanged (§3.3) |
+| Recipes | POST | `/api/recipes` | Also accepts an optional `id` (D15) |
+
+A new recipe's body may include `id`, a UUID chosen by the client. If a recipe already has that id, the API answers 409 `{ "error": "A recipe with that id already exists." }` and changes nothing. The web client sends one with every new recipe, online or off, so a retried upload can't create the same recipe twice: a 409 tells it the first attempt arrived. `PATCH` still refuses `id`.
 
 #### Phase 6: Enhanced Features
  
@@ -720,7 +723,7 @@ Offline clients keep a full copy of the data, refreshed from one snapshot endpoi
 }
 ```
 
-Each recipe is as `GET /api/recipes/:id` returns it, and each shared list holds every row.
+Each recipe is as `GET /api/recipes/:id` returns it, and each shared list holds every row. 3c comes before 3b (D15), so until 3b the snapshot holds `recipes` and `ingredients`; `tags` and `equipment` join it with 3b.
 
 **Implementation:**
 - The response is deterministic. Every array is sorted (recipes and the shared lists by name, then id; everything inside a recipe by `orderIndex`), and the body holds no timestamp of its own, so the same data always gives the same bytes.
@@ -731,7 +734,7 @@ Each recipe is as `GET /api/recipes/:id` returns it, and each shared list holds 
 **Rationale:**
 - A snapshot can't miss anything. Timestamp-based delta sync misses rows without an `updatedAt`, edits made through child endpoints, and deletes, unless every write bumps its parent and every delete leaves a tombstone (F2). Replacing the whole copy makes deleted recipes disappear on their own.
 - At personal scale the snapshot is small: a few hundred kilobytes for hundreds of recipes, less once compressed, and nothing at all when unchanged.
-- Offline use is read-only (D9), so data only flows from the server to the client, and there's nothing to reconcile.
+- The snapshot only ever flows from the server to the client, so it never needs merging. Changes made offline go up separately, through the ordinary recipe endpoints with their `If-Match` check, before the next snapshot comes down (D15, §3.4).
 - Delta sync (`?since=`) with a tombstone table stays possible if the collection ever outgrows this, without changing the client's offline model.
 
 ### 3.4 Web Client (Phase 3)
@@ -748,7 +751,7 @@ The web client is a React single-page app, installable as a PWA, and the only us
 | UI | React | As planned in the design document |
 | Routing | React Router | Deep links such as `/recipes/<id>` work, and survive a reload |
 | Server data | TanStack Query | Caching, refetching and request state while online |
-| Offline copy (3c) | IndexedDB, through idb-keyval | One record holding the latest snapshot. It never expires (see Offline below) |
+| Offline copy (3c) | IndexedDB, through idb-keyval | The latest snapshot, and the changes waiting to upload. Neither expires (see Offline below) |
 | Styling | CSS Modules, with the theme as CSS custom properties (D13) | Plain CSS, scoped to each component so screens can't restyle each other; light and dark swap the custom properties |
 | PWA | vite-plugin-pwa (Workbox) | Generates the manifest and the service worker |
 | Unit and component tests | Vitest, Testing Library | Vite-native, with Jest-style syntax |
@@ -775,7 +778,7 @@ The web client is a React single-page app, installable as a PWA, and the only us
   - The API's `fields` errors appear next to their inputs. Saving sends `If-Match`, and a 412 offers to reload the recipe.
   - Delete recipe sits at the bottom.
 - **Deleting a recipe:** from its ⋮ menu or the bottom of the editor, always after a confirmation.
-- **Options:** theme (system, light or dark) and text size, saved on the device; the timer sound, with a test; and the connection's state, to which 3c adds the offline copy's. Its Advanced section holds **Ingredients**: list, search, rename and delete, where a delete refused with 409 says the ingredient is in use. Ingredients are shared data, so they're kept out of the everyday screens.
+- **Options:** theme (system, light or dark) and text size, saved on the device; the timer sound, with a test; and the connection's state, to which 3c adds the offline copy's and any changes waiting to upload. Its Advanced section holds **Ingredients**: list, search, rename and delete, where a delete refused with 409 says the ingredient is in use. Ingredients are shared data, so they're kept out of the everyday screens.
 - **Cooking mode:** a switch on the recipe page that keeps the screen on, and at heart that's all it is. The page itself doesn't change: the whole recipe stays readable and scrollable, so cooking takes no more taps than reading. The Screen Wake Lock API keeps the screen on (Firefox 126 and later, and Chromium) until the switch is turned off or you leave the recipe, and the lock is taken again whenever the page becomes visible. Where the API is missing, the switch says the screen may sleep, rather than failing silently. A one-step-at-a-time view is optional, and waits for Phase 5.
 - **Timers:** for mid-length waits such as "stir every 15 minutes", not for short steps, or for the oven, which has its own. Most recipes won't need one, so they stay small and out of the way:
   - A small button adds a timer, with a length and an optional label. Several can run at once.
@@ -786,28 +789,42 @@ The web client is a React single-page app, installable as a PWA, and the only us
   - In 3b, a step with a `timerSeconds` gets a small button beside it that starts that timer.
 - **Printing:** a print stylesheet reduces a recipe to its ingredients and method, without navigation, buttons or a footer.
 
-3b adds the section, step, tag, equipment and image editors, tag filtering on the list, and tag pills. A pill uses its tag's colour as the background, with dark or light text chosen for contrast.
+3b adds the section, step, tag, equipment and image editors, tag filtering on the list, and tag pills. A pill uses its tag's colour as the background, with dark or light text chosen for contrast. Since 3c comes first (D15), 3b also keeps the offline copy and waiting changes whole: the snapshot gains tags and equipment, waiting changes carry sections and steps, and images join the offline copy.
 
 **Keeping devices in step:** the app may be open on the laptop and the phone at the same time. From 3a:
 - A device refreshes its data when the app opens, when it comes back to the foreground (switching back to the app or its tab), when its connection returns, and right after it saves a change of its own. Nothing refreshes in the background, and nothing polls on a timer.
 - A **Refresh** button refreshes at any time.
 - So with the app open on both, a recipe added on the laptop appears on the phone the next time the phone's app comes to the front, or when Refresh is tapped. The same holds the other way round.
 - If the recipe on screen was changed elsewhere, the page shows the new version at the next refresh. If it was deleted, the page says so instead of failing. An edit started before the change gets a 412 when saved, with an offer to reload (§3.1, principle 7).
-- In 3a these refreshes are TanStack Query's refetch on focus and reconnect. From 3c, the same moments also fetch the snapshot.
+- In 3a these refreshes are TanStack Query's refetch on focus and reconnect. From 3c, the same moments also upload any changes waiting on the device, then fetch the snapshot.
 
-**Offline (3c, D9):** the copy on the device must survive weeks without the app being opened.
+**Offline (3c, D8, D9):** the copy on the device must survive weeks without the app being opened.
 - **The app's files:** from 3a, the service worker caches them, so the app opens with no connection, however long it's been since it was last used.
 - **The data:** the offline copy is the latest snapshot, kept in IndexedDB as one record with its ETag and the time it was fetched. It has no expiry. It's replaced only when a newer snapshot has fully arrived, so a failed or partial refresh never leaves the device with less than it had. TanStack Query's own persistence isn't used for this, because by default it silently discards anything older than 24 hours.
-- **Refreshing:** the client fetches `/api/sync` at the moments listed under "Keeping devices in step". Offline, every page reads from the stored snapshot. Editing controls are disabled, with a banner showing when the copy was last refreshed.
-- **Retrying:** if a refresh fails, the client tries again while the app is on screen: after 15 seconds, then at doubling intervals up to every 5 minutes, until one succeeds. The browser's "online" signal only means the phone has a network, not that the Pi is reachable (Tailscale may be off, for example), so the client retries rather than waiting for that signal alone. Refresh tries straight away.
+- **Refreshing:** the client fetches `/api/sync` at the moments listed under "Keeping devices in step". When the Pi can't be reached, every page reads from the stored snapshot, with a banner saying so and when the copy was last refreshed. Search then matches recipe names on the device, more simply than the API's fuzzy search.
+- **Retrying:** if a refresh fails, the client tries again while the app is on screen: after 15 seconds, then at doubling intervals up to every 5 minutes, until one succeeds. The browser's "online" signal only means the phone has a network, not that the Pi is reachable (Tailscale may be off, for example), so the client retries rather than waiting for that signal alone. Refresh tries straight away. Waiting changes upload on the same schedule.
 - **Keeping the browser from clearing it:** the client asks for persistent storage with `navigator.storage.persist()`, so the browser won't clear the copy when the device runs low on space.
   - Firefox asks you to allow it, and only in response to a tap, so the request comes from a **Protect** button on the "Offline copy" line rather than happening silently.
   - Chrome decides by itself, without asking, and grants it to installed apps.
   - Neither Firefox nor Chrome puts a time limit on a site's data, and Safari's seven-day limit doesn't apply to Home Screen apps.
   - Firefox's "Delete browsing data on quit" setting would erase the copy, so it must stay off.
-- **Visible state:** an "Offline copy" line shows how many recipes are stored, when they were last refreshed, and whether storage is protected, with the Refresh button and, until storage is protected, the Protect button.
+- **Visible state:** an "Offline copy" line shows how many recipes are stored, when they were last refreshed, whether storage is protected, and how many changes are waiting to upload, with the Refresh button and, until storage is protected, the Protect button. Protecting matters more once changes are waiting, since they're the only copy until they upload.
 - **What can still remove it:** clearing the browser's data for the site, or removing the app from the Home Screen.
-- **Images:** thumbnails are cached ahead of time. Full images are cached as they're viewed, up to a limit.
+- **Images (3b):** images arrive after 3c, and 3b adds them to the offline copy: thumbnails are cached ahead of time, and full images as they're viewed, up to a limit. Adding an image needs a connection.
+
+**Editing offline (3c, D15):** recipes can be created and edited with the Pi out of reach. The phone is often off the tailnet, because Android runs one VPN at a time.
+- **Saving:** Save always tries the Pi first. If the Pi can't be reached (no answer, or a 502 or 504 from Tailscale), the change is kept on the device as a *waiting change*, and the editor closes as it does after any save. So the same Save works online and off, and a connection that drops mid-save loses nothing.
+- **What works offline:** creating and editing recipes. Deleting a recipe, and renaming or deleting an ingredient, still need the Pi; offline, they say so rather than waiting. They're rare, and they're the changes most likely to collide with another device.
+- **What you see:** a waiting change shows straight away, marked "Waiting to upload": a new recipe in the list, and an edited recipe's new version on its page, with when it was saved. Opening the editor on a recipe with a waiting change edits that version. So there's at most one waiting change per recipe, and it keeps the ETag of the version it started from.
+- **New ingredients:** offline, the ingredient picker suggests names from the offline copy. A name that isn't there becomes a new ingredient, created when the change uploads. If it was created elsewhere meanwhile (409), the existing one is used.
+- **Checking before saving:** the editor checks everything the API would refuse, such as a missing name, a length or an amount, so a change saved offline is rarely refused when it uploads.
+- **Uploading:** at the moments under "Keeping devices in step", and on the retry schedule above, waiting changes upload by themselves, oldest first, before the snapshot is fetched. New ingredients go first, then a `POST` for a new recipe, with its id, or a `PATCH` with `If-Match` for an edit. Each success replaces the recipe in the offline copy with the API's reply, so a page never steps back to the old version while the next snapshot loads. If the Pi can't be reached, the round stops and tries again later.
+- **A retried create:** a 409 for a new recipe's id means an earlier attempt arrived but its answer was lost, so the change counts as uploaded.
+- **When an upload can't go through,** the change stays on the device, marked "Needs your attention", with a banner until it's settled:
+  - **Changed elsewhere (412):** both versions are shown, with Keep mine (saved over the other), Keep theirs (mine discarded) and Keep both (mine saved as a new recipe, with "(copy)" after its name).
+  - **Deleted elsewhere (404):** save it as a new recipe, or discard it.
+  - **Refused (400):** the editor opens on the change, with the API's messages beside their fields.
+  - Nothing is discarded without a tap, and discarding asks first.
 
 **Accessibility:** semantic HTML, labelled form controls, visible focus, and text that scales with the browser's font size. Cooking mode must work one-handed.
 
@@ -970,17 +987,19 @@ Phase 3 adds tests at three levels:
 1. **API tests**, in the style of §5.2, for everything the API gains:
    - 3a: JSON 404s under `/api`; `If-Match`, where a stale ETag gets 412 and changes nothing; and list responses without ingredient lines
    - 3b: sections, steps, tags and equipment through the recipe body, including the `sectionIndex` rules; tag and equipment CRUD, including the 409s; and the image rules (D11). A JPEG carrying GPS data must come back without it. SVG, GIF and HEIC must be refused, and so must a file over 15 MB, an image over 50 megapixels and an 11th image
-   - 3c: the snapshot, its ETag and the 304, and that a deleted recipe is missing from the next snapshot
+   - 3c: the snapshot, its ETag and the 304, and that a deleted recipe is missing from the next snapshot; a new recipe with an id chosen by the client, a 409 that changes nothing when the id is taken, and `id` still refused by `PATCH`
 2. **Unit and component tests:**
    - `shared/quantity.ts`: formatting and parsing, as `test.each` tables, in the Jest suite beside the units tests, since it needs no browser
    - Client components with logic, in Vitest with Testing Library: the ingredient-line editor, mapping the API's `fields` errors onto inputs, and the timers, with fake timers
    - The offline store (3c): with the network down, a snapshot fetched 60 days earlier is still served; a failed or partial refresh leaves it untouched; only a complete new snapshot replaces it
+   - Waiting changes (3c): kept when the Pi can't be reached, one per recipe, and across a reload; uploaded oldest first, with new ingredients before their recipe; a 409 on a create counted as uploaded; a 412, 404 or 400 marked as needing attention, with nothing discarded without a tap
 3. **End-to-end tests** (Playwright):
    - Against the built client served by the real API, with a `_test` database reset to the base seed before each test (§5.3)
    - Every flow in Firefox and Chromium, at a phone size and a desktop size. Firefox because it's the phone's browser, and phone sizes because the phone is the main device
    - 3a: find a recipe by search; scroll the list until the next page loads; create one with lines and a new ingredient; edit it; get the 412 prompt when it changed elsewhere; delete it; turn cooking mode on and off; run two timers at once, and dismiss one when it finishes. With two browser contexts standing in for the laptop and the phone, a recipe added in one appears in the other when it returns to the foreground or presses Refresh
    - 3b: upload an image and make it the main one; edit sections, steps, tags and equipment; start a step's timer from its button
-   - 3c: load the app, go offline (`context.setOffline(true)`), and check that recipes still open and editing is disabled. Then reload the page while still offline, which is a fresh start from the stored copy rather than the open tab, and check again. Come back online, and see a change made elsewhere arrive. Make a refresh fail by blocking `/api/sync`, unblock it, and check the retry gets the new snapshot without a restart
+   - 3c: load the app, go offline (`context.setOffline(true)`), and check that recipes still open. Then reload the page while still offline, which is a fresh start from the stored copy rather than the open tab, and check again. Come back online, and see a change made elsewhere arrive. Make a refresh fail by blocking `/api/sync`, unblock it, and check the retry gets the new snapshot without a restart
+   - 3c, editing offline: create a recipe and edit another while offline, reload, and check both are still there, marked as waiting. Come back online and check both reach a second context without a tap. Edit a recipe offline while a second context changes it, and choose each of Keep mine, Keep theirs and Keep both. Let a create reach the API but lose its answer, and check the retry doesn't make a second copy
 
 CI runs the client's lint, type-check and unit tests, then the Playwright tests in Firefox and Chromium against the PostgreSQL service, alongside the API's tests. Playwright's Firefox is the desktop build of the same engine as Firefox for Android, so a few things, such as the install prompt and wake lock, are also checked by hand on the phone at the end of 3a and 3c.
 
@@ -1196,7 +1215,7 @@ This technical specification outlines the implementation plan for the Recipe App
  
 1. **Working Software First** - Phase 1 delivers a complete, testable API
 2. **Incremental Deployment** - Pi deployment in Phase 2 establishes the production environment early, with Tailscale HTTPS from day one
-3. **User Interface** - Phase 3 adds the web UI in three parts (the UI and cooking mode, then structured recipes and images, then offline reading), installable as a PWA on phone and desktop. Phase 5 polishes it for mobile
+3. **User Interface** - Phase 3 adds the web UI in three parts (the UI and cooking mode, then offline use, then structured recipes and images), installable as a PWA on phone and desktop. Phase 5 polishes it for mobile
 4. **Hardening** - Phase 4 adds alerts, monitoring and dependency updates
 5. **Enhanced Features** - Phase 6 adds advanced functionality
  
