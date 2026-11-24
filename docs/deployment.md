@@ -185,7 +185,12 @@ With Tailscale connected on the phone:
 
 Things worth knowing:
 
-- **Starting without a connection:** the service worker keeps the app's files on the phone, so the app opens even with Tailscale off. It then says it can't reach the server, until 3c adds an offline copy of the recipes.
+- **Starting without a connection:** the service worker keeps the app's files on the phone, so the app opens even with Tailscale off.
+- **Offline (3c):** the app keeps a copy of every recipe on the phone, refreshed whenever it opens or comes back to the front with the Pi in reach. Off the tailnet (Proton on, or airplane mode), recipes, search and cooking mode work from that copy, with a banner saying how old it is.
+- **Saving offline:** new recipes and edits made off the tailnet wait on the phone, marked "Waiting to upload", and upload by themselves once the Pi can be reached again, with no tap. Deleting a recipe, and renaming or deleting an ingredient, still need the connection.
+- **Protect it:** in **Options › Offline copy**, tap **Protect** once and allow it, so Firefox doesn't clear the copy when the phone runs short of space. Chrome and Edge decide for themselves, and allow it for installed apps. In Firefox, leave **Delete browsing data on quit** off: it would erase the copy every time.
+- **What clears it:** clearing the site's data in the browser's settings, or removing the app from the Home Screen, deletes the copy and any changes still waiting to upload. The copy comes back at the next refresh; waiting changes don't, so first check that Options shows none waiting.
+- **A change that couldn't upload,** because the recipe was changed or deleted on another device meanwhile, or the server refused it, shows a banner on every page. Its recipe page explains, with the choices: Keep mine, Keep theirs or Keep both; Save as a new recipe or Discard; or Edit it.
 - **Updates:** after a deploy, the next time you open the app it downloads the new version and reloads into it once. Running timers survive that, since they're kept on the phone.
 - **Cooking mode** keeps the screen on in Firefox 126 or later, and in Chrome. Where it can't, it says the screen may sleep.
 - **Timers** ring only while the app is on screen. If you switch to another app, one that ends rings when you come back.
