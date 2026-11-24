@@ -247,9 +247,9 @@ On the Phase 1 schema, with no new tables. It was completed on 23 November 2026,
 - A phone photo uploads with its GPS data removed
 - A step with a timer starts it with one tap
 
-#### Phase 3c: Offline Use
+#### Phase 3c: Offline Use — complete
 
-Built before 3b (D15), on the Phase 1 schema.
+Built before 3b (D15), on the Phase 1 schema. It was completed on 24 November 2026, on the Pi.
 
 **Key Deliverables:**
 - A snapshot endpoint, and a client that keeps the snapshot on the device (D8)

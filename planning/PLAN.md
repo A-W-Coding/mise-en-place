@@ -3,8 +3,8 @@
 # Mise en place: hardening plan (Phase 1 to Phase 3c)
 
 > **Status**
-> - Current step: **Step 19: deploy, and check on the phone**, all but one box done (2026-11-24). Every phone check passed, but a start with Proton on showed nothing until the request to the Pi failed, so pages now show the copy at once. That fix waits on its PR, a redeploy and a recheck on the phone; Phase 3c is then complete. Step 18 merged as PR #21, CI green; Step 17 as PR #20; Step 16 as PR #19; Step 15 as PR #18. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
-> - Last updated: 2026-11-24 (Step 19: deploy and phone check, and the copy shown at once)
+> - Current step: **Phase 3c is complete** (2026-11-24): Steps 15–19 merged (PRs #18–#22, CI green), deployed on the Pi, and every success criterion met on your phone. Next: Phase 3b's steps are written, the same way, when you're ready. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
+> - Last updated: 2026-11-24 (Phase 3c complete)
 > - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
@@ -608,6 +608,8 @@ Before starting (done 2026-11-23): the UI wireframes, made and reviewed together
 ## Phase 3c: offline use
 Phase 3c comes before 3b (D15). Each device keeps a full snapshot of the data (D8), so every recipe can be read and cooked from with no connection. Recipes can also be created and edited offline: the change waits on the device and uploads by itself once the Pi can be reached (D9, revised by D15). Deleting recipes, and renaming or deleting ingredients, still need a connection. There's no schema change. The specs are the reference: technical spec §3.2 (Phase 3c), §3.3, §3.4 ("Offline" and "Editing offline") and §5.6, and the design spec's Phase 3c. As in 3a, every step ends with its tests passing in CI.
 
+**Complete** (2026-11-24): every criterion below was met on the phone in Step 19.
+
 **Phase 3c is done when** the design spec's 3c success criteria are met:
 - With the phone in airplane mode, the app opens from the Home Screen, any recipe opens, and cooking mode works
 - The same holds weeks after the app was last opened, with the copy from its last refresh
@@ -717,7 +719,7 @@ Phase 3c comes before 3b (D15). Each device keeps a full snapshot of the data (D
 - [x] Weeks without opening the app: Playwright's clock and the store's unit tests cover it in CI. If you can leave the app unopened for a week or more, check it then and note it in the log
 - [x] Docs: `docs/architecture.md` (the offline copy and waiting changes), `docs/deployment.md` (Protect, and what clearing the site's data loses), and the README if any commands changed
 - [x] Found by the phone check: a start with Proton on showed nothing until the request to the Pi failed, which takes seconds. Pages now show the copy at once while the Pi is asked (added 2026-11-24)
-- [ ] Merge that, redeploy, and recheck on the phone that a start with Proton on shows the recipes at once (you)
+- [x] Merge that, redeploy, and recheck on the phone that a start with Proton on shows the recipes at once (you)
 - [x] Tick the boxes, then update the Status block and the Progress log
 
 **Done when:** every 3c success criterion above is met, and CI is green. **Phase 3c is then complete.** 3b's steps are written next.
@@ -1488,3 +1490,6 @@ Phase 3c comes before 3b (D15). Each device keeps a full snapshot of the data (D
   - Weeks without opening the app: CI covers it (the store's 60-day test). If you leave the app unopened for a week or more, check it then and note it here.
 
   Next: merge the fix, redeploy, and recheck check 2 on the phone. Phase 3c is then complete, and 3b's steps are written next.
+- **2026-11-24:** Step 19 merged (PR #22, CI green, Firefox included). Redeployed. Your recheck: with Proton on, a fresh start now shows the recipes at once, and the banner a few seconds later. **Phase 3c is complete.**
+
+  Next: Phase 3b's steps, written the same way, when you're ready.
