@@ -1,11 +1,11 @@
 > Created on 27 September 2026. This is the live copy: progress is ticked off here as each step is done.
 
-# Mise en place: hardening plan (Phase 1 to Phase 3a)
+# Mise en place: hardening plan (Phase 1 to Phase 3c)
 
 > **Status**
-> - Current step: **Phase 3a is done** (2026-11-23). Step 14 deployed it to the Pi and passed the checks on the phone and the laptop, with its CI to be confirmed when its PR opens. Next is D15 (offline edits), which decides whether 3c comes before 3b; that part's steps are written once it's settled. Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
-> - Last updated: 2026-11-23 (Step 14: deploy, and check on the phone)
-> - Blockers: the SSD for 8.1, about a month away. D15, before the next part of Phase 3 is planned
+> - Current step: **Step 15: the snapshot, and ids chosen by the client**, ready to start once you've reviewed Phase 3c's steps. Phase 3a is done (2026-11-23). D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b), and Phase 3c's Steps 15–19 are written. Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
+> - Last updated: 2026-11-24 (D15 settled; Phase 3c's steps written)
+> - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
 - Work through the steps in order. Each step gives a goal, why it matters, tasks as checkboxes, and a "done when" test.
@@ -54,20 +54,20 @@ The rule that reconciles them: **settle the spec first, then bring the code in l
 | D6 | List response shape for pagination | **Keep a plain array and add an `X-Total-Count` header**, which breaks nothing. The alternative is a `{ items, total, limit, offset }` envelope | Step 5 | **Decided 2026-11-02: a plain array plus an `X-Total-Count` header** |
 | D7 | Electron | **Drop it or defer it.** An installed PWA already covers the desktop (V2) | Phase 3 gate | **Decided 2026-11-22: drop it.** The installed PWA is the desktop app; Electron can come back if a real need appears |
 | D8 | Sync design | **A full snapshot with an ETag first.** Add delta sync with tombstones only if it's ever needed (F2) | Phase 3 gate | **Decided 2026-11-22: a full snapshot with an ETag.** Delta sync only if it's ever needed |
-| D9 | Offline editing | **Read-only offline** to begin with (F3) | Phase 3 gate | **Decided 2026-11-22: read-only offline.** Editing waits for a connection |
-| D10 | Split Phase 3 | **Yes, into three:** 3a is the UI plus cooking mode on the Phase 1 schema; 3b is structured instructions, images and tags; 3c is offline support (V3) | Phase 3 gate | **Decided 2026-11-22: three parts, as recommended.** 3b also takes sections, equipment and the missing endpoints (F6) |
+| D9 | Offline editing | **Read-only offline** to begin with (F3) | Phase 3 gate | **Decided 2026-11-22: read-only offline.** Editing waits for a connection. **Revised 2026-11-24 by D15:** recipes can be created and edited offline |
+| D10 | Split Phase 3 | **Yes, into three:** 3a is the UI plus cooking mode on the Phase 1 schema; 3b is structured instructions, images and tags; 3c is offline support (V3) | Phase 3 gate | **Decided 2026-11-22: three parts, as recommended.** 3b also takes sections, equipment and the missing endpoints (F6). **Order changed 2026-11-24 by D15:** 3a, then 3c, then 3b |
 | D11 | Image upload rules | Allowed types, size and pixel caps, re-encoding (S4) | Phase 3 gate | **Decided 2026-11-22:** JPEG, PNG and WebP, recognised from the contents (SVG, GIF and HEIC rejected). At most 15 MB and 50 megapixels, checked before decoding. Each image is turned upright, then re-encoded with sharp to WebP at 2000 px on the long side, plus a 400 px thumbnail, with all metadata stripped. The original isn't kept. Server-generated filenames, 10 images per recipe, stored in a Docker volume that's backed up with the database |
 | D12 | Nutrition data source | **USDA FoodData Central** as the primary source. Use Spoonacular only for live, uncached extras (V1) | Phase 6 | Deferred |
 | D13 | Styling | **Plain CSS with CSS Modules**, built into Vite. Nothing new to learn or upgrade, styles are scoped to each component, and CSS custom properties hold the sizes and colours cooking mode and printing override. Alternatives: Tailwind (utility classes in the markup, quick once learned) or a component library such as Mantine (ready-made forms and dialogs, but heavier and opinionated) | Step 10 | **Decided 2026-11-23: CSS Modules.** Plain CSS, one `*.module.css` file per component with its class names scoped to it, and the theme's colours and sizes as CSS custom properties. No Tailwind or component library. Settled after the UI wireframes |
 | D14 | Timer alerts when the app isn't on screen | **Web Push from the Pi.** On Android, Firefox pauses a page soon after you switch away, so the page alone can't ring at zero. Instead, the app tells the Pi when a timer starts, and at zero the Pi sends a push, which the phone shows as a notification with sound and vibration, whatever app is open. It needs notification permission (asked once, at the first timer), VAPID keys in the Pi's `.env`, a small table of running timers so a restart can't lose one (3a's only schema change), and a connection at that moment. The push travels encrypted through Mozilla's push service. Firefox for Android has had push bugs with installed apps, so the first task would be a quick test on your phone. Alternative: timers ring only while the app is on screen, which cooking mode keeps it, and background alerts wait for Phase 5, which already lists push | Step 13 | **Decided 2026-11-22: on screen only, for now.** Timers ring while the app is on screen, and a note by them says so. Alerts while another app is open wait for Phase 5's push work |
-| D15 | Offline edits (revisits D9) | To come before 3c is planned. In outline: (1) offline drafts, where the editor saves on the phone and uploads when connected, with the 412 prompt for changes made elsewhere; (2) a full offline queue of creates, edits and deletes, with IDs made on the phone (a small API change) and conflicts shown side by side; (3) automatic merging (CRDTs), likely overkill for one person with two devices. Leaning towards 1 or 2, as part of 3c, with 3c moved before 3b | Before 3c | **Open, raised 2026-11-23.** In Step 14's phone check, Android ran only one VPN at a time: Tailscale and Proton VPN take turns, so the phone is often off the tailnet. Read-only offline (D9) would mean switching VPNs to edit |
+| D15 | Offline edits (revisits D9) | **Offline drafts, as part of 3c, with 3c built before 3b.** Four levels: (0) keep D9, read-only; (1) offline drafts, where a recipe created or edited offline is kept on the phone and uploads by itself when the Pi answers, with the 412 check for changes made elsewhere; (2) a full offline queue that also takes deletes and ingredient changes, with conflicts shown side by side, about twice the work of 1; (3) automatic merging (CRDTs), far more than one person with two devices needs. 1 covers what the phone is used for offline, jotting down a recipe or tweaking one while cooking, and leaves out the changes that are rare and riskiest to replay | Before 3c | **Decided 2026-11-24: offline drafts, in 3c, with 3c before 3b, as recommended.** Called *waiting changes* in the specs. Creating and editing recipes work offline; deleting recipes and renaming or deleting ingredients still need a connection. New recipes get their id on the device, so a retried upload can't create one twice (3c's one API change). Raised 2026-11-23: in Step 14's phone check, Android ran only one VPN at a time, so Tailscale and Proton VPN take turns and the phone is often off the tailnet |
 
 ## Revised phase map
 | Phase | Original | Proposed |
 |---|---|---|
 | 1 | Backend API | Backend API **plus hardening** (Steps 1–7 below) |
 | 2 | Pi on the home network | The Pi **plus Tailscale HTTPS** from day one (Step 8) |
-| 3 | Desktop UI (a very large phase) | The UI, gated by D7–D11 and split into 3a, 3b and 3c (D10) |
+| 3 | Desktop UI (a very large phase) | The UI, gated by D7–D11 and split into 3a, 3b and 3c (D10), built in the order 3a, 3c, 3b (D15) |
 | 4 | Global access via Tailscale | Hardening and monitoring, since Tailscale is already done |
 | 5 | Mobile polish | Unchanged |
 | 6 | Enhanced features | Unchanged, except nutrition comes from USDA FoodData Central (D12) |
@@ -603,13 +603,126 @@ Before starting (done 2026-11-23): the UI wireframes, made and reviewed together
 - [x] Docs: the README's development section (running the client, the root scripts, Playwright), `docs/architecture.md` (the API serving the client), and `docs/deployment.md` if anything changed
 - [x] Tick the boxes, then update the Status block and the Progress log
 
-**Done when:** every 3a success criterion above is met, and CI is green. **Phase 3a is then complete.** 3b's steps are written next, the same way.
+**Done when:** every 3a success criterion above is met, and CI is green. **Phase 3a is then complete.** 3b's steps are written next, the same way. (D15 changed that: 3c comes first, below.)
+
+## Phase 3c: offline use
+Phase 3c comes before 3b (D15). Each device keeps a full snapshot of the data (D8), so every recipe can be read and cooked from with no connection. Recipes can also be created and edited offline: the change waits on the device and uploads by itself once the Pi can be reached (D9, revised by D15). Deleting recipes, and renaming or deleting ingredients, still need a connection. There's no schema change. The specs are the reference: technical spec §3.2 (Phase 3c), §3.3, §3.4 ("Offline" and "Editing offline") and §5.6, and the design spec's Phase 3c. As in 3a, every step ends with its tests passing in CI.
+
+**Phase 3c is done when** the design spec's 3c success criteria are met:
+- With the phone in airplane mode, the app opens from the Home Screen, any recipe opens, and cooking mode works
+- The same holds weeks after the app was last opened, with the copy from its last refresh
+- If the first refresh fails and the connection comes back later, the copy updates without restarting the app
+- A recipe deleted on the laptop disappears from the phone at its next refresh
+- With the phone off the tailnet, a new recipe and an edit to another show on the phone at once, survive the app being closed, and reach the laptop once the phone is back on the tailnet, with no extra taps
+- An offline edit to a recipe changed on the laptop meanwhile asks which to keep, and nothing is lost whichever is chosen
+- A connection lost partway through an upload never creates a recipe twice
+
+## Step 15: The snapshot, and ids chosen by the client
+**Goal:** the API serves everything a device needs offline in one cacheable response, and accepts a new recipe's id from the client.
+
+**Why:** these are 3c's only server changes (§3.2, Phase 3c). As in Step 9, they're easier to test before the client depends on them.
+
+- [ ] `GET /api/sync` returns `{ recipes, ingredients }`, each recipe as `GET /api/recipes/:id` returns it (§3.3). It's deterministic: every array is sorted (recipes and ingredients by name, then id; lines by `orderIndex`), and the body has no timestamp of its own, so the same data always gives the same bytes. `tags` and `equipment` join it in 3b
+- [ ] Its `ETag` is a SHA-256 hash of the body. `If-None-Match` with the current one gets a 304 with no body
+- [ ] Gzip for the app's responses, through the `compression` package. That's a new dependency, named here as the working rules ask. It's applied to the whole app, so the client's files gain it too, and images, already compressed, are skipped. Check that `tailscale serve` passes it through to the phone
+- [ ] `POST /api/recipes` accepts an optional `id`, a UUID. A taken id gets 409 `{ "error": "A recipe with that id already exists." }` and changes nothing. `PATCH` still refuses `id`
+- [ ] Integration tests:
+  - the snapshot's shape and order
+  - the same data gives the same ETag; a new recipe, an edit, a delete and an ingredient rename each give a new one
+  - a 304 for a matching `If-None-Match`
+  - a deleted recipe is missing from the next snapshot
+  - a gzip response when the request accepts it
+  - `POST` with an id; a taken id (409, nothing changed); an id that isn't a UUID (400); `id` on `PATCH` (400)
+- [ ] `docs/api.md`: `/api/sync`, the `id` on create, and compression
+
+**Done when:** all tests pass locally and in CI, and the API reference describes the changes.
+
+## Step 16: The offline copy
+**Goal:** every recipe can be found, read and cooked from with no connection, weeks after the app was last opened.
+
+**Why:** reading offline is the base that offline editing builds on, and on its own it already covers cooking with the phone off the tailnet.
+
+- [ ] The store: the latest snapshot in IndexedDB, through idb-keyval (a new dependency, named in §3.4), as one record with its ETag and when it was fetched. It has no expiry, and it's replaced only once a complete newer snapshot has arrived. TanStack Query's own persistence isn't used for it, because it drops anything older than a day by default
+- [ ] Refreshing, with `If-None-Match`: at the moments the app already refetches (it opens, comes to the front, reconnects, or saves something), and from Refresh. A failed refresh is retried while the app is on screen, after 15 seconds and then at doubling intervals up to every 5 minutes. The browser's "online" signal isn't trusted alone, since the phone can have a network while the Pi is out of reach
+- [ ] When the Pi can't be reached, the list, search, the recipe page, cooking mode and Options › Ingredients read from the copy, with a banner saying so and how old the copy is. Search then matches names on the device
+- [ ] Options › "Offline copy": how many recipes it holds, when it was last refreshed, whether storage is protected, and the Protect button. `navigator.storage.persist()` is called from the tap, as Firefox requires
+- [ ] Saving while offline still says "Can't reach the server" until Step 17
+- [ ] Unit tests for the store, with fake time: a snapshot fetched 60 days earlier is still served offline; a failed or partial refresh leaves the copy untouched; only a complete one replaces it; the retry schedule
+- [ ] Component tests: the pages read from the copy, the banner, and the Offline copy line
+- [ ] Playwright:
+  - load the app, go offline (`context.setOffline(true)`), then open recipes, search and use cooking mode. Reload while still offline, a fresh start from the copy, and check again
+  - come back online, and see a change made elsewhere arrive
+  - block `/api/sync`, unblock it, and check the retry gets the new snapshot without a restart
+
+**Done when:** the tests pass in CI.
+
+## Step 17: Saving offline, and uploading
+**Goal:** recipes can be created and edited with the Pi out of reach, and the changes reach it by themselves later (D15).
+
+**Why:** Step 14 showed the phone is often off the tailnet. Saving offline is the main thing D15 adds.
+
+- [ ] Every new recipe gets its id on the device (`crypto.randomUUID()`), online or off, so there's only one way to create a recipe
+- [ ] Save tries the Pi first. If it can't be reached (no answer, or a 502 or 504 from Tailscale), the change is kept in IndexedDB as a waiting change, and the editor closes as it does after any save
+- [ ] At most one waiting change per recipe: editing a recipe that has one edits that version, and keeps the ETag it started from. Waiting changes survive a reload and the app being closed
+- [ ] Waiting changes show at once, marked "Waiting to upload": a new recipe in the list, and an edit on its recipe page, with when it was saved. Options › Offline copy counts them
+- [ ] Offline, the ingredient picker suggests names from the offline copy. A name that isn't there becomes a new ingredient, created when the change uploads; if that gets a 409, the existing ingredient is used
+- [ ] The editor checks what the API would refuse before saving (a missing name, lengths, amounts, number ranges), so a change saved offline is rarely refused later. Limits the API and the editor share move into `shared/`
+- [ ] Offline, deleting a recipe and renaming or deleting an ingredient say they need a connection
+- [ ] Uploading:
+  - at the same moments as the snapshot refresh, and on its retry schedule, before the snapshot is fetched
+  - oldest first: new ingredients, then a `POST` with the id for a new recipe, or a `PATCH` with `If-Match` for an edit
+  - each success replaces the recipe in the offline copy with the API's reply, so the page never steps back to the old version
+  - a 409 on a create counts as uploaded: an earlier attempt arrived but its answer was lost
+  - if the Pi can't be reached, the round stops and tries again later
+- [ ] A 412, 404 or 400 marks the change "Needs your attention" and keeps it on the device, with a banner. Step 18 adds the choices
+- [ ] Unit tests for the waiting changes and the uploader: one per recipe, the order, the 409, stopping when the Pi can't be reached, and nothing lost on a reload
+- [ ] Playwright:
+  - offline, create a recipe with a new ingredient and edit another. Reload while still offline, and find both, marked as waiting. Come back online, and see both reach a second context without a tap
+  - let a create reach the API but lose its answer, and check the retry doesn't make a second copy
+
+**Done when:** the tests pass in CI.
+
+## Step 18: When an upload can't go through
+**Goal:** a waiting change that meets a change made elsewhere, a deleted recipe or a refusal is settled by you, and never lost or silently saved over another change.
+
+**Why:** with one person and two devices these will be rare, so they're kept apart from Step 17. But they're the one place 3c could lose data.
+
+- [ ] Changed elsewhere (412): both versions shown, with Keep mine (saved over the other, using the newer ETag), Keep theirs (mine discarded) and Keep both (mine saved as a new recipe, with "(copy)" after its name)
+- [ ] Deleted elsewhere (404): save it as a new recipe, or discard it
+- [ ] Refused (400): the editor opens on the change, with the API's messages beside their fields. Saving it again uploads it
+- [ ] Nothing is discarded without a tap, and discarding asks first
+- [ ] A 412 while saving online keeps Step 12's dialog: the editor is still open then, so reloading and making the edit again is cheap
+- [ ] Component tests for each choice
+- [ ] Playwright:
+  - edit a recipe offline while a second context changes it, then come back online and choose each of Keep mine, Keep theirs and Keep both
+  - edit a recipe offline while the second context deletes it, and save it as a new recipe
+
+**Done when:** the tests pass in CI.
+
+## Step 19: Deploy, and check on the phone (Phase 3c done)
+**Goal:** Phase 3c runs on the Pi and meets its success criteria on your phone.
+
+**Why:** Playwright's offline mode stands in for the phone's. Being off the tailnet with Proton on, the app being closed by Android, and persistent storage in Firefox need the real phone.
+
+- [ ] Merge to `main`, then run `scripts/deploy.sh` on the Pi
+- [ ] On your phone, in the installed app (you):
+  - with Tailscale on, open the app so it fetches the snapshot, then tap Protect in Options and allow it
+  - switch to Proton or airplane mode: the app opens from the Home Screen, and recipes open, search and work with cooking mode
+  - still off the tailnet, create a recipe with a new ingredient and edit another. Close the app fully, reopen it, and check both are there, marked as waiting
+  - switch back to Tailscale, bring the app to the front, and check both upload by themselves and appear on the laptop
+  - edit the same recipe on the phone, offline, and on the laptop. Reconnect the phone, and settle it with Keep both
+  - delete a recipe on the laptop, and check it disappears from the phone at its next refresh
+- [ ] Weeks without opening the app: Playwright's clock and the store's unit tests cover it in CI. If you can leave the app unopened for a week or more, check it then and note it in the log
+- [ ] Docs: `docs/architecture.md` (the offline copy and waiting changes), `docs/deployment.md` (Protect, and what clearing the site's data loses), and the README if any commands changed
+- [ ] Tick the boxes, then update the Status block and the Progress log
+
+**Done when:** every 3c success criterion above is met, and CI is green. **Phase 3c is then complete.** 3b's steps are written next.
 
 ## Backlog (later phases)
 | When | Items |
 |---|---|
 | Any time after Step 6 | M6: a JSON export of all data (small, and cheap insurance) |
-| Phase 3 | 3a: Steps 9–14. 3b and 3c get their steps when each starts, following the Phase 3 gate's decisions. 3c may come before 3b, depending on D15 |
+| Phase 3 | 3a: Steps 9–14 (done). 3c: Steps 15–19, before 3b (D15). 3b gets its steps when it starts, and keeps the offline copy and waiting changes whole as recipes gain sections, steps, tags, equipment and images |
 | Later, unscheduled | Ingredient usage, from your wireframe review: see which recipes use an ingredient, then either replace it in all of them at once (a merge) so it can be deleted, or delete those recipes with it. Phone VPNs: Android runs one VPN at a time, so Tailscale and Proton VPN take turns, and Proton doesn't reconnect by itself (Android's Always-on VPN blocks Tailscale outright). Ways to automate or avoid the switch: an automation app (MacroDroid: start Proton when Tailscale disconnects), the Pi as a Tailscale exit node sending its traffic through Proton, or Tailscale's Mullvad add-on |
 | Phase 4 | Uptime and disk-space alerts, log rotation, and automated dependency updates (Dependabot or Renovate). V5: the Prisma upgrade, as its own task |
 | Phase 5 | F7: the shopping-list tables must exist before Phase 5 can deliver shopping lists. D14: timer alerts while another app is open, through Web Push from the Pi (test it on the phone first, because Firefox for Android has had push bugs) |
@@ -1238,3 +1351,12 @@ Before starting (done 2026-11-23): the UI wireframes, made and reviewed together
   - **Updates after a deploy:** an installed app picks up the new version the next time it opens, reloading into it once. One left open during a deploy keeps the old version until it's reopened or reloaded.
 
   Next: D15. Then the steps for 3c or 3b, whichever it puts first.
+- **2026-11-24:** Step 14's PR #16 merged. D15 settled as recommended: offline drafts, in 3c, with 3c built before 3b.
+  - **What D15 means:** a recipe created or edited with the Pi out of reach is kept on the device as a *waiting change*, shown at once, and uploaded by itself when the Pi answers again. An edit uploads with the ETag it started from, so the F3 check catches a change made elsewhere meanwhile, and you choose Keep mine, Keep theirs or Keep both. Deleting recipes, and renaming or deleting ingredients, still need a connection. New recipes get their id on the device, so a retried upload can't create one twice. That's 3c's one API change, and it needs no schema change.
+  - **Specs:**
+    - The technical spec: §1 (ids made by the client), §2.3 (the 3a, 3c, 3b order), §3.1 (the `id` exception, and `If-Match` for offline edits), §3.2 (`POST` takes an `id`), §3.3 (the snapshot flows one way; tags and equipment join it with 3b), §3.4 (a new "Editing offline" part) and §5.6 (the tests).
+    - The design spec: the Phase 3 decisions, with D15 added; 3b keeps the offline copy whole; 3c is renamed Offline Use, with three new success criteria; the risks and the conclusion.
+    - Caching images for offline moved from 3c to 3b, which brings the images.
+  - **Plan:** Phase 3c's Steps 15–19 are written: the API (15), the offline copy (16), saving offline and uploading (17), uploads that can't go through (18), and the deploy and phone check (19).
+
+  Next: review Phase 3c's steps, then Step 15.
