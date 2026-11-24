@@ -54,6 +54,16 @@ describe('apiRequest', () => {
         expect(init.headers).toMatchObject({ 'Content-Type': 'application/json', Accept: 'application/json' });
     });
 
+    test("never uses the browser's HTTP cache, which Firefox would answer from when offline", async () => {
+        const fetchMock = answer(200, []);
+        await apiRequest('/api/recipes');
+        expect(fetchMock.mock.calls[0][1].cache).toBe('no-store');
+
+        const write = answer(201, {});
+        await apiRequest('/api/recipes', { method: 'POST', body: { name: 'Toast' } });
+        expect(write.mock.calls[0][1].cache).toBe('no-store');
+    });
+
     test('sends If-Match when given an ETag, and nothing otherwise', async () => {
         const fetchMock = answer(200, {});
         await apiRequest('/api/recipes/x', { method: 'PATCH', body: {}, ifMatch: '"5"' });
@@ -157,8 +167,6 @@ describe('apiRequestIfChanged', () => {
         const [path, init] = fetchMock.mock.calls[0];
         expect(path).toBe('/api/sync');
         expect(init.headers['If-None-Match']).toBe('"abc"');
-        // The caller keeps the copy, so the browser's cache needn't keep another
-        expect(init.cache).toBe('no-store');
     });
 
     test('returns the new data and its ETag when it changed', async () => {

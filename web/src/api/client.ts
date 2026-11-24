@@ -12,6 +12,12 @@
  *   does an answer cut off partway, when the connection drops mid-download.
  * - `apiRequestIfChanged()` is the conditional GET the offline copy uses
  *   (3c): it sends `If-None-Match`, and a 304 means the copy is current.
+ * - Every request skips the browser's HTTP cache (`cache: 'no-store'`).
+ *   TanStack Query and the offline copy are the app's caches. And Firefox,
+ *   when it's offline (in airplane mode, say), answers from its HTTP cache
+ *   however old the entry is, instead of failing: a page would show an old
+ *   answer as if it were current, rather than the offline copy and its
+ *   banner.
  *
  * Paths are relative ("/api/recipes"): the client is served from the same
  * origin as the API, in production and in development (F1).
@@ -84,7 +90,6 @@ function isAbort(error: unknown): boolean {
 
 interface SendOptions extends RequestOptions {
     ifNoneMatch?: string | null;
-    cache?: RequestCache;
 }
 
 /** Send a request, turning no answer at all into a network error. */
@@ -100,7 +105,7 @@ async function send(path: string, options: SendOptions): Promise<Response> {
             headers,
             body: options.body === undefined ? undefined : JSON.stringify(options.body),
             signal: options.signal,
-            ...(options.cache ? { cache: options.cache } : {}),
+            cache: 'no-store',
         });
     } catch (error) {
         if (isAbort(error)) throw error;
@@ -157,14 +162,11 @@ export type IfChangedResult<T> = { changed: false } | ({ changed: true } & ApiRe
 /**
  * GET a resource unless it still has the ETag of the copy you hold.
  *
- * The browser's own cache is skipped (`no-store`): the caller keeps its own
- * copy, so a second one in the HTTP cache would only take up room.
- *
  * @param etag - The ETag of the copy you hold, sent as `If-None-Match`; null to fetch it whatever it is.
  * @throws ApiError, as `apiRequest()` does.
  */
 export async function apiRequestIfChanged<T>(path: string, etag: string | null): Promise<IfChangedResult<T>> {
-    const response = await send(path, { ifNoneMatch: etag, cache: 'no-store' });
+    const response = await send(path, { ifNoneMatch: etag });
     if (response.status === 304 && etag) return { changed: false };
     return { changed: true, ...(await readResult<T>(response)) };
 }

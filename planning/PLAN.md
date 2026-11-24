@@ -3,7 +3,7 @@
 # Mise en place: hardening plan (Phase 1 to Phase 3c)
 
 > **Status**
-> - Current step: **Step 17: saving offline, and uploading**, ready to start once one question is settled: offline edits need each recipe's ETag, which the snapshot doesn't carry yet (see the Progress log for 2026-11-24). Step 16 is done (2026-11-24), with CI to be confirmed when its PR opens; Step 15 merged as PR #18, CI green. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
+> - Current step: **Step 17: saving offline, and uploading**, ready to start once one question is settled: offline edits need each recipe's ETag, which the snapshot doesn't carry yet (see the Progress log for 2026-11-24). Step 16 is done (2026-11-24); its PR #19 failed in Firefox on the first run (the browser's HTTP cache, see the Progress log), fixed, with CI to be confirmed. Step 15 merged as PR #18, CI green. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
 > - Last updated: 2026-11-24 (Step 16: the offline copy)
 > - Blockers: the SSD for 8.1, about a month away
 
@@ -1398,7 +1398,7 @@ Phase 3c comes before 3b (D15). Each device keeps a full snapshot of the data (D
     - `apiRequest()` let a body cut off mid-download escape as a bare TypeError. It's now a network error, like no answer at all.
   - **The editor doesn't edit the copy.** The API's recipe ETags are opaque (`docs/api.md`), so the copy has none, and a save from it after the connection came back would have gone without `If-Match`, over any change made elsewhere. Offline, the editor says it can't reach the server, as in 3a.
   - **To settle before Step 17:** an offline edit keeps "the ETag it started from", but the snapshot doesn't carry each recipe's ETag. Recommended: `GET /api/sync` adds them (for example `etags: { "<recipe id>": "<etag>" }`), so they stay opaque and the client never works one out from `updatedAt`.
-  - **Tests:** the client has 182, 70 of them new.
+  - **Tests:** the client has 183, 71 of them new.
     - `copy.test.ts`: a copy fetched 60 days ago is still there, a newer one replaces it whole, a 304 moves only `checkedAt`, storage that can't be read.
     - `sync.test.ts`: the 304, five kinds of failed refresh leaving the copy untouched, storage that's full, the retry schedule over 20 minutes, hidden and visible, the connection returning, the pages fetching again, a moment during a refresh, and a page's fallback bringing a retry.
     - `read.test.ts`: device search, paging and `fromCopy`.
@@ -1407,6 +1407,11 @@ Phase 3c comes before 3b (D15). Each device keeps a full snapshot of the data (D
     - Playwright: `offline.spec.ts`, three tests. Offline in the open app and after a fresh start (search, a recipe, cooking mode, Ingredients); coming back online; a blocked `/api/sync` retried, with `page.clock`. Chromium: all 44 pass. Firefox runs in CI.
     - Playwright found what the unit tests missed: `loadOfflineCopy()` kept answering with what its first read found (nothing) after a refresh had stored a copy, so pages offline showed the error. Fixed, with a unit test.
   - Checked in the Browser pane: Options › Offline copy at phone width, and the banner over the list with the API stopped.
+  - **CI on PR #19 (run 39) failed in Firefox:** "coming back online" never showed the banner, in both viewports; the other 84 tests passed.
+    - The cause: Firefox, when it's offline, answers from its HTTP cache however old the entry is, instead of failing. The list had loaded from the API before going offline, so its refresh got that old answer and never fell back to the copy. Chromium fails the request, so it passed here. The tests that passed in Firefox only made requests offline that it had never made online.
+    - It would have happened on the phone in airplane mode too: an old answer shown as current, with no banner.
+    - The fix: every API request uses `cache: 'no-store'`, with a unit test. TanStack Query and the offline copy are the app's caches, and the browser's revalidation of small, gzipped answers saved little.
+    - Chromium: all 44 still pass. Firefox won't start on this PC, so CI confirms the fix there.
   - **Docs:** the README's structure. `docs/architecture.md` still says recipes come from the API until 3c; Step 19 updates it, as planned.
 
   Next: Step 17, saving offline, once the snapshot's ETags are settled.
