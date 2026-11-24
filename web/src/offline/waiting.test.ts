@@ -17,7 +17,7 @@ const ID_A = 'aaaaaaaa-0000-4000-8000-000000000001';
 const ID_B = 'bbbbbbbb-0000-4000-8000-000000000002';
 
 function body(name: string): DraftBody {
-    return { name, description: null, servings: 1, prepTime: null, cookTime: null, sections: [], ingredients: [] };
+    return { name, description: null, servings: 1, prepTime: null, cookTime: null, sections: [], ingredients: [], tags: [], equipment: [] };
 }
 
 /** The changes as a fresh start of the app would read them from storage. */

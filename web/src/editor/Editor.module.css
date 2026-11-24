@@ -505,6 +505,96 @@ textarea.stepText {
     color: var(--accent-text);
 }
 
+/* Tags (3b): the recipe's pills, then the box to add one */
+.tagPills {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.removeTag {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.newTag {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface);
+}
+
+.newTagTitle {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+/* Equipment lines (3b): the item, then how many and whether it's optional */
+.equipmentTools {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.stepper {
+    display: flex;
+    align-items: center;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg);
+}
+
+.stepperButton {
+    width: 40px;
+    height: 40px;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-size: 1.25rem;
+    cursor: pointer;
+}
+
+.stepperButton:disabled {
+    color: var(--border);
+    cursor: default;
+}
+
+.stepperValue {
+    min-width: 28px;
+    text-align: center;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.optional {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: var(--tap);
+    font-size: 0.9375rem;
+}
+
+.optional input {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--accent);
+}
+
 /* Wider screens: an ordinary heading row, with Cancel and Save beside it */
 @media (min-width: 768px) {
     .page {

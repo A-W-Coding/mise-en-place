@@ -28,7 +28,7 @@ export interface FuzzyPage {
 }
 
 /** Tables that support fuzzy name search. */
-export type SearchableTable = 'Recipe' | 'Ingredient';
+export type SearchableTable = 'Recipe' | 'Ingredient' | 'Tag' | 'Equipment';
 
 /**
  * The SQL identifier for each searchable table. A table name can't be a
@@ -37,6 +37,8 @@ export type SearchableTable = 'Recipe' | 'Ingredient';
 const TABLES: Record<SearchableTable, Prisma.Sql> = {
     Recipe: Prisma.sql`"Recipe"`,
     Ingredient: Prisma.sql`"Ingredient"`,
+    Tag: Prisma.sql`"Tag"`,
+    Equipment: Prisma.sql`"Equipment"`,
 };
 
 /** Default trigram similarity threshold (0 – 1). */
@@ -65,9 +67,12 @@ export function escapeLikePattern(term: string): string {
  * always come back in the same order and pages never overlap. The page is
  * cut in SQL; a second query counts every match for `X-Total-Count`.
  *
- * @param table      - Prisma model name (`'Recipe'` or `'Ingredient'`).
+ * @param table      - Prisma model name (`'Recipe'`, `'Ingredient'`, `'Tag'` or `'Equipment'`).
  * @param searchTerm - Search string from the client (will be lowercased).
  * @param page       - `limit` and `offset` of the page to return.
+ * @param filter     - A further condition every row must meet, such as
+ *                     `recipesTagged()` (3b). Built with `Prisma.sql`, so its
+ *                     values are bound parameters too.
  * @param threshold  - Minimum trigram similarity to qualify (default 0.3).
  * @returns One page of matches, best first, and the total number of matches.
  */
@@ -75,11 +80,12 @@ export async function fuzzySearchByName(
     table: SearchableTable,
     searchTerm: string,
     page: Page,
+    filter: Prisma.Sql = Prisma.sql`TRUE`,
     threshold: number = DEFAULT_THRESHOLD,
 ): Promise<FuzzyPage> {
     const term = searchTerm.toLowerCase();
     const pattern = `%${escapeLikePattern(term)}%`;
-    const matchesTerm = Prisma.sql`word_similarity(${term}, name) > ${threshold} OR name ILIKE ${pattern}`;
+    const matchesTerm = Prisma.sql`(word_similarity(${term}, name) > ${threshold} OR name ILIKE ${pattern}) AND ${filter}`;
 
     const [matches, [{ total }]] = await Promise.all([
         prisma.$queryRaw<FuzzyMatch[]>`
@@ -97,4 +103,9 @@ export async function fuzzySearchByName(
     ]);
 
     return { matches, total };
+}
+
+/** A `fuzzySearchByName()` filter for the Recipe table: only recipes with this tag (3b). */
+export function recipesTagged(tagId: string): Prisma.Sql {
+    return Prisma.sql`id IN (SELECT "recipeId" FROM "RecipeTag" WHERE "tagId" = ${tagId})`;
 }

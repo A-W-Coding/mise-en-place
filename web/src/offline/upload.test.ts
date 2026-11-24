@@ -29,6 +29,8 @@ function toast(name = 'Sourdough Toast'): DraftBody {
         prepTime: null,
         cookTime: null,
         sections: [{ name: 'Method', steps: [{ text: 'Toast it.', timerSeconds: null }] }],
+        tags: [],
+        equipment: [],
         ingredients: [
             {
                 ingredientId: null,
@@ -57,6 +59,71 @@ function writes(server: ReturnType<typeof fakeServer>): string[] {
 const upload = () => uploadWaitingChanges(new QueryClient());
 
 describe('uploadWaitingChanges', () => {
+    test('a new tag and item made offline are created first, the tag with its colour, and the recipe names them (3b)', async () => {
+        const server = fakeServer();
+        const stamp = '2026-11-24T09:00:00.000Z';
+        // Made elsewhere meanwhile: this one is used, with its own colour
+        server.tags.set('existing-spicy', { id: 'existing-spicy', name: 'spicy', color: '#ffd8c2', createdAt: stamp, updatedAt: stamp });
+        await keepWaitingChange(
+            {
+                recipeId: TOAST_ID,
+                kind: 'create',
+                body: {
+                    ...toast(),
+                    tags: [
+                        { tagId: null, name: 'weeknight', color: '#1f4e79' },
+                        { tagId: null, name: 'spicy', color: '#c8ddf4' },
+                    ],
+                    equipment: [{ equipmentId: null, name: 'toaster', quantity: 1, optional: true }],
+                },
+                etag: null,
+            },
+            { now: 1 },
+        );
+
+        await upload();
+
+        expect(writes(server)).toEqual([
+            'POST /api/ingredients',
+            'POST /api/tags',
+            'POST /api/tags',
+            'POST /api/equipment',
+            'POST /api/recipes',
+        ]);
+        expect(sent(server.fetchMock, 'POST')[1]?.body).toEqual({ name: 'weeknight', color: '#1f4e79' });
+        const recipe = server.recipes.get(TOAST_ID)!;
+        expect(recipe.tags.map((line) => [line.tag.name, line.tag.color])).toEqual([
+            ['weeknight', '#1f4e79'],
+            ['spicy', '#ffd8c2'],
+        ]);
+        expect(recipe.equipment.map((line) => [line.equipment.name, line.optional])).toEqual([['toaster', true]]);
+        expect(await afterReload()).toEqual([]);
+    });
+
+    test('a waiting change shows its tags and equipment, new ones with stand-in ids (3b)', () => {
+        const recipe = recipeFromChange({
+            recipeId: TOAST_ID,
+            kind: 'create',
+            body: {
+                ...toast(),
+                tags: [{ tagId: null, name: 'weeknight', color: '#1f4e79' }],
+                equipment: [{ equipmentId: 'pan', name: 'large pan', quantity: 2, optional: false }],
+            },
+            etag: null,
+            sent: [],
+            problem: null,
+            createdAt: 1,
+            savedAt: 1,
+        });
+
+        expect(recipe.tags).toEqual([
+            expect.objectContaining({ tagId: 'new:weeknight', orderIndex: 0, tag: expect.objectContaining({ name: 'weeknight', color: '#1f4e79' }) }),
+        ]);
+        expect(recipe.equipment).toEqual([
+            expect.objectContaining({ equipmentId: 'pan', quantity: 2, optional: false, equipment: expect.objectContaining({ name: 'large pan' }) }),
+        ]);
+    });
+
     test('uploads oldest first: new ingredients, then a POST with the id, or a PATCH with If-Match', async () => {
         const server = fakeServer({ recipes: [beefChili] });
         await seedCopy([beefChili]);

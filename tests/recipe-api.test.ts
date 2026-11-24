@@ -67,7 +67,8 @@ describe('Recipe API', () => {
 
             expect(response.status).toBe(200);
             expect(Object.keys(response.body[0]).sort()).toEqual(
-                ['cookTime', 'createdAt', 'description', 'id', 'name', 'prepTime', 'servings', 'updatedAt'],
+                // From 3b, its tags too, for the list's pills
+                ['cookTime', 'createdAt', 'description', 'id', 'name', 'prepTime', 'servings', 'tags', 'updatedAt'],
             );
             expect(response.body[0]).toMatchObject({ name: 'Beef Chili', servings: expect.any(Number) });
         });

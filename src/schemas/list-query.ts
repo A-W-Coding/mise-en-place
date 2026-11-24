@@ -42,6 +42,14 @@ export const listQuerySchema = z.strictObject({
     offset: wholeNumber.default(0),
 });
 
+/** GET /api/recipes also takes `tag`, a tag's id, to list only the recipes with it (3b). */
+export const recipeListQuerySchema = listQuerySchema.extend({
+    tag: z
+        .uuid({ error: 'Must be a single tag id.' })
+        .transform((id) => id.toLowerCase())
+        .optional(),
+});
+
 export type ListQuery = z.output<typeof listQuerySchema>;
 
 /** The part of a list query that selects a page. */

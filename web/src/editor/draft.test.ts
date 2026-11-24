@@ -1,11 +1,12 @@
 import { describe, expect, test } from 'vitest';
-import { beefChili, section } from '../test/fixtures';
+import { beefChili, equipmentOn, item, section, tag, tagsOn } from '../test/fixtures';
 import {
     apiBody,
     buildRecipeBody,
     draftFromBody,
     draftFromRecipe,
     draftReducer,
+    equipmentErrorKey,
     hasNamedSections,
     isDirty,
     lineErrorKey,
@@ -14,6 +15,8 @@ import {
     newDraft,
     sectionErrorKey,
     stepErrorKey,
+    TAGS_ERROR,
+    type EquipmentDraft,
     type LineDraft,
     type RecipeDraft,
     type SectionDraft,
@@ -109,10 +112,13 @@ describe('buildRecipeBody', () => {
                         sectionIndex: null,
                     },
                 ],
+                tags: [],
+                equipment: [],
             },
             lineKeys: ['a', 'b'],
             sectionKeys: ['m'],
             stepKeys: [['m-0', 'm-2']],
+            equipmentKeys: [],
         });
     });
 
@@ -231,7 +237,8 @@ describe('a new ingredient picked offline', () => {
             note: null,
             sectionIndex: null,
         });
-        expect(apiBody(result.body, (name) => (name === 'sourdough' ? 'new-id' : '')).ingredients).toEqual([
+        const ids = { ingredient: (name: string) => (name === 'sourdough' ? 'new-id' : ''), tag: () => '', equipment: () => '' };
+        expect(apiBody(result.body, ids).ingredients).toEqual([
             { ingredientId: 'new-id', quantity: 200, quantityMax: null, unit: 'g', note: null, sectionIndex: null },
             { ingredientId: garlic.id, quantity: 1, quantityMax: null, unit: null, note: null, sectionIndex: null },
         ]);
@@ -561,5 +568,154 @@ describe('isDirty', () => {
         expect(isDirty(start, draftReducer(start, { type: 'step', key: step.key, patch: { timerSeconds: 60 } }))).toBe(true);
         const focused = { ...start, sections: start.sections.map((s) => ({ ...s, focus: true, steps: s.steps.map((st) => ({ ...st, focus: true })) })) };
         expect(isDirty(start, focused)).toBe(false);
+    });
+});
+
+describe('tags and equipment (3b)', () => {
+    const beef = tag('beef', '#f6c7bd');
+    const spicy = tag('spicy');
+    const pan = item('large pan');
+    const spoon = item('wooden spoon');
+    const recipe = {
+        ...beefChili,
+        tags: tagsOn(beefChili.id, [spicy, beef]),
+        equipment: equipmentOn(beefChili.id, [[pan, 2], [spoon, 1, true]]),
+    };
+    const body = (d: RecipeDraft) => {
+        const result = buildRecipeBody(d);
+        if ('errors' in result) throw new Error(`Expected a body: ${JSON.stringify(result.errors)}`);
+        return result;
+    };
+    const line = (key: string, extra: Partial<EquipmentDraft> = {}): EquipmentDraft => ({
+        key,
+        item: null,
+        itemText: '',
+        quantity: 1,
+        optional: false,
+        ...extra,
+    });
+
+    test('a recipe opens with its tags in order and its equipment lines, and saves them back as they were', () => {
+        const loaded = draftFromRecipe(recipe);
+
+        expect(loaded.tags).toEqual([
+            { id: spicy.id, name: 'spicy', color: null },
+            { id: beef.id, name: 'beef', color: '#f6c7bd' },
+        ]);
+        expect(loaded.equipment.map((l) => [l.itemText, l.quantity, l.optional])).toEqual([
+            ['large pan', 2, false],
+            ['wooden spoon', 1, true],
+        ]);
+        const saved = body(loaded);
+        expect(saved.body.tags).toEqual([
+            { tagId: spicy.id, name: 'spicy', color: null },
+            { tagId: beef.id, name: 'beef', color: '#f6c7bd' },
+        ]);
+        expect(saved.body.equipment).toEqual([
+            { equipmentId: pan.id, name: 'large pan', quantity: 2, optional: false },
+            { equipmentId: spoon.id, name: 'wooden spoon', quantity: 1, optional: true },
+        ]);
+        expect(saved.equipmentKeys).toEqual(loaded.equipment.map((l) => l.key));
+        // And a version kept on the device reopens the same
+        expect(buildRecipeBody(draftFromBody(saved.body))).toMatchObject({ body: saved.body });
+    });
+
+    test('apiBody sends tags and items by id, new ones once created', () => {
+        const draft = draftReducer(draftFromRecipe(recipe), { type: 'addTag', tag: { id: null, name: 'weeknight', color: '#1f4e79' } });
+        const withNewItem = draftReducer(draft, {
+            type: 'equipment',
+            key: draft.equipment[0]!.key,
+            patch: { item: { id: null, name: 'wok' } },
+        });
+
+        const sent = apiBody(body(withNewItem).body, {
+            ingredient: () => 'x',
+            tag: (name) => `tag-${name}`,
+            equipment: (name) => `item-${name}`,
+        });
+
+        expect(sent.tagIds).toEqual([spicy.id, beef.id, 'tag-weeknight']);
+        expect(sent.equipment).toEqual([
+            { equipmentId: 'item-wok', quantity: 2, optional: false },
+            { equipmentId: spoon.id, quantity: 1, optional: true },
+        ]);
+        expect(sent).not.toHaveProperty('tags');
+    });
+
+    test('a tag is added once, at the end, and removed by name', () => {
+        const start = draftFromRecipe(recipe);
+        const added = draftReducer(start, { type: 'addTag', tag: { id: 'w', name: 'weeknight', color: null } });
+
+        expect(added.tags.map((t) => t.name)).toEqual(['spicy', 'beef', 'weeknight']);
+        expect(draftReducer(added, { type: 'addTag', tag: { id: 'w', name: 'weeknight', color: null } })).toBe(added);
+        expect(draftReducer(added, { type: 'removeTag', name: 'spicy' }).tags.map((t) => t.name)).toEqual(['beef', 'weeknight']);
+    });
+
+    test('equipment lines are added, changed, moved and removed', () => {
+        const start = draftFromRecipe(recipe);
+        const [first, second] = start.equipment;
+
+        const added = draftReducer(start, { type: 'addEquipment' });
+        expect(added.equipment[2]).toMatchObject({ item: null, itemText: '', quantity: 1, optional: false, focus: true });
+
+        const counted = draftReducer(start, { type: 'equipment', key: first!.key, patch: { quantity: 3, optional: true } });
+        expect(counted.equipment[0]).toMatchObject({ quantity: 3, optional: true });
+
+        expect(draftReducer(start, { type: 'moveEquipment', key: second!.key, by: -1 }).equipment.map((l) => l.itemText)).toEqual([
+            'wooden spoon',
+            'large pan',
+        ]);
+        expect(draftReducer(start, { type: 'moveEquipment', key: first!.key, by: -1 })).toBe(start);
+        expect(draftReducer(start, { type: 'removeEquipment', key: first!.key }).equipment).toHaveLength(1);
+    });
+
+    test('typing in an Item box unpicks the item unless it still names it', () => {
+        const start = draftFromRecipe(recipe);
+        const key = start.equipment[0]!.key;
+
+        expect(draftReducer(start, { type: 'equipmentText', key, text: 'Large Pan ' }).equipment[0]?.item).toEqual({
+            id: pan.id,
+            name: 'large pan',
+        });
+        expect(draftReducer(start, { type: 'equipmentText', key, text: 'large' }).equipment[0]).toMatchObject({
+            item: null,
+            itemText: 'large',
+        });
+    });
+
+    test('an empty equipment line is left out; one typed but not chosen, or a long new tag, is refused', () => {
+        const draft = { ...draftFromRecipe(beefChili), equipment: [line('blank'), line('typed', { itemText: 'wok' })] };
+        const longTag = { ...draftFromRecipe(beefChili), tags: [{ id: null, name: 'x'.repeat(51), color: null }] };
+
+        expect(buildRecipeBody(draft)).toEqual({
+            errors: { [equipmentErrorKey('typed', 'item')]: 'Choose “wok” from the list, or create it.' },
+        });
+        expect(buildRecipeBody({ ...draft, equipment: [line('blank')] })).toMatchObject({ body: { equipment: [] }, equipmentKeys: [] });
+        expect(buildRecipeBody(longTag)).toEqual({ errors: { [TAGS_ERROR]: "Keep each tag's name to 50 characters or fewer." } });
+    });
+
+    test("the API's messages about tags and equipment land beside them", () => {
+        const errors = mapServerErrors(
+            {
+                'tagIds.1': 'Each tag only once.',
+                'equipment.1.quantity': 'Must be at most 99.',
+                'equipment.0.equipmentId': 'Must be an equipment id.',
+            },
+            { equipmentKeys: ['a', 'b'] },
+        );
+
+        expect(errors).toEqual({
+            [TAGS_ERROR]: 'Each tag only once.',
+            [equipmentErrorKey('b', 'quantity')]: 'Must be at most 99.',
+            [equipmentErrorKey('a', 'item')]: 'Must be an equipment id.',
+        });
+    });
+
+    test('notices a tag or equipment line changing, but not focus', () => {
+        const start = draftFromRecipe(recipe);
+
+        expect(isDirty(start, draftReducer(start, { type: 'removeTag', name: 'beef' }))).toBe(true);
+        expect(isDirty(start, draftReducer(start, { type: 'equipment', key: start.equipment[0]!.key, patch: { optional: true } }))).toBe(true);
+        expect(isDirty(start, { ...start, equipment: start.equipment.map((l) => ({ ...l, focus: true })) })).toBe(false);
     });
 });

@@ -37,7 +37,7 @@ describe('GET /api/sync', () => {
 
             expect(response.status).toBe(200);
             expect(response.headers['content-type']).toMatch(/^application\/json/);
-            expect(Object.keys(response.body)).toEqual(['recipes', 'ingredients', 'etags']);
+            expect(Object.keys(response.body)).toEqual(['recipes', 'ingredients', 'etags', 'tags', 'equipment']);
             expect(response.body.recipes.map((recipe: { name: string }) => recipe.name)).toEqual([
                 'Apple Crumble',
                 'Beef Chili',
@@ -47,6 +47,31 @@ describe('GET /api/sync', () => {
                 const single = await request.get(`/api/recipes/${recipe.id}`);
                 expect(recipe).toEqual(single.body);
             }
+        });
+
+        test('holds every tag and equipment item, by name (3b)', async () => {
+            await request.post('/api/tags').send({ name: 'weeknight', color: '#1f4e79' });
+            await request.post('/api/tags').send({ name: 'beef' });
+            await request.post('/api/equipment').send({ name: 'wooden spoon' });
+            await request.post('/api/equipment').send({ name: 'large pan' });
+
+            const response = await request.get('/api/sync');
+
+            expect(response.body.tags.map((tag: { name: string; color: string | null }) => [tag.name, tag.color])).toEqual([
+                ['beef', null],
+                ['weeknight', '#1f4e79'],
+            ]);
+            expect(response.body.equipment.map((item: { name: string }) => item.name)).toEqual(['large pan', 'wooden spoon']);
+        });
+
+        test('changes its ETag when a tag is renamed, though no recipe changed (3b)', async () => {
+            const tag = await request.post('/api/tags').send({ name: 'beef' });
+            const before = await request.get('/api/sync');
+
+            await request.patch(`/api/tags/${tag.body.id}`).send({ name: 'red meat' });
+            const after = await request.get('/api/sync').set('If-None-Match', before.headers.etag);
+
+            expect(after.status).toBe(200);
         });
 
         test("gives each recipe's ETag, as its own GET sends it, so a copy can be edited with If-Match", async () => {

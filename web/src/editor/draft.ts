@@ -20,6 +20,11 @@
  * section's, in the sections' order. Moving a line keeps it in its group,
  * and changing its section moves it to the end of the new group, so what's
  * saved (each line's position) always matches what the editor showed.
+ *
+ * A recipe also has tags, in its own order, and equipment lines (3b). Like
+ * an ingredient, a tag or item picked offline that doesn't exist yet has a
+ * null id: it's created by name when the recipe is sent (a new tag with the
+ * colour chosen for it).
  */
 
 import { LIMITS } from '../../../shared/limits';
@@ -55,6 +60,26 @@ export interface LineDraft {
     sectionKey?: string | null;
 }
 
+/** A tag on the recipe (3b). A null id is a new tag, created with its name and colour when the recipe is sent. */
+export interface PickedTag {
+    id: string | null;
+    name: string;
+    color: string | null;
+}
+
+/** One equipment line as the editor holds it (3b). */
+export interface EquipmentDraft {
+    key: string;
+    /** The item picked, or null; a null id is a new item, created by name when the recipe is sent. */
+    item: PickedIngredient | null;
+    /** The Item box's text, which may not be a picked item yet. */
+    itemText: string;
+    quantity: number;
+    optional: boolean;
+    /** Focus its Item box when it first appears, after Add equipment. */
+    focus?: boolean;
+}
+
 /** One step of the method: its text, and its timer in seconds, if it has one (3b). */
 export interface StepDraft {
     key: string;
@@ -81,6 +106,9 @@ export interface RecipeDraft {
     cookTime: string;
     sections: SectionDraft[];
     lines: LineDraft[];
+    /** In the recipe's order: the list shows the first two (3b). */
+    tags: PickedTag[];
+    equipment: EquipmentDraft[];
 }
 
 /**
@@ -101,10 +129,23 @@ export const sectionErrorKey = (key: string, field: SectionField) => `section:${
 export type StepField = 'text' | 'timer';
 export const stepErrorKey = (key: string, field: StepField) => `step:${key}:${field}`;
 
+/** Where an equipment line's problem shows: its Item box, or its count (3b). */
+export type EquipmentField = 'item' | 'quantity';
+export const equipmentErrorKey = (key: string, field: EquipmentField) => `equipment:${key}:${field}`;
+
+/** Where a problem with the tags shows: under them (3b). */
+export const TAGS_ERROR = 'tags';
+
 let nextKey = 0;
 export function newLine(focus?: LineDraft['focus'], sectionKey: string | null = null): LineDraft {
     nextKey += 1;
     return { key: `new-${nextKey}`, amount: '', ingredient: null, ingredientText: '', note: '', showNote: false, focus, sectionKey };
+}
+
+let nextEquipment = 0;
+export function newEquipmentLine(focus = false): EquipmentDraft {
+    nextEquipment += 1;
+    return { key: `new-equipment-${nextEquipment}`, item: null, itemText: '', quantity: 1, optional: false, focus };
 }
 
 let nextStep = 0;
@@ -130,6 +171,8 @@ export function newDraft(): RecipeDraft {
         cookTime: '',
         sections: [newSection('Method')],
         lines: [newLine()],
+        tags: [],
+        equipment: [],
     };
 }
 
@@ -160,7 +203,9 @@ function lineDraft(key: string, line: Omit<LineBody, 'sectionIndex'>, sectionKey
     };
 }
 
-function fieldsDraft(saved: Omit<DraftBody, 'ingredients' | 'sections'>): Omit<RecipeDraft, 'lines' | 'sections'> {
+type Fields = Omit<DraftBody, 'ingredients' | 'sections' | 'tags' | 'equipment'>;
+
+function fieldsDraft(saved: Fields): Omit<RecipeDraft, 'lines' | 'sections' | 'tags' | 'equipment'> {
     return {
         name: saved.name,
         description: saved.description ?? '',
@@ -178,7 +223,26 @@ export function draftFromRecipe(recipe: Recipe): RecipeDraft {
     const lines = recipe.recipeIngredients.map((line) =>
         lineDraft(line.id, { ...line, ingredientId: line.ingredient.id, ingredientName: line.ingredient.name }, line.sectionId),
     );
-    return { ...fieldsDraft(recipe), sections, lines: groupLines(lines, sections) };
+    return {
+        ...fieldsDraft(recipe),
+        sections,
+        lines: groupLines(lines, sections),
+        tags: recipe.tags.map(({ tag }) => ({ id: tag.id, name: tag.name, color: tag.color })),
+        equipment: recipe.equipment.map((line) =>
+            equipmentDraft(line.id, { equipmentId: line.equipment.id, name: line.equipment.name, quantity: line.quantity, optional: line.optional }),
+        ),
+    };
+}
+
+/** A saved equipment line, ready to edit. */
+function equipmentDraft(key: string, line: EquipmentBody): EquipmentDraft {
+    return {
+        key,
+        item: { id: line.equipmentId, name: line.name },
+        itemText: line.name,
+        quantity: line.quantity,
+        optional: line.optional,
+    };
 }
 
 /** A version saved on the device and not yet uploaded, ready to edit again (3c). */
@@ -190,7 +254,13 @@ export function draftFromBody(body: DraftBody): RecipeDraft {
     const lines = body.ingredients.map((line, index) =>
         lineDraft(`saved-${index}`, line, line.sectionIndex === null ? null : sectionKey(line.sectionIndex)),
     );
-    return { ...fieldsDraft(body), sections, lines: groupLines(lines, sections) };
+    return {
+        ...fieldsDraft(body),
+        sections,
+        lines: groupLines(lines, sections),
+        tags: body.tags.map((tag) => ({ id: tag.tagId, name: tag.name, color: tag.color })),
+        equipment: body.equipment.map((line, index) => equipmentDraft(`saved-equipment-${index}`, line)),
+    };
 }
 
 /** True when the draft differs from where it started, ignoring which box wants focus. */
@@ -211,6 +281,7 @@ export function isDirty(initial: RecipeDraft, current: RecipeDraft): boolean {
                 line.note,
                 line.sectionKey ?? null,
             ]),
+            equipment: draft.equipment.map((line) => [line.key, line.item?.id ?? null, line.itemText, line.quantity, line.optional]),
         });
     return comparable(initial) !== comparable(current);
 }
@@ -271,10 +342,11 @@ export function hasNamedSections(sections: { name: string }[]): boolean {
 // ── Editing ────────────────────────────────────────────────────────────────
 
 type LinePatch = Partial<Omit<LineDraft, 'key' | 'sectionKey'>>;
+type EquipmentPatch = Partial<Pick<EquipmentDraft, 'item' | 'itemText' | 'quantity' | 'optional'>>;
 type StepPatch = Partial<Pick<StepDraft, 'text' | 'timerSeconds'>>;
 
 export type DraftAction =
-    | { type: 'field'; field: Exclude<keyof RecipeDraft, 'lines' | 'sections'>; value: string }
+    | { type: 'field'; field: Exclude<keyof RecipeDraft, 'lines' | 'sections' | 'tags' | 'equipment'>; value: string }
     | { type: 'line'; key: string; patch: LinePatch }
     | { type: 'ingredientText'; key: string; text: string }
     | { type: 'add' }
@@ -291,6 +363,13 @@ export type DraftAction =
     | { type: 'pasteSteps'; key: string; text: string }
     | { type: 'removeStep'; key: string }
     | { type: 'moveStep'; key: string; by: -1 | 1 }
+    | { type: 'addTag'; tag: PickedTag }
+    | { type: 'removeTag'; name: string }
+    | { type: 'addEquipment' }
+    | { type: 'equipment'; key: string; patch: EquipmentPatch }
+    | { type: 'equipmentText'; key: string; text: string }
+    | { type: 'removeEquipment'; key: string }
+    | { type: 'moveEquipment'; key: string; by: -1 | 1 }
     | { type: 'reset'; draft: RecipeDraft };
 
 /** Swap an item with its neighbour, if it has one that way. */
@@ -408,6 +487,35 @@ export function draftReducer(draft: RecipeDraft, action: DraftAction): RecipeDra
             });
         case 'moveStep':
             return updateSectionOf(draft, action.key, (section, index) => ({ ...section, steps: swap(section.steps, index, action.by) }));
+        case 'addTag':
+            // Names are unique, so a tag already on the recipe isn't added twice
+            return draft.tags.some((tag) => tag.name === action.tag.name) ? draft : { ...draft, tags: [...draft.tags, action.tag] };
+        case 'removeTag':
+            return { ...draft, tags: draft.tags.filter((tag) => tag.name !== action.name) };
+        case 'addEquipment':
+            return { ...draft, equipment: [...draft.equipment, newEquipmentLine(true)] };
+        case 'equipment':
+            return {
+                ...draft,
+                equipment: draft.equipment.map((line) => (line.key === action.key ? { ...line, ...action.patch } : line)),
+            };
+        case 'equipmentText':
+            // Typing something other than the picked name unpicks it, as for an ingredient
+            return {
+                ...draft,
+                equipment: draft.equipment.map((line) =>
+                    line.key === action.key
+                        ? { ...line, itemText: action.text, item: line.item && line.item.name === action.text.trim().toLowerCase() ? line.item : null }
+                        : line,
+                ),
+            };
+        case 'removeEquipment':
+            return { ...draft, equipment: draft.equipment.filter((line) => line.key !== action.key) };
+        case 'moveEquipment': {
+            const from = draft.equipment.findIndex((line) => line.key === action.key);
+            const equipment = swap(draft.equipment, from, action.by);
+            return equipment === draft.equipment ? draft : { ...draft, equipment };
+        }
         case 'reset':
             return action.draft;
     }
@@ -439,6 +547,21 @@ export interface SectionBody {
     steps: StepBody[];
 }
 
+/** One of the recipe's tags as it's saved (3b): by id, or a new one by name and colour (a null id). */
+export interface TagBody {
+    tagId: string | null;
+    name: string;
+    color: string | null;
+}
+
+/** One equipment line as it's saved (3b): its item by id, or a new one by name (a null id). */
+export interface EquipmentBody {
+    equipmentId: string | null;
+    name: string;
+    quantity: number;
+    optional: boolean;
+}
+
 /** A recipe as the editor saves it, online or kept on the device. */
 export interface DraftBody {
     name: string;
@@ -448,10 +571,12 @@ export interface DraftBody {
     cookTime: number | null;
     sections: SectionBody[];
     ingredients: LineBody[];
+    tags: TagBody[];
+    equipment: EquipmentBody[];
 }
 
-/** The body for `POST /api/recipes` or `PATCH /api/recipes/:id`: every ingredient by id. */
-export interface RecipeBody extends Omit<DraftBody, 'ingredients'> {
+/** The body for `POST /api/recipes` or `PATCH /api/recipes/:id`: every ingredient, tag and item by id. */
+export interface RecipeBody extends Omit<DraftBody, 'ingredients' | 'tags' | 'equipment'> {
     ingredients: {
         ingredientId: string;
         quantity: number | null;
@@ -460,20 +585,28 @@ export interface RecipeBody extends Omit<DraftBody, 'ingredients'> {
         note: string | null;
         sectionIndex: number | null;
     }[];
+    tagIds: string[];
+    equipment: { equipmentId: string; quantity: number; optional: boolean }[];
 }
 
-/**
- * The API's body, once every ingredient has an id.
- *
- * @param idOf - The id of a new ingredient, by name, once it's been created.
- */
-export function apiBody(body: DraftBody, idOf: (name: string) => string): RecipeBody {
+/** The ids of new ingredients, tags and items, by name, once each has been created. */
+export interface NewIds {
+    ingredient: (name: string) => string;
+    tag: (name: string) => string;
+    equipment: (name: string) => string;
+}
+
+/** The API's body, once every ingredient, tag and item has an id. */
+export function apiBody(body: DraftBody, ids: NewIds): RecipeBody {
+    const { tags, equipment, ...rest } = body;
     return {
-        ...body,
+        ...rest,
         ingredients: body.ingredients.map(({ ingredientId, ingredientName, ...line }) => ({
-            ingredientId: ingredientId ?? idOf(ingredientName),
+            ingredientId: ingredientId ?? ids.ingredient(ingredientName),
             ...line,
         })),
+        tagIds: tags.map((tag) => tag.tagId ?? ids.tag(tag.name)),
+        equipment: equipment.map(({ equipmentId, name, ...line }) => ({ equipmentId: equipmentId ?? ids.equipment(name), ...line })),
     };
 }
 
@@ -483,6 +616,8 @@ export interface BodyKeys {
     sectionKeys: string[];
     /** Each saved section's steps' keys, by position. */
     stepKeys: string[][];
+    /** Each saved equipment line's key, by position (3b). */
+    equipmentKeys: string[];
 }
 
 export type BuildResult = ({ body: DraftBody } & BodyKeys) | { errors: DraftErrors };
@@ -596,6 +731,30 @@ export function buildRecipeBody(draft: RecipeDraft): BuildResult {
         }
     }
 
+    const longTag = draft.tags.find((tag) => tag.name.length > LIMITS.tagName);
+    if (longTag) errors[TAGS_ERROR] = `Keep each tag's name to ${LIMITS.tagName} characters or fewer.`;
+    const tags = draft.tags.map((tag) => ({ tagId: tag.id, name: tag.name, color: tag.color }));
+
+    const equipment: EquipmentBody[] = [];
+    const equipmentKeys: string[] = [];
+    for (const line of draft.equipment) {
+        const typed = line.itemText.trim();
+        if (!line.item && typed === '') continue;
+        if (!line.item) {
+            errors[equipmentErrorKey(line.key, 'item')] = `Choose “${typed}” from the list, or create it.`;
+            continue;
+        }
+        if (line.item.name.length > LIMITS.equipmentName) {
+            errors[equipmentErrorKey(line.key, 'item')] = `Keep the item's name to ${LIMITS.equipmentName} characters or fewer.`;
+        }
+        const { min, max } = LIMITS.equipmentQuantity;
+        if (!Number.isInteger(line.quantity) || line.quantity < min || line.quantity > max) {
+            errors[equipmentErrorKey(line.key, 'quantity')] = `From ${min} to ${max}.`;
+        }
+        equipment.push({ equipmentId: line.item.id, name: line.item.name, quantity: line.quantity, optional: line.optional });
+        equipmentKeys.push(line.key);
+    }
+
     if (Object.keys(errors).length > 0) return { errors };
 
     return {
@@ -607,10 +766,13 @@ export function buildRecipeBody(draft: RecipeDraft): BuildResult {
             cookTime,
             sections,
             ingredients,
+            tags,
+            equipment,
         },
         lineKeys,
         sectionKeys,
         stepKeys,
+        equipmentKeys,
     };
 }
 
@@ -620,6 +782,7 @@ export function draftKeys(draft: RecipeDraft): BodyKeys {
         lineKeys: draft.lines.map((line) => line.key),
         sectionKeys: draft.sections.map((section) => section.key),
         stepKeys: draft.sections.map((section) => section.steps.map((step) => step.key)),
+        equipmentKeys: draft.equipment.map((line) => line.key),
     };
 }
 
@@ -633,17 +796,20 @@ const LINE_FIELDS: Record<string, LineField> = {
 
 const STEP_FIELDS: Record<string, StepField> = { text: 'text', timerSeconds: 'timer' };
 
+const EQUIPMENT_FIELDS: Record<string, EquipmentField> = { equipmentId: 'item', quantity: 'quantity', optional: 'quantity' };
+
 const RECIPE_FIELDS = new Set(['name', 'description', 'servings', 'prepTime', 'cookTime']);
 
 /**
  * Put the API's per-field messages next to their boxes. `ingredients.2.unit`
  * is the third line sent, which `lineKeys` turns back into a row;
  * `sections.1.name` the second section's name, through `sectionKeys`; and
- * `sections.1.steps.0.text` that section's first step, through `stepKeys`.
- * Anything else is shown for the whole form.
+ * `sections.1.steps.0.text` that section's first step, through `stepKeys`;
+ * `equipment.0.quantity` the first equipment line, through `equipmentKeys`;
+ * and `tagIds…` under the tags. Anything else is shown for the whole form.
  */
 export function mapServerErrors(fields: Record<string, string>, keys: Partial<BodyKeys>): DraftErrors {
-    const { lineKeys = [], sectionKeys = [], stepKeys = [] } = keys;
+    const { lineKeys = [], sectionKeys = [], stepKeys = [], equipmentKeys = [] } = keys;
     const errors: DraftErrors = {};
     const unplaced: string[] = [];
 
@@ -656,10 +822,15 @@ export function mapServerErrors(fields: Record<string, string>, keys: Partial<Bo
         const stepField = step ? STEP_FIELDS[step[3] ?? ''] : undefined;
         const section = /^sections\.(\d+)\.(name|steps)\b/.exec(path);
         const sectionKey = section ? sectionKeys[Number(section[1])] : undefined;
+        const item = /^equipment\.(\d+)\.(\w+)$/.exec(path);
+        const itemKey = item ? equipmentKeys[Number(item[1])] : undefined;
+        const itemField = item ? EQUIPMENT_FIELDS[item[2] ?? ''] : undefined;
 
         if (lineKey && lineField) errors[lineErrorKey(lineKey, lineField)] = message;
         else if (stepKey && stepField) errors[stepErrorKey(stepKey, stepField)] = message;
         else if (sectionKey && section) errors[sectionErrorKey(sectionKey, section[2] as SectionField)] = message;
+        else if (itemKey && itemField) errors[equipmentErrorKey(itemKey, itemField)] = message;
+        else if (path === 'tagIds' || path.startsWith('tagIds.')) errors[TAGS_ERROR] = message;
         else if (RECIPE_FIELDS.has(path)) errors[path] = message;
         else unplaced.push(`${path}: ${message}`);
     }

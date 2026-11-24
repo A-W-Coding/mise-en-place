@@ -27,4 +27,13 @@ export const LIMITS = {
     stepText: 2000,
     /** A step's timer, in whole seconds: up to a day (3b). */
     timerSeconds: { min: 1, max: 86_400 },
+    /** Characters in a tag's name, after trimming; stored lowercase (3b). */
+    tagName: 50,
+    /** Characters in an equipment item's name, after trimming; stored lowercase (3b). */
+    equipmentName: 100,
+    /** How many of an item an equipment line needs (3b). */
+    equipmentQuantity: { min: 1, max: 99 },
 } as const;
+
+/** A tag's colour: `#rrggbb`, stored lowercase (3b). */
+export const TAG_COLOUR = /^#[0-9a-f]{6}$/i;

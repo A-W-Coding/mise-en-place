@@ -25,6 +25,9 @@
  *   a sheet to set it. Removing a section asks first when it has steps or
  *   lines. Once the method has sections of its own, each ingredient line's
  *   ⋮ menu puts it in one, and the lines show grouped under their sections.
+ * - Tags sit just under the name, and Equipment is a section of its own
+ *   after the ingredients (3b). A new tag or item made offline is created
+ *   when the recipe reaches the server.
  */
 
 import { useEffect, useReducer, useRef, useState, type FormEvent, type ReactNode } from 'react';
@@ -57,13 +60,16 @@ import {
     sectionTitle,
     type BodyKeys,
     type DraftErrors,
+    type EquipmentDraft,
     type LineDraft,
     type RecipeDraft,
     type SectionDraft,
 } from '../editor/draft';
+import { EquipmentRow } from '../editor/EquipmentRow';
 import { LineRow } from '../editor/LineRow';
 import { MethodSection } from '../editor/MethodSection';
 import { StepTimerSheet, type TimerTarget } from '../editor/StepTimerSheet';
+import { TagPicker } from '../editor/TagPicker';
 import page from '../components/Page.module.css';
 import styles from '../editor/Editor.module.css';
 
@@ -89,6 +95,12 @@ function refusalErrors(message: string, fields: FieldErrors, keys: BodyKeys): Dr
     if (Object.keys(fields).length > 0) return mapServerErrors(fields, keys);
     if (message === 'One or more ingredient IDs are invalid.') {
         return { form: 'An ingredient on this recipe was deleted elsewhere. Choose it again, then save.' };
+    }
+    if (message === 'One or more tag IDs are invalid.') {
+        return { form: 'A tag on this recipe was deleted elsewhere. Remove it or choose it again, then save.' };
+    }
+    if (message === 'One or more equipment IDs are invalid.') {
+        return { form: 'An item of equipment on this recipe was deleted elsewhere. Choose it again, then save.' };
     }
     return { form: message };
 }
@@ -190,7 +202,7 @@ function RecipeEditor({ recipeId, start, onReload }: RecipeEditorProps) {
     const [errors, setErrors] = useState<DraftErrors>(() =>
         refused ? refusalErrors(refused.message, refused.fields, draftKeys(start.draft)) : {},
     );
-    const [open, setOpen] = useState({ ingredients: true, method: true });
+    const [open, setOpen] = useState({ ingredients: true, equipment: true, method: true });
     const [conflict, setConflict] = useState(false);
     const [deleting, setDeleting] = useState(false);
     // The step whose timer is being set, and a section waiting for "Remove" to be confirmed
@@ -201,6 +213,7 @@ function RecipeEditor({ recipeId, start, onReload }: RecipeEditorProps) {
     const formRef = useRef<HTMLFormElement>(null);
     const addLineRef = useRef<HTMLButtonElement>(null);
     const addSectionRef = useRef<HTMLButtonElement>(null);
+    const addEquipmentRef = useRef<HTMLButtonElement>(null);
     // Set just before leaving on purpose (after saving or deleting), so the unsaved-changes check lets it through
     const leaving = useRef(false);
 
@@ -232,6 +245,7 @@ function RecipeEditor({ recipeId, start, onReload }: RecipeEditorProps) {
         const keys = Object.keys(found);
         setOpen((sections) => ({
             ingredients: sections.ingredients || keys.some((key) => key.startsWith('line:')),
+            equipment: sections.equipment || keys.some((key) => key.startsWith('equipment:')),
             method: sections.method || keys.some((key) => key.startsWith('section:') || key.startsWith('step:')),
         }));
         setFocusErrors((count) => count + 1);
@@ -338,7 +352,12 @@ function RecipeEditor({ recipeId, start, onReload }: RecipeEditorProps) {
         );
     };
 
-    const setField = (field: Exclude<keyof RecipeDraft, 'lines' | 'sections'>) => (value: string) =>
+    const removeEquipment = (line: EquipmentDraft) => {
+        dispatch({ type: 'removeEquipment', key: line.key });
+        addEquipmentRef.current?.focus();
+    };
+
+    const setField = (field: Exclude<keyof RecipeDraft, 'lines' | 'sections' | 'tags' | 'equipment'>) => (value: string) =>
         dispatch({ type: 'field', field, value });
 
     const fieldErrors = Object.keys(errors).filter((key) => key !== 'form').length;
@@ -367,6 +386,7 @@ function RecipeEditor({ recipeId, start, onReload }: RecipeEditorProps) {
                         <input {...props} value={draft.name} onChange={(event) => setField('name')(event.target.value)} />
                     )}
                 </Field>
+                <TagPicker tags={draft.tags} errors={errors} dispatch={dispatch} />
                 <Field label="Description" error={errors.description} wide>
                     {(props) => (
                         <textarea
@@ -442,6 +462,40 @@ function RecipeEditor({ recipeId, start, onReload }: RecipeEditorProps) {
                 <button ref={addLineRef} type="button" className={styles.addLine} onClick={() => dispatch({ type: 'add' })}>
                     <PlusIcon size={18} />
                     Add ingredient
+                </button>
+            </Section>
+
+            <Section
+                id="equipment-lines"
+                title="Equipment"
+                count={draft.equipment.length}
+                open={open.equipment}
+                onToggle={() => setOpen((sections) => ({ ...sections, equipment: !sections.equipment }))}
+            >
+                <p className={styles.hint}>Shared with every recipe, like ingredients. Optional means the recipe works without it.</p>
+                {draft.equipment.length > 0 && (
+                    <ol className={styles.lines} aria-label="Equipment lines">
+                        {draft.equipment.map((line, index) => (
+                            <EquipmentRow
+                                key={line.key}
+                                line={line}
+                                index={index}
+                                count={draft.equipment.length}
+                                errors={errors}
+                                dispatch={dispatch}
+                                onRemove={removeEquipment}
+                            />
+                        ))}
+                    </ol>
+                )}
+                <button
+                    ref={addEquipmentRef}
+                    type="button"
+                    className={styles.addLine}
+                    onClick={() => dispatch({ type: 'addEquipment' })}
+                >
+                    <PlusIcon size={18} />
+                    Add equipment
                 </button>
             </Section>
 

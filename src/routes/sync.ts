@@ -21,7 +21,7 @@ import { RECIPE_INCLUDE } from '../utils/recipe-query.js';
 
 const router = Router();
 
-/** Recipes and ingredients by name, then id, so equal names still sort the same way every time. */
+/** Recipes and the shared lists by name, then id, so equal names still sort the same way every time. */
 const BY_NAME_THEN_ID = [{ name: 'asc' }, { id: 'asc' }] as const;
 
 /**
@@ -49,12 +49,13 @@ export function noneMatch(header: string | undefined, etag: string): boolean {
 
 // ── GET /api/sync ───────────────────────────────────────────────────────────
 /**
- * The whole snapshot: `{ recipes, ingredients, etags }`. Each recipe is as
- * `GET /api/recipes/:id` returns it, `ingredients` holds every ingredient,
- * and `etags` maps each recipe's id to the ETag its own GET would send, so
- * a device can edit a recipe from its copy with `If-Match` (Step 17). They
- * sit beside the recipes rather than in them, so each recipe stays exactly
- * as its GET returns it. 3b adds `tags` and `equipment`.
+ * The whole snapshot: `{ recipes, ingredients, etags, tags, equipment }`.
+ * Each recipe is as `GET /api/recipes/:id` returns it; `ingredients`, `tags`
+ * and `equipment` hold every row of those shared lists (3b added the last
+ * two); and `etags` maps each recipe's id to the ETag its own GET would
+ * send, so a device can edit a recipe from its copy with `If-Match` (Step
+ * 17). They sit beside the recipes rather than in them, so each recipe
+ * stays exactly as its GET returns it.
  *
  * `Cache-Control: no-cache` makes any cache check with the API before reusing
  * a stored copy, which costs only a 304 when nothing has changed.
@@ -67,16 +68,18 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
         // One transaction at REPEATABLE READ, so every query sees the database
         // at the same moment. Without it, a recipe saved between the queries
         // could use an ingredient that the ingredient list doesn't have yet.
-        const [recipes, ingredients] = await prisma.$transaction(
+        const [recipes, ingredients, tags, equipment] = await prisma.$transaction(
             [
                 prisma.recipe.findMany({ include: RECIPE_INCLUDE, orderBy: [...BY_NAME_THEN_ID] }),
                 prisma.ingredient.findMany({ orderBy: [...BY_NAME_THEN_ID] }),
+                prisma.tag.findMany({ orderBy: [...BY_NAME_THEN_ID] }),
+                prisma.equipment.findMany({ orderBy: [...BY_NAME_THEN_ID] }),
             ],
             { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
         );
 
         const etags = Object.fromEntries(recipes.map((recipe) => [recipe.id, recipeEtag(recipe.updatedAt)]));
-        const body = JSON.stringify({ recipes, ingredients, etags });
+        const body = JSON.stringify({ recipes, ingredients, etags, tags, equipment });
         const etag = snapshotEtag(body);
         res.set({ ETag: etag, 'Cache-Control': 'no-cache' });
 

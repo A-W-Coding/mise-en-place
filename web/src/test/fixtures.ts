@@ -4,7 +4,7 @@
  * offline copies made from them.
  */
 
-import type { Recipe, RecipeIngredient, RecipeSection, RecipeSummary } from '../api/types';
+import type { Equipment, Recipe, RecipeEquipment, RecipeIngredient, RecipeSection, RecipeSummary, RecipeTag, Tag } from '../api/types';
 import { replaceOfflineCopy, type Snapshot } from '../offline/copy';
 
 const STAMP = '2026-11-23T10:00:00.000Z';
@@ -23,8 +23,49 @@ export function summary(name: string, overrides: Partial<RecipeSummary> = {}): R
         cookTime: null,
         createdAt: STAMP,
         updatedAt: STAMP,
+        tags: [],
         ...overrides,
     };
+}
+
+/** A shared tag (3b). Its id comes from its name, so the same name is the same tag. */
+export function tag(name: string, color: string | null = null, recipeCount?: number): Tag {
+    const id = `40000000-0000-4000-8000-${[...name].reduce((sum, char) => sum * 31 + char.charCodeAt(0), 7).toString(16).slice(-12).padStart(12, '0')}`;
+    return { id, name, color, createdAt: STAMP, updatedAt: STAMP, ...(recipeCount === undefined ? {} : { recipeCount }) };
+}
+
+/** A recipe's tags, in order, as the API nests them. */
+export function tagsOn(recipeId: string, tags: Tag[]): RecipeTag[] {
+    return tags.map((counted, orderIndex) => {
+        const plain = withoutCount(counted);
+        return { recipeId, tagId: plain.id, orderIndex, tag: plain };
+    });
+}
+
+/** A tag as a recipe or the snapshot has it: without `recipeCount`. */
+function withoutCount(tag: Tag): Tag {
+    const plain = { ...tag };
+    delete plain.recipeCount;
+    return plain;
+}
+
+/** A shared piece of equipment (3b). */
+export function item(name: string): Equipment {
+    const id = `50000000-0000-4000-8000-${String(name.length).padStart(4, '0')}${name.slice(0, 8).replace(/\W/g, '0').padEnd(8, '0')}`;
+    return { id, name, createdAt: STAMP, updatedAt: STAMP };
+}
+
+/** A recipe's equipment lines, as the API nests them. */
+export function equipmentOn(recipeId: string, lines: [Equipment, number?, boolean?][]): RecipeEquipment[] {
+    return lines.map(([equipment, quantity = 1, optional = false], orderIndex) => ({
+        id: `${recipeId}-equipment-${orderIndex}`,
+        recipeId,
+        equipmentId: equipment.id,
+        orderIndex,
+        quantity,
+        optional,
+        equipment,
+    }));
 }
 
 function line(
@@ -73,10 +114,12 @@ export const beefChiliSummary: RecipeSummary = {
     cookTime: 120,
     createdAt: STAMP,
     updatedAt: STAMP,
+    tags: [],
 };
 
 export const beefChili: Recipe = {
     ...beefChiliSummary,
+    equipment: [],
     sections: [
         section(BEEF_CHILI_ID, 0, 'Method', [
             'Heat some oil and cook the onions.',
@@ -107,6 +150,8 @@ export const lemonDrizzle: Recipe = {
     updatedAt: STAMP,
     sections: [section('0c1d2e3f-4a5b-4c6d-8e7f-901a2b3c4d5e', 0, 'Method', ['Bake.'])],
     recipeIngredients: [],
+    tags: [],
+    equipment: [],
 };
 
 /** A recipe's ETag in the tests: its updatedAt, quoted, as the API happens to make them. */
@@ -114,13 +159,21 @@ export function etagOf(recipe: Recipe): string {
     return `"${Date.parse(recipe.updatedAt)}"`;
 }
 
-/** What `GET /api/sync` would return for these recipes: their ingredients, each once, sorted by name. */
-export function snapshotOf(recipes: Recipe[]): Snapshot {
+/**
+ * What `GET /api/sync` would return for these recipes: their ingredients,
+ * tags and equipment, each once, sorted by name, plus any other tags given.
+ */
+export function snapshotOf(recipes: Recipe[], extraTags: Tag[] = []): Snapshot {
+    const byName = <T extends { name: string }>(items: Iterable<T>) => [...items].sort((a, b) => a.name.localeCompare(b.name));
     const ingredients = new Map(recipes.flatMap((recipe) => recipe.recipeIngredients.map((line) => [line.ingredient.id, line.ingredient])));
+    const tags = new Map([...recipes.flatMap((recipe) => recipe.tags.map((line) => line.tag)), ...extraTags].map((plain) => [plain.id, plain]));
+    const equipment = new Map(recipes.flatMap((recipe) => recipe.equipment.map((line) => [line.equipment.id, line.equipment])));
     return {
-        recipes: [...recipes].sort((a, b) => a.name.localeCompare(b.name)),
-        ingredients: [...ingredients.values()].sort((a, b) => a.name.localeCompare(b.name)),
+        recipes: byName(recipes),
+        ingredients: byName(ingredients.values()),
         etags: Object.fromEntries(recipes.map((recipe) => [recipe.id, etagOf(recipe)])),
+        tags: byName(tags.values()).map(withoutCount),
+        equipment: byName(equipment.values()),
     };
 }
 

@@ -97,6 +97,36 @@
     color: var(--muted);
 }
 
+/* The recipe's tags (3b), as pills that open the list filtered by each */
+.tags {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.tag {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    padding: 0 12px;
+    border-radius: var(--radius-pill);
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+/* Equipment (3b), after the ingredients and in their column */
+.equipment {
+    margin-top: 24px;
+}
+
+.equipmentName {
+    flex-grow: 1;
+}
+
 /* Ingredient lines grouped by section (3b): a small heading over each section's */
 .ingredientGroup + .ingredientGroup {
     margin-top: 14px;

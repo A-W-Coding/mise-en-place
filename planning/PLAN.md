@@ -3,8 +3,8 @@
 # Mise en place: hardening plan (Phase 1 to Phase 3b)
 
 > **Status**
-> - Current step: **Step 22: sections and steps in the editor and on the page**, done (2026-11-24), with CI to be confirmed when its PR opens. Next: Step 23, tags and equipment. Step 21 (the 3b wireframes) merged as PR #26. Step 20 merged as PR #25 (CI green); it isn't deployed (3b deploys in Step 26). Phase 3b's steps merged as PR #24. Phase 3c is complete (2026-11-24): Steps 15–19 merged (PRs #18–#22), deployed on the Pi, and every success criterion met on your phone. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
-> - Last updated: 2026-11-24 (Step 22: sections and steps in the editor and on the page)
+> - Current step: **Step 23: tags and equipment**, done (2026-11-24), with CI to be confirmed when its PR opens. Next: Step 24, images in the API and on the Pi. Step 22 merged as PR #27 (CI green). Step 21 (the 3b wireframes) merged as PR #26. Step 20 merged as PR #25 (CI green); it isn't deployed (3b deploys in Step 26). Phase 3b's steps merged as PR #24. Phase 3c is complete (2026-11-24): Steps 15–19 merged (PRs #18–#22), deployed on the Pi, and every success criterion met on your phone. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
+> - Last updated: 2026-11-24 (Step 23: tags and equipment)
 > - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
@@ -804,28 +804,28 @@ And since 3c came first, its criteria still hold with all of this: offline, reci
 
 **Why:** two shared lists with the same shape, so they're built together (F6).
 
-- [ ] API (§3.2):
+- [x] API (§3.2):
   - `/api/tags` and `/api/equipment`, with full CRUD. Names are normalised like ingredients' and unique (409); a tag's colour is `#rrggbb` or null
   - deleting a tag removes it from every recipe; deleting equipment a recipe uses is a 409
   - the recipe body takes `tagIds` and `equipment` (`{ equipmentId, quantity, optional }`); responses include both, and the list's lighter rows include the tags
   - `GET /api/tags` gives each tag's `recipeCount`, for the filter's order and the question before a delete (from the wireframe review)
   - `GET /api/recipes?tag=<id>` filters, with search and paging
   - the snapshot gains `tags` and `equipment`
-- [ ] The editor, as the wireframes have it:
-  - Tags just under the name: the recipe's pills, each with a × to take it off, then "Add tag", which opens a picker that searches and creates on the spot ("Create tag “weeknight”")
+- [x] The editor, as the wireframes have it:
+  - Tags just under the name: the recipe's pills, each with a × to take it off, then "Add tag", which opens a picker that searches and creates on the spot ("Create tag “weeknight”"). (As built: the "Add a tag" box is always there, rather than behind a button: one tap fewer, and one state fewer)
   - a new tag's colour: ten presets, or any colour (the browser's colour picker, with a box for the `#rrggbb` code), with a preview pill
   - Equipment as its own collapsible section after Ingredients: each line has the item (the same kind of picker), a − / + count, an Optional box, and a ⋮ menu (Move up, Move down, Remove line)
-- [ ] Pills: a recipe's first two tags beside its name on the list, and all of them on its page, in the tag's colour, with dark or light text chosen for contrast. Names are stored in lower case; pills show them with a capital first letter. A pill on the recipe page opens the list filtered by that tag
-- [ ] The list's tag filter, one tag at a time: a row of tag chips under the search box, the most used first, scrolling sideways on a phone and wrapping on a desktop. The tag is kept in the address (`?tag=`), so Back and a refresh keep it, and a line says how many recipes it found, with Clear. It works together with search. Offline, it filters on the device
-- [ ] Options › Advanced gains Tags and Equipment, like Ingredients:
+- [x] Pills: a recipe's first two tags beside its name on the list, and all of them on its page, in the tag's colour, with dark or light text chosen for contrast. Names are stored in lower case; pills show them with a capital first letter. A pill on the recipe page opens the list filtered by that tag
+- [x] The list's tag filter, one tag at a time: a row of tag chips under the search box, the most used first, scrolling sideways on a phone and wrapping on a desktop. The tag is kept in the address (`?tag=`), so Back and a refresh keep it, and a line says how many recipes it found, with Clear. It works together with search. Offline, it filters on the device. (As built: the address holds the tag's id, `?tag=<id>`, which the API filters by and which survives a rename)
+- [x] Options › Advanced gains Tags and Equipment, like Ingredients:
   - Tags: each tag's pill and how many recipes use it; a ⋮ menu with Rename, Change colour (the same picker as a new tag) and Delete…, which asks first ("It comes off 3 recipes")
   - Equipment: rename, and delete, refused while a recipe uses it
-- [ ] Offline, as you answered: the pickers suggest from the copy, and a new tag or item is picked by name and created when the change uploads, using the existing one on a 409. Renaming or deleting one needs a connection
-- [ ] Tests:
+- [x] Offline, as you answered: the pickers suggest from the copy, and a new tag or item is picked by name and created when the change uploads, using the existing one on a 409. Renaming or deleting one needs a connection
+- [x] Tests:
   - API: the CRUD, the 409s, `recipeCount`, the body, and the filter
   - client: the pills' contrast on light and dark colours, the pickers, the filter, and a new tag created offline uploading with its recipe
   - Playwright: tag a recipe and filter the list by it; add equipment; rename and recolour a tag in Options
-- [ ] `docs/api.md` and `docs/erd.md`
+- [x] `docs/api.md` and `docs/erd.md`. (As built: the ERD already had both tables from Step 20; the README's endpoint table too)
 
 **Done when:** the tests pass in CI.
 
@@ -1735,3 +1735,24 @@ And since 3c came first, its criteria still hold with all of this: offline, reci
   - **Docs:** no API change, so none.
 
   Next: Step 23, tags and equipment.
+- **2026-11-24:** Step 22 merged (PR #27, CI green, Firefox included). Step 23 done: tags and equipment, end to end.
+  - **The API:**
+    - `/api/tags` and `/api/equipment`, with full CRUD, built like `/api/ingredients`: names trimmed and lowercased, a taken one a 409, fuzzy search, paging. A tag's colour is `#rrggbb` (stored lowercase) or null, and every tag these endpoints return carries its `recipeCount`. Deleting a tag takes it off every recipe; deleting equipment a recipe uses is a 409.
+    - The recipe body takes `tagIds` (in order, each once) and `equipment` (`{ equipmentId, quantity 1–99, optional }`), replacing what's there in the same transaction as the rest. A tag or item that doesn't exist is checked before writing, so the 400 can say which list was wrong ("One or more tag IDs are invalid."); the foreign key alone can't tell a tag from an ingredient.
+    - Responses carry `tags` (each with its Tag) and `equipment` (each with its item); list rows carry the tags. `GET /api/recipes?tag=<id>` filters, with search and paging: fuzzy search gained an optional filter, still a bound parameter. The snapshot gained `tags` and `equipment`.
+    - A limit the spec hadn't set: an equipment line's quantity is at most 99, so it stays well inside Postgres's integers, like servings. Added to technical spec §3.2.
+  - **The app:**
+    - The ingredient picker became one picker for every shared list (`SharedListPicker`): ingredients, equipment and tags, each searching the API and, offline, the copy. A tag isn't created in the picker: "Create tag" opens the colour panel first.
+    - Tags under the name: the recipe's pills with ×, an always-visible "Add a tag" box, and the colour panel (ten presets, or any colour through the phone's picker or a `#rrggbb` code, with a preview pill). Online a new tag is created there and then; offline it's kept by name and colour and created on upload.
+    - Equipment as its own section after Ingredients: the item (picked or created), − / + for how many, Optional, and a ⋮ menu.
+    - Pills: the first two on each list row, all of them on the recipe page (each a link to the list filtered by it), in the tag's colour. The text is black or white, whichever reads better: a test of colours across the whole range showed that only pure black and white guarantee WCAG AA (4.5:1) on any colour, so the pills don't use the theme's near-black.
+    - The list's filter: tag chips under the search box, most used first (counts from the API, or worked out from the copy offline), in the address as `?tag=<id>`, with "2 recipes tagged Weeknight · Clear". The search box now leaves other parameters alone, so searching keeps the tag.
+    - Options › Advanced gained Tags (pill, recipe count, Rename, Change colour, Delete… with "It comes off 3 recipes") and Equipment, which shares the Ingredients page's code, with its own words.
+    - Offline: the copy keeps tags and equipment (an older copy without them is fetched again whole); a waiting change carries its tags and equipment, new ones by name, created on upload before the recipe, the existing one used on a 409; old waiting changes get none. The recipe page doesn't link a tag made offline until it has an id.
+  - **Tests:**
+    - Jest: 550, 49 of them new: the tag and equipment endpoints (`tags-api`, `equipment-api`), a recipe's tags and equipment in its body, responses, list rows and the `?tag=` filter (`recipe-tags-equipment`), and the snapshot's new lists.
+    - The client: 294, 32 of them new: the pill colours (including AA across the colour range), the draft's tags and equipment, the editor's tag picker (pick, create with a colour, offline, remove) and equipment lines, the list's pills and filter (online and offline), the recipe page's tags and equipment, Options › Tags and Equipment, and a new tag and item uploading with their recipe.
+    - Playwright: `tags.spec.ts` tags a recipe with a new coloured tag and filters by it, adds equipment, and renames and recolours a tag in Options. All 66 pass in Chromium; Firefox runs in CI. On the way, the Optional checkbox gained an explicit name: Chromium read its hidden suffix with a stray space ("Optional , equipment line 1").
+  - **Docs:** `docs/api.md` (Tag, Equipment, tag and equipment lines, the endpoints, `?tag=`, the body, the snapshot) and the README's endpoint table.
+
+  Next: Step 24, images in the API and on the Pi.

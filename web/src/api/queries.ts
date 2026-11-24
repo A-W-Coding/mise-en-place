@@ -15,6 +15,11 @@
  * - **Instead,** when the API can't be reached: the copy's answer becomes
  *   the page's data, marked `fromCopy`, with the banner.
  * Search then runs on the device until the API answers.
+ *
+ * From 3b the recipe list can be filtered by a tag, on the device too, and
+ * the tag and equipment lists are read the same way. The tag list behind the
+ * list's filter has every tag, each with how many recipes use it, which the
+ * copy works out from its recipes.
  */
 
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
@@ -22,7 +27,7 @@ import { loadOfflineCopy, useOfflineCopy, type OfflineCopy } from '../offline/co
 import { listFromCopy, recipeFromCopy, type ReadResult } from '../offline/read';
 import { noteUnreachable } from '../offline/sync';
 import { ApiError, apiRequest } from './client';
-import type { Ingredient, Recipe, RecipeSummary } from './types';
+import type { Equipment, Ingredient, Recipe, RecipeSummary, Tag } from './types';
 
 /**
  * Items per page. Small enough that the first page arrives quickly on the
@@ -33,15 +38,21 @@ export const PAGE_SIZE = 20;
 /** Cache keys. Everything about recipes starts with 'recipes', so one key can refresh it all. */
 export const queryKeys = {
     recipes: ['recipes'] as const,
-    recipeList: (search: string) => ['recipes', 'list', search] as const,
+    recipeList: (search: string, tag = '') => ['recipes', 'list', search, tag] as const,
     recipe: (id: string) => ['recipes', 'detail', id] as const,
     ingredientList: (search: string) => ['ingredients', 'list', search] as const,
+    tags: ['tags'] as const,
+    tagList: (search: string) => ['tags', 'list', search] as const,
+    allTags: ['tags', 'all'] as const,
+    equipment: ['equipment'] as const,
+    equipmentList: (search: string) => ['equipment', 'list', search] as const,
     health: ['health'] as const,
 };
 
-function listPath(resource: string, search: string, offset: number): string {
+function listPath(resource: string, search: string, offset: number, tag = ''): string {
     const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
     if (search) params.set('search', search);
+    if (tag) params.set('tag', tag);
     return `/api/${resource}?${params}`;
 }
 
@@ -72,10 +83,11 @@ async function withOfflineCopy<T>(
  * copy yet.
  */
 function useInfiniteList<T extends { name: string }>(
-    resource: 'recipes' | 'ingredients',
+    resource: 'recipes' | 'ingredients' | 'tags' | 'equipment',
     queryKey: readonly unknown[],
     search: string,
     itemsInCopy: (copy: OfflineCopy) => T[],
+    tag = '',
 ) {
     // Reading the copy here re-renders the list once it's loaded from storage
     const { copy } = useOfflineCopy();
@@ -84,7 +96,7 @@ function useInfiniteList<T extends { name: string }>(
         queryKey,
         queryFn: ({ pageParam, signal }) =>
             withOfflineCopy(
-                () => apiRequest<T[]>(listPath(resource, search, pageParam), { signal }),
+                () => apiRequest<T[]>(listPath(resource, search, pageParam, tag), { signal }),
                 (copy) => listFromCopy(itemsInCopy(copy), search, pageParam, PAGE_SIZE),
             ),
         initialPageParam: 0,
@@ -102,9 +114,15 @@ function useInfiniteList<T extends { name: string }>(
     return { ...query, items, total, hasNextPage: query.hasNextPage && !query.isPlaceholderData };
 }
 
-/** The recipe list, as summaries. */
-export function useRecipeList(search: string) {
-    return useInfiniteList<RecipeSummary>('recipes', queryKeys.recipeList(search), search, (copy) => copy.data.recipes);
+/** The recipe list, as summaries, optionally only the recipes with one tag (3b). */
+export function useRecipeList(search: string, tag = '') {
+    return useInfiniteList<RecipeSummary>(
+        'recipes',
+        queryKeys.recipeList(search, tag),
+        search,
+        (copy) => (tag ? copy.data.recipes.filter((recipe) => recipe.tags.some((line) => line.tagId === tag)) : copy.data.recipes),
+        tag,
+    );
 }
 
 /** The shared ingredient list. */
@@ -115,6 +133,50 @@ export function useIngredientList(search: string) {
         search,
         (copy) => copy.data.ingredients,
     );
+}
+
+/** The copy's tags, each with how many of its recipes have it. */
+export function tagsFromCopy(copy: OfflineCopy): Tag[] {
+    const counts = new Map<string, number>();
+    for (const recipe of copy.data.recipes) for (const line of recipe.tags) counts.set(line.tagId, (counts.get(line.tagId) ?? 0) + 1);
+    return copy.data.tags.map((tag) => ({ ...tag, recipeCount: counts.get(tag.id) ?? 0 }));
+}
+
+/** The shared tag list, page by page, for Options › Tags (3b). */
+export function useTagList(search: string) {
+    return useInfiniteList<Tag>('tags', queryKeys.tagList(search), search, tagsFromCopy);
+}
+
+/** The shared equipment list, page by page, for Options › Equipment (3b). */
+export function useEquipmentList(search: string) {
+    return useInfiniteList<Equipment>('equipment', queryKeys.equipmentList(search), search, (copy) => copy.data.equipment);
+}
+
+/** As many tags as one request gives: enough for the list's filter. */
+const ALL_TAGS = 100;
+
+/** Most used first, then by name: the order of the list's tag filter. */
+export function byUse(tags: Tag[]): Tag[] {
+    return [...tags].sort((a, b) => (b.recipeCount ?? 0) - (a.recipeCount ?? 0) || a.name.localeCompare(b.name));
+}
+
+/**
+ * Every tag, most used first, for the recipe list's filter (3b). The copy's
+ * stand in at once, and instead when the API can't be reached.
+ */
+export function useAllTags() {
+    const { copy } = useOfflineCopy();
+    const standIn = copy ? { data: tagsFromCopy(copy), etag: null, totalCount: copy.data.tags.length, fromCopy: true as const } : undefined;
+    const query = useQuery({
+        queryKey: queryKeys.allTags,
+        queryFn: ({ signal }) =>
+            withOfflineCopy(
+                () => apiRequest<Tag[]>(`/api/tags?limit=${ALL_TAGS}`, { signal }),
+                (copy) => ({ data: tagsFromCopy(copy), etag: null, totalCount: copy.data.tags.length, fromCopy: true }),
+            ),
+        placeholderData: standIn,
+    });
+    return { ...query, tags: byUse(query.data?.data ?? []) };
 }
 
 /**

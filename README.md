@@ -135,17 +135,21 @@ GitHub Actions runs on every pull request into `main` and every push to `main`, 
 | Method | Endpoint | Description |
 |---|---|---|
 | GET | `/api/health` | 200 `{"status":"ok"}` if the database answers, otherwise 503 |
-| GET | `/api/recipes` | List recipes. `?search=`, `?limit=`, `?offset=` |
-| GET | `/api/recipes/:id` | Get a recipe with its ingredient lines |
-| POST | `/api/recipes` | Create a recipe, optionally with its lines, its method's sections and steps, and an `id` chosen by the client. 409 if that id is taken |
-| PATCH | `/api/recipes/:id` | Update a recipe. An `ingredients` array replaces every line, and a `sections` array every section and step |
-| DELETE | `/api/recipes/:id` | Delete a recipe and its lines |
+| GET | `/api/recipes` | List recipes, with their tags. `?search=`, `?tag=`, `?limit=`, `?offset=` |
+| GET | `/api/recipes/:id` | Get a recipe with its ingredient lines, method, tags and equipment |
+| POST | `/api/recipes` | Create a recipe, optionally with its lines, its method's sections and steps, its `tagIds` and `equipment`, and an `id` chosen by the client. 409 if that id is taken |
+| PATCH | `/api/recipes/:id` | Update a recipe. An `ingredients`, `sections`, `tagIds` or `equipment` array replaces what was there |
+| DELETE | `/api/recipes/:id` | Delete a recipe and everything in it; the shared lists stay |
 | GET | `/api/ingredients` | List ingredients. `?search=`, `?limit=`, `?offset=` |
 | GET | `/api/ingredients/:id` | Get an ingredient |
 | POST | `/api/ingredients` | Create an ingredient. 409 if the name exists |
 | PATCH | `/api/ingredients/:id` | Rename an ingredient. 409 if the name exists |
 | DELETE | `/api/ingredients/:id` | Delete an ingredient. 409 while a recipe uses it |
-| GET | `/api/sync` | Every recipe and ingredient, with each recipe's ETag, for the offline copy. 304 when `If-None-Match` names the current `ETag` |
+| GET, POST | `/api/tags` | List tags, each with its `recipeCount` (`?search=`, `?limit=`, `?offset=`), or create one with a name and a `#rrggbb` colour |
+| GET, PATCH, DELETE | `/api/tags/:id` | Get, rename or recolour a tag, or delete it from every recipe |
+| GET, POST | `/api/equipment` | List equipment, or create an item. Like ingredients |
+| GET, PATCH, DELETE | `/api/equipment/:id` | Get, rename or delete an item. 409 while a recipe uses it |
+| GET | `/api/sync` | Every recipe, ingredient, tag and equipment item, with each recipe's ETag, for the offline copy. 304 when `If-None-Match` names the current `ETag` |
 
 Lists return a JSON array, with the total across all pages in the `X-Total-Count` header. [`docs/api.md`](docs/api.md) has every parameter, body, response and error.
 
@@ -167,7 +171,7 @@ From Phase 2 the app runs on a Raspberry Pi, in Docker, on `127.0.0.1:3000` only
 src/
   app.ts                 The Express app: compression, CORS, JSON parsing, routes, error handler (tests import it)
   server.ts              Loads .env and starts listening
-  routes/                health, recipes, ingredients, sync
+  routes/                health, recipes, ingredients, tags, equipment, sync
   schemas/               Zod schemas for every request body and list query
   middleware/            CORS policy, serving the web client, and the error handler
   utils/                 Validation, fuzzy search, ETags, how a whole recipe is read, Prisma error helpers

@@ -165,7 +165,7 @@ describe('putRecipeInCopy', () => {
 describe('isSnapshot', () => {
     test("accepts the API's shape, and nothing else", () => {
         expect(isSnapshot(snapshotOf([beefChili]))).toBe(true);
-        expect(isSnapshot({ recipes: [], ingredients: [], etags: {} })).toBe(true);
+        expect(isSnapshot({ recipes: [], ingredients: [], etags: {}, tags: [], equipment: [] })).toBe(true);
         expect(isSnapshot(null)).toBe(false);
         expect(isSnapshot({ recipes: [], etags: {} })).toBe(false);
         // A copy from before Step 17, with no ETags, is fetched again whole
@@ -176,6 +176,11 @@ describe('isSnapshot', () => {
         expect(isSnapshot({ recipes: [{ id: 'a', name: 'A', recipeIngredients: [], instructions: 'Stir.' }], ingredients: [], etags: {} })).toBe(
             false,
         );
-        expect(isSnapshot({ recipes: [], ingredients: [{ id: 1, name: 'salt' }], etags: {} })).toBe(false);
+        expect(isSnapshot({ recipes: [], ingredients: [{ id: 1, name: 'salt' }], etags: {}, tags: [], equipment: [] })).toBe(false);
+        // A copy from before Step 23, with no tags or equipment, is fetched again too
+        expect(isSnapshot({ recipes: [], ingredients: [], etags: {} })).toBe(false);
+        const untagged = { ...beefChili, tags: undefined };
+        expect(isSnapshot({ recipes: [untagged], ingredients: [], etags: {}, tags: [], equipment: [] })).toBe(false);
+        expect(isSnapshot({ recipes: [], ingredients: [], etags: {}, tags: [{ id: 'a' }], equipment: [] })).toBe(false);
     });
 });

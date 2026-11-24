@@ -18,15 +18,18 @@
  */
 
 import { useEffect, useSyncExternalStore } from 'react';
-import type { Ingredient, Recipe } from '../api/types';
+import type { Equipment, Ingredient, Recipe, Tag } from '../api/types';
 import { offlineStorage } from './storage';
 
-/** What `GET /api/sync` returns. 3b adds tags and equipment. */
+/** What `GET /api/sync` returns. */
 export interface Snapshot {
     recipes: Recipe[];
     ingredients: Ingredient[];
     /** Each recipe's ETag, by id, for `If-Match` when it's edited from the copy. */
     etags: Record<string, string>;
+    /** Every tag and every item of equipment (3b), by name. */
+    tags: Tag[];
+    equipment: Equipment[];
 }
 
 export interface OfflineCopy {
@@ -66,11 +69,20 @@ export function isSnapshot(value: unknown): value is Snapshot {
     if (!isObject(value.etags) || !Object.values(value.etags).every((etag) => typeof etag === 'string')) return false;
     const named = (item: unknown): item is Record<string, unknown> =>
         isObject(item) && typeof item.id === 'string' && typeof item.name === 'string';
-    // A copy from before 3b has no sections, and is fetched again whole rather than shown broken
+    // A copy from before 3b has no sections, tags or equipment, and is fetched again whole rather than shown broken
+    if (!Array.isArray(value.tags) || !Array.isArray(value.equipment)) return false;
     return (
         value.recipes.every(
-            (recipe) => named(recipe) && Array.isArray(recipe.recipeIngredients) && Array.isArray(recipe.sections),
-        ) && value.ingredients.every(named)
+            (recipe) =>
+                named(recipe) &&
+                Array.isArray(recipe.recipeIngredients) &&
+                Array.isArray(recipe.sections) &&
+                Array.isArray(recipe.tags) &&
+                Array.isArray(recipe.equipment),
+        ) &&
+        value.ingredients.every(named) &&
+        value.tags.every(named) &&
+        value.equipment.every(named)
     );
 }
 
@@ -136,22 +148,22 @@ function placeByName<T extends { id: string; name: string }>(items: T[], item: T
 
 /**
  * Put a recipe the API has just sent back into the copy, with its ETag and
- * any ingredients the copy hasn't got yet. The copy keeps its snapshot ETag,
- * so the next refresh still fetches the whole snapshot.
+ * any ingredients, tags and equipment the copy hasn't got yet. The copy
+ * keeps its snapshot ETag, so the next refresh still fetches the whole
+ * snapshot.
  */
 export async function putRecipeInCopy(recipe: Recipe, etag: string | null): Promise<void> {
     const copy = await loadOfflineCopy();
     if (!copy) return;
-    let ingredients = copy.data.ingredients;
-    for (const line of recipe.recipeIngredients) {
-        if (!ingredients.some((ingredient) => ingredient.id === line.ingredient.id)) {
-            ingredients = placeByName(ingredients, line.ingredient);
-        }
-    }
+    const addMissing = <T extends { id: string; name: string }>(items: T[], found: T[]) =>
+        found.reduce((list, item) => (list.some((existing) => existing.id === item.id) ? list : placeByName(list, item)), items);
+    const ingredients = addMissing(copy.data.ingredients, recipe.recipeIngredients.map((line) => line.ingredient));
+    const tags = addMissing(copy.data.tags, recipe.tags.map((line) => line.tag));
+    const equipment = addMissing(copy.data.equipment, recipe.equipment.map((line) => line.equipment));
     const etags = { ...copy.data.etags };
     if (etag) etags[recipe.id] = etag;
     else delete etags[recipe.id];
-    const data: Snapshot = { recipes: placeByName(copy.data.recipes, recipe), ingredients, etags };
+    const data: Snapshot = { recipes: placeByName(copy.data.recipes, recipe), ingredients, etags, tags, equipment };
     const stored: StoredSnapshot = { data, etag: copy.etag, fetchedAt: copy.fetchedAt };
     await offlineStorage().setMany([[SNAPSHOT_KEY, stored]]);
     update({ status: 'ready', copy: { ...copy, data } });
