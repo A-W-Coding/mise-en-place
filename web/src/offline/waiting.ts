@@ -166,6 +166,18 @@ export function markProblem(change: WaitingChange, problem: ChangeProblem): Prom
     });
 }
 
+/**
+ * Put another change in this one's place in the queue, as settling one does
+ * (Step 18). Ignored if the change has been saved again since.
+ */
+export function replaceWaitingChange(change: WaitingChange, replacement: WaitingChange): Promise<void> {
+    return write((changes) => {
+        const current = changes.find((candidate) => candidate.recipeId === change.recipeId);
+        if (!current || current.savedAt !== change.savedAt) return null;
+        return changes.map((candidate) => (candidate === current ? replacement : candidate));
+    });
+}
+
 /** Drop a recipe's waiting change: it was saved online, or the recipe was deleted. */
 export function discardWaitingChange(recipeId: string): Promise<void> {
     return write((changes) =>

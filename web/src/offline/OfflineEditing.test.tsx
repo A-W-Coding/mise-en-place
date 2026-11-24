@@ -120,8 +120,8 @@ describe('editing offline (Step 17)', () => {
         expect(within(list).getByRole('link', { name: /Beef Chili/ })).toHaveTextContent('Needs your attention');
 
         await user.click(within(banner).getByRole('link', { name: 'Beef Chili' }));
-        expect((await screen.findByText(/Needs your attention\./)).closest('[role="status"]')).toHaveTextContent(
-            "Needs your attention. It was changed on another device after you started editing it, so this version wasn't saved over that one. It's kept on this device.",
+        expect(await screen.findByRole('region', { name: 'Needs your attention' })).toHaveTextContent(
+            "Needs your attention. This recipe was changed on another device after you started editing it, so yours wasn't saved over theirs.",
         );
     });
 

@@ -56,3 +56,67 @@
         display: none;
     }
 }
+
+/* Settling a change that couldn't upload (Step 18) */
+.text {
+    margin: 0;
+}
+
+.notice > * + * {
+    margin-top: 10px;
+}
+
+.segments {
+    display: inline-flex;
+    padding: 3px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-2);
+}
+
+.segment {
+    min-height: 36px;
+    padding: 0 16px;
+    border: none;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.segment[aria-pressed='true'] {
+    background: var(--bg);
+    color: var(--text);
+}
+
+.segment:disabled {
+    cursor: default;
+    opacity: 0.5;
+}
+
+.choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.choice {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.choice:disabled {
+    color: var(--muted);
+    cursor: default;
+}
