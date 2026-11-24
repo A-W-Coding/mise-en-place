@@ -1,10 +1,10 @@
 > Created on 27 September 2026. This is the live copy: progress is ticked off here as each step is done.
 
-# Mise en place: hardening plan (Phase 1 to Phase 3c)
+# Mise en place: hardening plan (Phase 1 to Phase 3b)
 
 > **Status**
-> - Current step: **Phase 3c is complete** (2026-11-24): Steps 15–19 merged (PRs #18–#22, CI green), deployed on the Pi, and every success criterion met on your phone. Next: Phase 3b's steps are written, the same way, when you're ready. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
-> - Last updated: 2026-11-24 (Phase 3c complete)
+> - Current step: **Step 20: the 3b schema, and sections and steps through the API**, ready to start once you've reviewed Phase 3b's steps (written 2026-11-24). Phase 3c is complete (2026-11-24): Steps 15–19 merged (PRs #18–#22), deployed on the Pi, and every success criterion met on your phone. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
+> - Last updated: 2026-11-24 (Phase 3b's steps written)
 > - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
@@ -435,7 +435,7 @@ exit 1
 ### 8.7 Backups (V4)
 - [x] Add a daily cron job that runs `pg_dump -Fc` through `docker compose exec -T`, saves the dump to the SSD and keeps 7 days of dumps (spec §6.2). Put the commands in a script, `scripts/backup.sh`, rather than in the crontab line itself. The script is written and tested locally; the cron line is in `docs/deployment.md`. The line was added to the Pi's crontab on 2026-11-22 (03:30 daily); its first run is on 2026-11-23
 - [x] Keep an encrypted copy off the Pi, for example with restic or rclone's crypt backend, on another machine or in cloud storage. **Answered 2026-11-22: Backblaze B2, with restic.** `scripts/offsite.sh` and section 7 of `docs/deployment.md`. The first copy went up on 2026-11-22, and a restore from it passed the restore check
-- [ ] Back up the images directory as well, once Phase 3 adds images
+- [ ] Back up the images directory as well, once Phase 3 adds images (Step 24)
 - [x] **Test a restore:** restore a dump into a scratch database, for example with `pg_restore -d miseenplace_restore_check`, and compare row counts with the live database. `scripts/restore-check.sh` does this. It passed locally, and on the Pi on 2026-11-22
 
 **Done when:**
@@ -724,11 +724,169 @@ Phase 3c comes before 3b (D15). Each device keeps a full snapshot of the data (D
 
 **Done when:** every 3c success criterion above is met, and CI is green. **Phase 3c is then complete.** 3b's steps are written next.
 
+## Phase 3b: structured recipes, images, tags and equipment
+Phase 3b comes last of the three (D15). Recipes gain sections and steps, with a timer on any step and ingredient lines grouped by section; tags, with colours, shown as pills and used to filter the list; equipment; and images, under D11's rules. Every part of a recipe can be created, changed and removed (F6), and the offline copy and waiting changes keep up with all of it. The specs are the reference: technical spec §2.3 (Phase 3b entities), §3.2 (Phase 3b), §3.4, §5.6, §6.2 (3b) and §7.2, and the design spec's Phase 3b.
+
+Each step builds its feature end to end, API and client together. A step that changed only the API would break the app, which reads the old method text, and as in 3a and 3c the app must work at the end of every step, with its tests passing in CI.
+
+Answered before these steps were written (2026-11-24): wireframes for 3b's screens before any 3b UI code; a new tag or equipment item typed offline is created when the change uploads, like an ingredient; a tag's colour can be any colour, with a row of presets as well; and the order is sections, then tags and equipment, then images.
+
+**Phase 3b is done when** the design spec's 3b success criteria are met:
+- A recipe with sections, steps, timers, images, tags and equipment can be created and edited from the phone
+- A phone photo uploads with its GPS data removed
+- A step with a timer starts it with one tap
+
+And since 3c came first, its criteria still hold with all of this: offline, recipes read from the copy with their sections, tags, equipment and thumbnails, and sections, steps, tags and equipment edited offline upload by themselves.
+
+## Step 20: The 3b schema, and sections and steps through the API
+**Goal:** every 3b table exists, every method has become steps, and recipes are read and saved with sections and steps, while the app looks as it does now.
+
+**Why:** the migration touches every recipe, so it comes first and on its own (§7.2), before any new screen depends on it.
+
+- [ ] One migration creates every 3b table and column (§2.3): RecipeSection, Instruction, Image, Tag, RecipeTag, Equipment and RecipeEquipment, `Recipe.primaryImageId` and `RecipeIngredient.sectionId`. Every foreign key is indexed, and tag and equipment names get trigram indexes. `Recipe.instructions` stays for now
+- [ ] The data step is a migration of its own, straight after: every recipe with instructions gets one section, "Method", with a step for each non-empty line, in order, without a leading "1." or "2)" (as the recipe page shows them today). A test runs that SQL on recipes made with instructions, and checks the sections and steps it makes
+- [ ] The recipe body takes `sections` (each `{ name, steps: [{ text, timerSeconds }] }`) and `ingredients[].sectionIndex`, with §3.2's rules:
+  - section names 1–100 characters, step text 1–2,000, timers whole seconds from 1 to 86,400 or null
+  - `sectionIndex` must point inside `sections`, and a body with `sections` must also have `ingredients`
+  - the limits go in `shared/limits.ts`, for the editor too
+- [ ] Responses, and so the snapshot, include `sections` with their `steps`, and each line's `sectionId`. `instructions` is no longer read or written
+- [ ] The client switches over with no new screens yet:
+  - the recipe page shows the method from the sections, and so does printing
+  - the editor's method box (one step per line) saves as one section, keeping that section's name; a recipe with several sections can't be made in the app until Step 22
+  - waiting changes saved before this, with `instructions`, are converted on load into a "Method" section, so they still upload
+- [ ] Tests:
+  - API: the section and step rules, the `sectionIndex` rules, a PATCH replacing sections and lines together, and the data step
+  - client: the conversions, in both directions, and an old waiting change converted and uploaded
+  - Playwright: the existing tests keep passing
+- [ ] `docs/api.md` and `docs/erd.md`: sections and steps
+
+**Done when:** the tests pass in CI.
+
+## Step 21: Wireframes for 3b's screens (no code)
+**Goal:** the new screens are agreed before they're built.
+
+**Why:** you asked for them, as for 3a. The editor gains the most, and sections, step timers and ingredient grouping all have to fit a phone, used with one hand.
+
+- [ ] A canvas of the new screens:
+  - the method editor: sections, steps, and a timer on a step
+  - ingredient lines grouped by section
+  - the recipe page, and cooking mode, with sections and a step's timer button
+  - the tag picker, with its colour: a row of presets, or any colour
+  - pills on the list and on the recipe page, and the list's tag filter
+  - equipment lines
+  - the image gallery, the main image, and adding one from the camera
+  - Options › Advanced › Tags and Equipment
+- [ ] Reviewed together. The Progress log records what they settle, and the steps below are adjusted to match
+
+**Done when:** you've reviewed them and the log records the outcome.
+
+## Step 22: Sections and steps in the editor and on the page
+**Goal:** a recipe's method has sections and steps with timers, and its ingredients are grouped by section, made and read on the phone.
+
+**Why:** Step 20 changed the data; this gives it its screens, as the wireframes settle.
+
+- [ ] The editor's method becomes sections: add, rename, move and remove a section; add, move and remove a step; an optional timer on a step, typed as "15 min" or "1 h 30 min" and read by `parseDuration()` in `shared/quantity.ts`, beside `parseAmount()`
+- [ ] Ingredient lines can be put in a section, sent as `sectionIndex`
+- [ ] The recipe page groups the ingredients and the method by section. A step with a timer has a small button that starts it with one tap, through the existing timers. Printing keeps the sections
+- [ ] The editor checks the new limits before saving, so a change saved offline is rarely refused later. The copy and waiting changes already carry sections (Step 20)
+- [ ] Tests:
+  - unit: `parseDuration()` (in the Jest suite, like `parseAmount()`), and the draft's sections and grouping
+  - component: the editor's sections and timers, and the page
+  - Playwright: a recipe with two sections, a step with a timer and grouped lines; then the step's timer started from the page
+
+**Done when:** the tests pass in CI.
+
+## Step 23: Tags and equipment
+**Goal:** recipes have tags, shown as coloured pills and used to filter the list, and equipment lines. Both are shared lists, managed like ingredients.
+
+**Why:** two shared lists with the same shape, so they're built together (F6).
+
+- [ ] API (§3.2):
+  - `/api/tags` and `/api/equipment`, with full CRUD. Names are normalised like ingredients' and unique (409); a tag's colour is `#rrggbb` or null
+  - deleting a tag removes it from every recipe; deleting equipment a recipe uses is a 409
+  - the recipe body takes `tagIds` and `equipment` (`{ equipmentId, quantity, optional }`); responses include both, and the list's lighter rows include the tags
+  - `GET /api/recipes?tag=<id>` filters, with search and paging
+  - the snapshot gains `tags` and `equipment`
+- [ ] The editor:
+  - a tag picker that searches and creates on the spot; a new tag's colour comes from a row of presets, or any colour
+  - equipment lines (the item, how many, whether it's optional), with the same kind of picker
+- [ ] Pills: a recipe's first two tags beside its name on the list, and all of them on its page, in the tag's colour, with dark or light text chosen for contrast
+- [ ] The list's tag filter: choose a tag to see its recipes, together with search. Offline, it filters on the device
+- [ ] Options › Advanced gains Tags (rename, recolour, delete, asking first) and Equipment (rename, delete; refused while a recipe uses it), like Ingredients
+- [ ] Offline, as you answered: the pickers suggest from the copy, and a new tag or item is picked by name and created when the change uploads, using the existing one on a 409. Renaming or deleting one needs a connection
+- [ ] Tests:
+  - API: the CRUD, the 409s, the body, and the filter
+  - client: the pills' contrast on light and dark colours, the pickers, the filter, and a new tag created offline uploading with its recipe
+  - Playwright: tag a recipe and filter the list by it; add equipment; rename and recolour a tag in Options
+- [ ] `docs/api.md` and `docs/erd.md`
+
+**Done when:** the tests pass in CI.
+
+## Step 24: Images in the API, and on the Pi
+**Goal:** images upload under D11's rules, are served, and are backed up.
+
+**Why:** this is where untrusted files reach the Pi, so it's built and tested on its own, before any screen uses it.
+
+- [ ] New dependencies, named here as the working rules ask: `sharp` (re-encoding, prebuilt for 64-bit ARM Linux, so nothing extra on the Pi) and `multer` (multipart uploads, held in memory)
+- [ ] `POST /api/recipes/:id/images` and `DELETE /api/images/:id` (§3.2, D11):
+  - the type is recognised from the contents: JPEG, PNG or WebP, anything else a 415
+  - at most 15 MB (413), and 50 megapixels, read from the header before decoding (400)
+  - turned upright, then re-encoded to WebP at 2,000 px on the long side, plus a 400 px thumbnail, with all metadata stripped; the upload itself is discarded
+  - the files are named after the new row's id; at most 10 per recipe (409)
+  - the files are written before the row, and removed if the transaction fails; deleting an image, or its recipe, deletes its files
+- [ ] `primaryImageId` in the recipe body; recipe responses include `images` and `primaryImageId`, and the list's rows `primaryImageId`
+- [ ] `/media/<id>.webp` and `/media/<id>-thumb.webp`, cached as `immutable`, from a folder set by `MEDIA_DIR`
+- [ ] The Pi:
+  - a named volume for the images, mounted into `api` and owned by its `node` user
+  - `backup.sh` saves the images beside each dump, and `offsite.sh` sends both to B2, which closes Step 8.7's last box
+  - "Moving to an SSD" in `docs/deployment.md` moves the images too
+- [ ] Tests, with images made by sharp inside the test:
+  - a JPEG carrying a GPS position comes back without it
+  - SVG, GIF and HEIC refused; a file over 15 MB; a small file that would expand past 50 megapixels; an 11th image
+  - the files gone with their image, and with their recipe
+  - `primaryImageId` refused for another recipe's image
+- [ ] `docs/api.md`, `docs/erd.md`, `docs/architecture.md` and `docs/deployment.md`
+
+**Done when:** the tests pass in CI.
+
+## Step 25: Images in the app
+**Goal:** images can be added from the phone's camera or its photos, a main image chosen, and thumbnails seen in the list, offline too.
+
+**Why:** the last of 3b's features, now the API is ready (Step 24).
+
+- [ ] Add an image (the phone offers its camera or its photos), see the recipe's images in a gallery, choose the main one, and delete one, asking first; where these sit follows the wireframes. Adding needs a connection, and says so offline
+- [ ] The list shows each recipe's main image as a thumbnail, and its page shows the main image
+- [ ] Offline (§3.4): the service worker caches every thumbnail ahead of time, after each snapshot refresh, and full images as they're viewed, the most recent 100. A deleted image's files drop out as they expire
+- [ ] Tests:
+  - component: the gallery, choosing the main image, and adding one offline saying it needs a connection
+  - Playwright: upload an image and make it the main one, see its thumbnail in the list, then go offline and still see it
+
+**Done when:** the tests pass in CI.
+
+## Step 26: Deploy, check on the phone, and drop `instructions` (Phase 3b done)
+**Goal:** Phase 3b runs on the Pi and meets its success criteria on your phone.
+
+**Why:** the migration meets your real recipes here, and the camera, its GPS data and the image backups need the real phone and Pi.
+
+- [ ] Merge to `main`, then run `scripts/deploy.sh`: it backs up, then migrates (§7.2)
+- [ ] Check a few migrated recipes in the app: each method is a "Method" section with the same steps (you). The backup taken before migrating is the way back
+- [ ] Then a last migration drops `Recipe.instructions` (§7.2), and a second deploy
+- [ ] On your phone (you):
+  - create a recipe with two sections, a step with a timer, grouped ingredient lines, two tags, equipment, and a photo taken there and then
+  - start the step's timer with one tap; edit the recipe
+  - offline: read it, thumbnail included, and edit its sections and tags, then reconnect and see the change upload by itself
+- [ ] The stored photo has no GPS position (checked from the PC, on the file the Pi serves)
+- [ ] The nightly backup includes the images, and so does the off-site copy
+- [ ] Docs: anything the deploy changed
+- [ ] Tick the boxes, then update the Status block and the Progress log
+
+**Done when:** every 3b success criterion above is met, and CI is green. **Phase 3b, and with it Phase 3, is then complete.**
+
 ## Backlog (later phases)
 | When | Items |
 |---|---|
 | Any time after Step 6 | M6: a JSON export of all data (small, and cheap insurance) |
-| Phase 3 | 3a: Steps 9–14 (done). 3c: Steps 15–19, before 3b (D15). 3b gets its steps when it starts, and keeps the offline copy and waiting changes whole as recipes gain sections, steps, tags, equipment and images |
+| Phase 3 | 3a: Steps 9–14 (done). 3c: Steps 15–19 (done), before 3b (D15). 3b: Steps 20–26 |
 | Later, unscheduled | Ingredient usage, from your wireframe review: see which recipes use an ingredient, then either replace it in all of them at once (a merge) so it can be deleted, or delete those recipes with it. Phone VPNs: Android runs one VPN at a time, so Tailscale and Proton VPN take turns, and Proton doesn't reconnect by itself (Android's Always-on VPN blocks Tailscale outright). Ways to automate or avoid the switch: an automation app (MacroDroid: start Proton when Tailscale disconnects), the Pi as a Tailscale exit node sending its traffic through Proton, or Tailscale's Mullvad add-on |
 | Phase 4 | Uptime and disk-space alerts, log rotation, and automated dependency updates (Dependabot or Renovate). V5: the Prisma upgrade, as its own task |
 | Phase 5 | F7: the shopping-list tables must exist before Phase 5 can deliver shopping lists. D14: timer alerts while another app is open, through Web Push from the Pi (test it on the phone first, because Firefox for Android has had push bugs) |
@@ -1493,3 +1651,16 @@ Phase 3c comes before 3b (D15). Each device keeps a full snapshot of the data (D
 - **2026-11-24:** Step 19 merged (PR #22, CI green, Firefox included). Redeployed. Your recheck: with Proton on, a fresh start now shows the recipes at once, and the banner a few seconds later. **Phase 3c is complete.**
 
   Next: Phase 3b's steps, written the same way, when you're ready.
+- **2026-11-24:** Phase 3b's steps written: Steps 20–26.
+  - **Answered first:**
+    - wireframes for 3b's screens before any 3b UI code, as for 3a (Step 21)
+    - a new tag or equipment item typed offline is created when the change uploads, like an ingredient
+    - a tag's colour can be any colour, with a row of presets as well
+    - the order: sections, then tags and equipment, then images
+  - **Each step builds its feature end to end,** API and client together, so the app works at the end of each. Step 20 does the riskiest part first: every 3b table in one migration, and the old method text moved into steps by a second, testable one. The app switches to sections there, with no new screens yet, and converts any waiting changes saved in the old shape.
+  - **Images come last,** in two steps: the API and the Pi first (Step 24), with the D11 rules tested before any screen uses them, and the Pi's image volume and backups, which closes Step 8.7; then the app (Step 25).
+  - **Step 26** deploys, checks the migrated recipes on the Pi, and only then drops `Recipe.instructions`, as §7.2 has it.
+  - **New dependencies, named in their step:** `sharp` and `multer` (Step 24).
+  - **Spec updates:** a tag's colour (any, with presets), and new tags and equipment typed offline (technical spec §3.4).
+
+  Next: review Phase 3b's steps, then Step 20.
