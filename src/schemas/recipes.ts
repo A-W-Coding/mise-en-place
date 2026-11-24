@@ -3,8 +3,10 @@
  * Request-body schemas for the Recipe endpoints (decision D1: Zod).
  *
  * Every schema is strict: an unknown field is a 400, so clients can't set
- * `id`, `createdAt` or anything else the server owns (S3). Parsing also
- * normalises: names are trimmed and units become canonical symbols.
+ * `createdAt` or anything else the server owns (S3). The one exception is a
+ * new recipe's `id`, which the client may choose (3c, D15); nothing can
+ * change an existing one. Parsing also normalises: names are trimmed and
+ * units become canonical symbols.
  */
 
 import { z } from 'zod';
@@ -73,8 +75,15 @@ export const ingredientLineSchema = z
 
 const ingredientLines = z.array(ingredientLineSchema, { error: 'Must be an array of ingredient lines.' });
 
+/**
+ * A new recipe's id, chosen by the client (3c, D15). Lowercased, because ids
+ * are stored and compared as text, and the server's own are lowercase.
+ */
+const newRecipeId = z.uuid({ error: 'Must be a UUID.' }).transform((id) => id.toLowerCase());
+
 /** POST /api/recipes. Only `name` is required; `servings` defaults to 1. */
 export const createRecipeSchema = z.strictObject({
+    id: newRecipeId.optional(),
     name: recipeName,
     description: text.optional(),
     servings: servings.default(1),

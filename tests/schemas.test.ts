@@ -28,9 +28,16 @@ describe('createRecipeSchema', () => {
         ['a blank name', { name: '   ' }],
         ['a name over 200 characters', { name: 'x'.repeat(201) }],
         ['a name that is not a string', { name: 5 }],
-        ['an unknown field', { name: 'Soup', id: ID }],
+        ['an unknown field', { name: 'Soup', createdAt: '2020-01-01' }],
+        ['an id that is not a UUID', { name: 'Soup', id: 'soup-1' }],
+        ['a null id', { name: 'Soup', id: null }],
     ])('rejects %s', (_label, body) => {
         expect(createRecipeSchema.safeParse(body).success).toBe(false);
+    });
+
+    test('accepts an id chosen by the client (3c, D15), in lowercase', () => {
+        expect(createRecipeSchema.parse({ name: 'Soup', id: ID }).id).toBe(ID);
+        expect(createRecipeSchema.parse({ name: 'Soup', id: ID.toUpperCase() }).id).toBe(ID);
     });
 });
 
