@@ -8,17 +8,17 @@
  * the box with exactly an existing name typed picks that ingredient, since
  * names are unique; anything else stays unpicked until chosen or created.
  *
- * Offline (3c), the suggestions come from the offline copy, and a created
- * ingredient is picked by name alone: it's created when the recipe reaches
- * the server, or the existing one is used if it was created elsewhere
- * meanwhile.
+ * The offline copy (3c) suggests names at once while the API is asked, and
+ * instead of it when it can't be reached. Offline, a created ingredient is
+ * picked by name alone: it's created when the recipe reaches the server, or
+ * the existing one is used if it was created elsewhere meanwhile.
  */
 
 import { useEffect, useId, useState, type KeyboardEvent } from 'react';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { LIMITS } from '../../../shared/limits';
 import { ApiError, apiRequest } from '../api/client';
-import { loadOfflineCopy } from '../offline/copy';
+import { loadOfflineCopy, useOfflineCopy } from '../offline/copy';
 import { listFromCopy } from '../offline/read';
 import { errorMessage } from '../api/errorMessage';
 import { useCreateIngredient } from '../api/mutations';
@@ -73,6 +73,9 @@ export function IngredientPicker({
     const typed = normalise(text);
     const search = useDebounced(typed, SEARCH_DELAY_MS);
     const create = useCreateIngredient();
+    const { copy } = useOfflineCopy();
+    // The copy's matches, shown while the API is asked
+    const standIn = copy && search ? listFromCopy(copy.data.ingredients, search, 0, SUGGESTIONS) : null;
 
     const results = useQuery({
         queryKey: ['ingredients', 'pick', search],
@@ -88,14 +91,15 @@ export function IngredientPicker({
             }
         },
         enabled: open && search !== '',
-        placeholderData: keepPreviousData,
+        placeholderData: (previous) => standIn ?? previous,
         staleTime: 30_000,
     });
 
     const matches = search === '' ? [] : (results.data?.data ?? []);
     const exact = matches.find((ingredient) => ingredient.name === typed);
-    // Offer to create only once the results are for what's typed now, so an existing name isn't offered
-    const settled = search === typed && results.isSuccess && !results.isPlaceholderData;
+    // Offer to create only once the results are for what's typed now, so an existing name isn't offered.
+    // The copy's are, and if the name exists on the server after all, creating it finds that one (409)
+    const settled = search === typed && results.isSuccess && (!results.isPlaceholderData || standIn !== null);
     const options: Option[] = [
         ...matches.map((ingredient): Option => ({ kind: 'match', ingredient })),
         ...(settled && typed !== '' && !exact ? [{ kind: 'create', name: typed } as Option] : []),

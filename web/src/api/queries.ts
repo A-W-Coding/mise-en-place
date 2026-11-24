@@ -5,13 +5,20 @@
  * Lists load a page at a time (`useInfiniteQuery`): the next page's offset is
  * the number of items loaded so far, until that reaches `X-Total-Count` (D6).
  *
- * When the API can't be reached, the recipe list, a recipe and the ingredient
- * list are answered from the offline copy instead (3c), marked `fromCopy`.
- * Search then runs on the device.
+ * The offline copy (3c) answers the recipe list, a recipe and the ingredient
+ * list in two ways:
+ * - **At once,** while the API is asked: the copy's answer stands in
+ *   (TanStack Query's `placeholderData`) until the API's arrives and
+ *   replaces it. So a page never waits on a network that isn't there:
+ *   reaching the Pi's address with Proton on can take seconds to fail.
+ *   Standing in isn't "from the copy", so no banner shows yet.
+ * - **Instead,** when the API can't be reached: the copy's answer becomes
+ *   the page's data, marked `fromCopy`, with the banner.
+ * Search then runs on the device until the API answers.
  */
 
-import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { loadOfflineCopy, type OfflineCopy } from '../offline/copy';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { loadOfflineCopy, useOfflineCopy, type OfflineCopy } from '../offline/copy';
 import { listFromCopy, recipeFromCopy, type ReadResult } from '../offline/read';
 import { noteUnreachable } from '../offline/sync';
 import { ApiError, apiRequest } from './client';
@@ -59,13 +66,20 @@ async function withOfflineCopy<T>(
     }
 }
 
-/** One list, page by page, optionally searched. The previous results stay on screen while a new search loads. */
+/**
+ * One list, page by page, optionally searched. While a page or a new search
+ * loads, the copy's answer stands in, or the previous results if there's no
+ * copy yet.
+ */
 function useInfiniteList<T extends { name: string }>(
     resource: 'recipes' | 'ingredients',
     queryKey: readonly unknown[],
     search: string,
     itemsInCopy: (copy: OfflineCopy) => T[],
 ) {
+    // Reading the copy here re-renders the list once it's loaded from storage
+    const { copy } = useOfflineCopy();
+    const standIn = copy ? listFromCopy(itemsInCopy(copy), search, 0, PAGE_SIZE) : null;
     const query = useInfiniteQuery({
         queryKey,
         queryFn: ({ pageParam, signal }) =>
@@ -79,12 +93,13 @@ function useInfiniteList<T extends { name: string }>(
             // An empty page also stops, in case the total shrank while paging
             return lastPage.data.length > 0 && loaded < (lastPage.totalCount ?? 0) ? loaded : undefined;
         },
-        placeholderData: keepPreviousData,
+        placeholderData: (previous) => (standIn ? { pages: [standIn], pageParams: [0] } : previous),
     });
 
     const items = query.data?.pages.flatMap((page) => page.data) ?? [];
     const total = query.data?.pages[0]?.totalCount ?? null;
-    return { ...query, items, total };
+    // Nothing loads more while something only stands in: the real first page comes first
+    return { ...query, items, total, hasNextPage: query.hasNextPage && !query.isPlaceholderData };
 }
 
 /** The recipe list, as summaries. */
@@ -104,9 +119,10 @@ export function useIngredientList(search: string) {
 
 /**
  * One whole recipe. `data.etag` is kept for the editor's `If-Match` (Step
- * 12); a recipe from the offline copy has none.
+ * 12). The copy's version stands in while the API is asked.
  */
 export function useRecipe(id: string) {
+    const { copy } = useOfflineCopy();
     return useQuery({
         queryKey: queryKeys.recipe(id),
         queryFn: ({ signal }) =>
@@ -114,6 +130,7 @@ export function useRecipe(id: string) {
                 () => apiRequest<Recipe>(`/api/recipes/${encodeURIComponent(id)}`, { signal }),
                 (copy) => recipeFromCopy(copy, id),
             ),
+        placeholderData: copy ? (recipeFromCopy(copy, id) ?? undefined) : undefined,
     });
 }
 

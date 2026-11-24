@@ -95,8 +95,12 @@ function EditRecipe({ id }: { id: string }) {
     // Bumped by "Reload recipe", which starts the form again from the latest version
     const [version, setVersion] = useState(0);
 
-    // A recipe from the copy needs its ETag to be edited; one from the API always has it
-    const loaded = recipe.data && !(recipe.data.fromCopy && recipe.data.etag === null) ? recipe.data : undefined;
+    // Not the copy's version standing in while the API is asked: if the copy is older,
+    // the edit would meet a 412. A recipe from the copy needs its ETag to be edited
+    const loaded =
+        recipe.data && !recipe.isPlaceholderData && !(recipe.data.fromCopy && recipe.data.etag === null)
+            ? recipe.data
+            : undefined;
     if (start === null && waiting.status === 'ready') {
         const change = waiting.changes.find((candidate) => candidate.recipeId === id);
         if (change) {

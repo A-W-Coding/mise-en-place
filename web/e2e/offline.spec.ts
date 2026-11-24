@@ -123,3 +123,27 @@ test.describe('a refresh that fails', () => {
         }
     });
 });
+
+test.describe('a server slow to answer', () => {
+    // So the test's own hold on /api/recipes sees every request: a service worker can hide them from it
+    test.use({ serviceWorkers: 'block' });
+
+    test('a fresh start shows the copy at once, rather than waiting for the request to give up', async ({ page }) => {
+        await page.goto('/options');
+        await expect(page.getByRole('region', { name: 'Offline copy' })).toContainText('1 recipe on this device');
+
+        // As with Proton on: the request to the Pi takes seconds to fail
+        await page.route(/\/api\/recipes(\?|$)/, async (route) => {
+            await new Promise((resolve) => setTimeout(resolve, 15_000));
+            await route.abort('timedout').catch(() => {});
+        });
+        try {
+            await page.goto('/');
+            await expect(page.getByRole('link', { name: /Beef Chili/ })).toBeVisible({ timeout: 3_000 });
+            // Nothing has failed yet, so no banner claims the server can't be reached
+            await expect(banner(page)).toBeHidden();
+        } finally {
+            await page.unrouteAll({ behavior: 'ignoreErrors' });
+        }
+    });
+});

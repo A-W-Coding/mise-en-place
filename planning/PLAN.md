@@ -3,8 +3,8 @@
 # Mise en place: hardening plan (Phase 1 to Phase 3c)
 
 > **Status**
-> - Current step: **Step 19: deploy, and check on the phone**, ready to start; it finishes Phase 3c. Step 18 is done (2026-11-24), with CI to be confirmed when its PR opens. Step 17 merged as PR #20, CI green after a fix for Firefox's reconnect; Step 16 as PR #19, after a fix for Firefox's HTTP cache; Step 15 as PR #18. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
-> - Last updated: 2026-11-24 (Step 18: when an upload can't go through)
+> - Current step: **Step 19: deploy, and check on the phone**, all but one box done (2026-11-24). Every phone check passed, but a start with Proton on showed nothing until the request to the Pi failed, so pages now show the copy at once. That fix waits on its PR, a redeploy and a recheck on the phone; Phase 3c is then complete. Step 18 merged as PR #21, CI green; Step 17 as PR #20; Step 16 as PR #19; Step 15 as PR #18. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
+> - Last updated: 2026-11-24 (Step 19: deploy and phone check, and the copy shown at once)
 > - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
@@ -705,18 +705,20 @@ Phase 3c comes before 3b (D15). Each device keeps a full snapshot of the data (D
 
 **Why:** Playwright's offline mode stands in for the phone's. Being off the tailnet with Proton on, the app being closed by Android, and persistent storage in Firefox need the real phone.
 
-- [ ] Merge to `main`, then run `scripts/deploy.sh` on the Pi
-- [ ] Check that gzip reaches the phone through `tailscale serve` (moved from Step 15): `/api/sync` and the app's script arrive with `Content-Encoding: gzip`
-- [ ] On your phone, in the installed app (you):
+- [x] Merge to `main`, then run `scripts/deploy.sh` on the Pi
+- [x] Check that gzip reaches the phone through `tailscale serve` (moved from Step 15): `/api/sync` and the app's script arrive with `Content-Encoding: gzip`
+- [x] On your phone, in the installed app (you):
   - with Tailscale on, open the app so it fetches the snapshot, then tap Protect in Options and allow it
   - switch to Proton or airplane mode: the app opens from the Home Screen, and recipes open, search and work with cooking mode
   - still off the tailnet, create a recipe with a new ingredient and edit another. Close the app fully, reopen it, and check both are there, marked as waiting
   - switch back to Tailscale, bring the app to the front, and check both upload by themselves and appear on the laptop
   - edit the same recipe on the phone, offline, and on the laptop. Reconnect the phone, and settle it with Keep both
   - delete a recipe on the laptop, and check it disappears from the phone at its next refresh
-- [ ] Weeks without opening the app: Playwright's clock and the store's unit tests cover it in CI. If you can leave the app unopened for a week or more, check it then and note it in the log
-- [ ] Docs: `docs/architecture.md` (the offline copy and waiting changes), `docs/deployment.md` (Protect, and what clearing the site's data loses), and the README if any commands changed
-- [ ] Tick the boxes, then update the Status block and the Progress log
+- [x] Weeks without opening the app: Playwright's clock and the store's unit tests cover it in CI. If you can leave the app unopened for a week or more, check it then and note it in the log
+- [x] Docs: `docs/architecture.md` (the offline copy and waiting changes), `docs/deployment.md` (Protect, and what clearing the site's data loses), and the README if any commands changed
+- [x] Found by the phone check: a start with Proton on showed nothing until the request to the Pi failed, which takes seconds. Pages now show the copy at once while the Pi is asked (added 2026-11-24)
+- [ ] Merge that, redeploy, and recheck on the phone that a start with Proton on shows the recipes at once (you)
+- [x] Tick the boxes, then update the Status block and the Progress log
 
 **Done when:** every 3c success criterion above is met, and CI is green. **Phase 3c is then complete.** 3b's steps are written next.
 
@@ -1467,3 +1469,22 @@ Phase 3c comes before 3b (D15). Each device keeps a full snapshot of the data (D
   - Checked in the Browser pane: the panel at phone width, and the Yours/Theirs switch, with a stand-in change put in the pane's storage and removed afterwards. Nothing was written to the dev database.
 
   Next: Step 19, deploy, and check on the phone (Phase 3c done).
+- **2026-11-24:** Step 18 merged (PR #21, CI green). Step 19:
+  - **Deployed** (`deploy.sh`, Deploy OK). Before it, `/api/sync` gave 404 on the Pi.
+  - **Gzip through `tailscale serve`:** the app's script arrives with `Content-Encoding: gzip`, 434,924 bytes as 133,641. The snapshot was 872 bytes at first, under the 1 kB threshold, so it wasn't compressed; after the phone checks added recipes it was 1,763 bytes, arriving gzipped as 587. `ETag`, `Vary: Accept-Encoding` and the 304 all pass through too.
+  - **On the phone** (your checks), every one passed:
+    1. Options › Offline copy showed the recipes; Protect was allowed.
+    2. On Proton, after closing the app fully: it opened from the Home Screen, and recipes, search and cooking mode worked. But nothing showed until the request to the Pi failed, a wait of a few seconds.
+    3. Off the tailnet, a new recipe with a new ingredient and an edit to another were both there after the app was closed and reopened, marked as waiting.
+    4. Back on Tailscale, with the app brought to the front, both uploaded "quicker than my eyes could track", and appeared in Edge on the PC.
+    5. The same recipe edited on the phone offline and on the PC: after reconnecting, it was settled with Keep both.
+    6. A recipe deleted on the PC disappeared from the phone at its next refresh.
+  - **The fix for check 2** (`api/queries.ts`): pages showed the copy only once the request to the Pi failed, and with Proton on the Pi's address takes seconds to fail. Now the copy's answer stands in at once while the API is asked (TanStack Query's `placeholderData`), and the API's answer replaces it. Your suggestion, over a 3-second timeout: nothing waits at all, and moving between pages or searching offline doesn't wait either.
+    - Standing in isn't "from the copy", so the banner still shows only once a request has failed. Loading more waits for the real first page.
+    - The ingredient picker suggests from the copy at once too, and offers Create from it; online, a name that exists after all gets a 409, and the existing ingredient is picked.
+    - The editor still waits for the API's version (or its failure), so an older copy isn't edited into a 412.
+  - **Tests:** the client has 230, 4 of them new: the list and a recipe from the copy at once with no banner, the API's answer replacing it, the banner once it fails, the editor waiting, and the picker. Playwright: a fresh start with `/api/recipes` held for 15 s shows the list within 3 s, with no banner. Chromium: all 58 pass. Firefox runs in CI.
+  - **Docs:** `docs/architecture.md` gains "From Phase 3c: working offline", with a diagram of the refresh round; the development diagram shows compression and the sync route. `docs/deployment.md`: what works offline, saving offline, Protect, what clearing the site's data loses, and settling a change that couldn't upload. The spec's "Refreshing" describes the copy shown at once.
+  - Weeks without opening the app: CI covers it (the store's 60-day test). If you leave the app unopened for a week or more, check it then and note it here.
+
+  Next: merge the fix, redeploy, and recheck check 2 on the phone. Phase 3c is then complete, and 3b's steps are written next.

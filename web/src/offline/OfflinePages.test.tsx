@@ -295,3 +295,71 @@ describe('Options › Offline copy', () => {
         expect(within(section).queryByText(/The last refresh failed/)).not.toBeInTheDocument();
     });
 });
+
+describe('the copy at once, while the API is asked (Step 19)', () => {
+    /** An API answer that hasn't come yet: call `answer` to send it, or `fail` for no answer at all. */
+    function slowAnswer() {
+        let answer: (response: Response) => void = () => {};
+        let fail: () => void = () => {};
+        const respond = () =>
+            new Promise<Response>((resolve, reject) => {
+                answer = resolve;
+                fail = () => reject(new TypeError('Failed to fetch'));
+            });
+        return { respond, answer: (response: Response) => answer(response), fail: () => fail() };
+    }
+
+    test("the list shows the copy straight away, with no banner, and the API's answer replaces it", async () => {
+        await seedCopy([beefChili]);
+        const slow = slowAnswer();
+        mockApi([['GET', '/api/recipes', slow.respond]]);
+        renderApp('/');
+
+        expect(await screen.findByRole('link', { name: /Beef Chili/ })).toBeInTheDocument();
+        expect(screen.queryByText('Loading recipes…')).not.toBeInTheDocument();
+        expect(banner()).toBeNull();
+
+        act(() => slow.answer(page([beefChiliSummary, summary('Banana Bread')])));
+        expect(await screen.findByRole('link', { name: /Banana Bread/ })).toBeInTheDocument();
+        expect(screen.getByText('2 recipes')).toBeInTheDocument();
+        expect(banner()).toBeNull();
+    });
+
+    test('if the API turns out to be out of reach, the copy stays, and only then the banner says so', async () => {
+        await seedCopy([beefChili]);
+        const slow = slowAnswer();
+        mockApi([['GET', `/api/recipes/${BEEF_CHILI_ID}`, slow.respond]]);
+        renderApp(`/recipes/${BEEF_CHILI_ID}`);
+
+        expect(await screen.findByRole('heading', { level: 1, name: 'Beef Chili' })).toBeInTheDocument();
+        expect(banner()).toBeNull();
+
+        act(() => slow.fail());
+        expect(await findBanner()).toHaveTextContent("Can't reach the server.");
+        expect(screen.getByRole('heading', { level: 1, name: 'Beef Chili' })).toBeInTheDocument();
+    });
+
+    test("the editor waits for the API's version, so an older copy isn't edited", async () => {
+        await seedCopy([beefChili]);
+        const slow = slowAnswer();
+        mockApi([['GET', `/api/recipes/${BEEF_CHILI_ID}`, slow.respond]]);
+        renderApp(`/recipes/${BEEF_CHILI_ID}/edit`);
+
+        expect(await screen.findByText('Loading recipe…')).toBeInTheDocument();
+        expect(screen.queryByLabelText('Name')).not.toBeInTheDocument();
+
+        act(() => slow.answer(json({ ...beefChili, description: 'Newer.' }, { headers: { ETag: '"9"' } })));
+        expect(await screen.findByLabelText('Description')).toHaveValue('Newer.');
+    });
+
+    test('the ingredient picker suggests from the copy straight away, and offers to create a new one', async () => {
+        await seedCopy([beefChili]);
+        mockApi([['GET', '/api/ingredients', slowAnswer().respond]]);
+        const { user } = renderApp('/recipes/new');
+
+        await user.type(await screen.findByRole('combobox', { name: 'Ingredient, line 1' }), 'pepper');
+        expect(await screen.findByRole('option', { name: 'red pepper' })).toBeInTheDocument();
+        expect(screen.getByRole('option', { name: 'cayenne pepper' })).toBeInTheDocument();
+        expect(screen.getByRole('option', { name: 'Create ingredient “pepper”' })).toBeInTheDocument();
+    });
+});
