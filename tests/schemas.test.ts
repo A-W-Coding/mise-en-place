@@ -18,7 +18,7 @@ describe('createRecipeSchema', () => {
     });
 
     test('accepts null for the optional text and time fields', () => {
-        const body = { name: 'Soup', description: null, instructions: null, prepTime: null, cookTime: 0 };
+        const body = { name: 'Soup', description: null, prepTime: null, cookTime: 0 };
         expect(createRecipeSchema.parse(body)).toEqual({ ...body, servings: 1 });
     });
 

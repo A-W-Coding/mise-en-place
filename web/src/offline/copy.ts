@@ -66,9 +66,11 @@ export function isSnapshot(value: unknown): value is Snapshot {
     if (!isObject(value.etags) || !Object.values(value.etags).every((etag) => typeof etag === 'string')) return false;
     const named = (item: unknown): item is Record<string, unknown> =>
         isObject(item) && typeof item.id === 'string' && typeof item.name === 'string';
+    // A copy from before 3b has no sections, and is fetched again whole rather than shown broken
     return (
-        value.recipes.every((recipe) => named(recipe) && Array.isArray(recipe.recipeIngredients)) &&
-        value.ingredients.every(named)
+        value.recipes.every(
+            (recipe) => named(recipe) && Array.isArray(recipe.recipeIngredients) && Array.isArray(recipe.sections),
+        ) && value.ingredients.every(named)
     );
 }
 

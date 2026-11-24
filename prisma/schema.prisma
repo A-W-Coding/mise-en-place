@@ -1,15 +1,19 @@
 // ============================================================================
 // Prisma Schema — mise-en-place
-// Phase 1: Foundation (Backend API)
+// Phase 1: Foundation (Backend API), and Phase 3b's entities (spec §2.3)
 //
-// Core entities: Recipe, Ingredient, RecipeIngredient (join table).
+// Phase 1: Recipe, Ingredient, RecipeIngredient (join table).
+// Phase 3b: RecipeSection and Instruction (the method), Image, Tag and
+// RecipeTag, Equipment and RecipeEquipment.
 // - UUID primary keys for distributed / offline-first safety.
-// - Ingredient names are normalized (lowercase, trimmed) at the API layer,
-//   and unique in the database.
-// - Cascade: deleting a Recipe removes its RecipeIngredient rows.
-// - Restrict: deleting an Ingredient fails if it is used in any recipe.
+// - Names of shared things (ingredients, tags, equipment) are normalised
+//   (lowercase, trimmed) at the API layer, and unique in the database.
+// - Cascade: deleting a Recipe removes everything that belongs to it.
+// - Restrict: deleting an Ingredient or Equipment item fails while a recipe
+//   uses it.
+// - Order is `orderIndex`, set by the server from array positions.
 // - The trigram (pg_trgm) indexes are declared here so Prisma doesn't see
-//   them as drift. `map:` keeps the names the original migration gave them.
+//   them as drift. `map:` keeps the names the migrations gave them.
 // ============================================================================
 
 generator client {
@@ -21,21 +25,128 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// A single recipe with optional metadata (times, servings, instructions).
+/// A single recipe with optional metadata (times, servings), its method in sections, and from 3b its tags,
+/// equipment and images.
 model Recipe {
-  id           String   @id @default(uuid())
-  name         String
-  description  String?
-  servings     Int      @default(1)
-  prepTime     Int? // minutes
-  cookTime     Int? // minutes
-  instructions String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id             String   @id @default(uuid())
+  name           String
+  description    String?
+  servings       Int      @default(1)
+  prepTime       Int? // minutes
+  cookTime       Int? // minutes
+  /// Phase 1's method as text. Moved into sections by a migration (3b); nothing reads it now,
+  /// and a later migration drops it once the move has been checked (spec §7.2).
+  instructions   String?
+  /// The main image: one of this recipe's own images, or none (F7).
+  primaryImageId String?  @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   recipeIngredients RecipeIngredient[]
+  sections          RecipeSection[]
+  images            Image[]            @relation("RecipeImages")
+  primaryImage      Image?             @relation("PrimaryImage", fields: [primaryImageId], references: [id], onDelete: SetNull)
+  tags              RecipeTag[]
+  equipment         RecipeEquipment[]
 
   @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "recipe_name_trgm_idx")
+}
+
+/// A part of a recipe's method, such as "Sauce" or "Base", with its steps. Ingredient lines can be grouped under one.
+model RecipeSection {
+  id         String @id @default(uuid())
+  recipeId   String
+  name       String // 1–100 characters
+  orderIndex Int // position within the recipe
+
+  recipe      Recipe             @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  steps       Instruction[]
+  ingredients RecipeIngredient[]
+
+  @@index([recipeId])
+}
+
+/// One step of a section's method, with a timer cooking mode can start.
+model Instruction {
+  id           String @id @default(uuid())
+  sectionId    String
+  orderIndex   Int // position within the section
+  text         String // 1–2,000 characters
+  timerSeconds Int? // 1–86,400
+
+  section RecipeSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@index([sectionId])
+}
+
+/// An image of a recipe. The files live on disk, named after the id (spec §6.2); there's no path column.
+model Image {
+  id         String   @id @default(uuid())
+  recipeId   String
+  orderIndex Int // upload order, used as the gallery order
+  width      Int // of the stored image, in pixels
+  height     Int
+  fileSize   Int // of the stored image, in bytes
+  createdAt  DateTime @default(now())
+
+  recipe     Recipe  @relation("RecipeImages", fields: [recipeId], references: [id], onDelete: Cascade)
+  primaryFor Recipe? @relation("PrimaryImage")
+
+  @@index([recipeId])
+}
+
+/// A shared tag, such as "dessert". Names are normalised like ingredients'.
+model Tag {
+  id        String   @id @default(uuid())
+  name      String   @unique // 1–50 characters
+  color     String? // #rrggbb
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  recipes RecipeTag[]
+
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "tag_name_trgm_idx")
+}
+
+/// A tag on a recipe, in the recipe's own order: the list shows the first two.
+model RecipeTag {
+  recipeId   String
+  tagId      String
+  orderIndex Int
+
+  recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([recipeId, tagId])
+  @@index([tagId])
+}
+
+/// A shared piece of equipment, such as "dutch oven". Names are normalised like ingredients'.
+model Equipment {
+  id        String   @id @default(uuid())
+  name      String   @unique // 1–100 characters
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  recipes RecipeEquipment[]
+
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "equipment_name_trgm_idx")
+}
+
+/// One equipment line in a recipe: which item, how many, and whether the recipe works without it.
+model RecipeEquipment {
+  id          String  @id @default(uuid())
+  recipeId    String
+  equipmentId String
+  orderIndex  Int
+  quantity    Int     @default(1)
+  optional    Boolean @default(false)
+
+  recipe    Recipe    @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  equipment Equipment @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+
+  @@index([recipeId])
+  @@index([equipmentId])
 }
 
 /// One ingredient line in a recipe: which ingredient, how much, and how it's prepared.
@@ -49,12 +160,15 @@ model RecipeIngredient {
   quantityMax  Float? // upper bound of a range, as in "2–3"
   unit         String? // canonical symbol from the units module; null means a count
   note         String? // preparation, e.g. "finely diced"
+  sectionId    String? // the section it's grouped under, or none (3b)
 
-  recipe     Recipe     @relation(fields: [recipeId], references: [id], onDelete: Cascade)
-  ingredient Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+  recipe     Recipe         @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  ingredient Ingredient     @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+  section    RecipeSection? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
 
   @@index([recipeId])
   @@index([ingredientId])
+  @@index([sectionId])
 }
 
 /// A unique ingredient. Names are stored normalised (lowercase, trimmed).

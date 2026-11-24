@@ -4,7 +4,7 @@
  * offline copies made from them.
  */
 
-import type { Recipe, RecipeIngredient, RecipeSummary } from '../api/types';
+import type { Recipe, RecipeIngredient, RecipeSection, RecipeSummary } from '../api/types';
 import { replaceOfflineCopy, type Snapshot } from '../offline/copy';
 
 const STAMP = '2026-11-23T10:00:00.000Z';
@@ -44,7 +44,23 @@ function line(
         quantityMax: extra.quantityMax ?? null,
         unit,
         note: extra.note ?? null,
+        sectionId: null,
         ingredient: { id: ingredientId, name, createdAt: STAMP, updatedAt: STAMP },
+    };
+}
+
+/** A section of a recipe's method, with steps made from their text (3b). */
+export function section(recipeId: string, index: number, name: string, steps: (string | [string, number])[]): RecipeSection {
+    const id = `30000000-0000-4000-8000-${recipeId.slice(-6)}${String(index).padStart(6, '0')}`;
+    return {
+        id,
+        recipeId,
+        name,
+        orderIndex: index,
+        steps: steps.map((step, orderIndex) => {
+            const [text, timerSeconds] = typeof step === 'string' ? [step, null] : step;
+            return { id: `${id.slice(0, -2)}${String(orderIndex).padStart(2, '0')}`, sectionId: id, orderIndex, text, timerSeconds };
+        }),
     };
 }
 
@@ -61,7 +77,13 @@ export const beefChiliSummary: RecipeSummary = {
 
 export const beefChili: Recipe = {
     ...beefChiliSummary,
-    instructions: '1. Heat some oil and cook the onions.\n2. Add the garlic.\n\n3. Simmer for at least 20 minutes.',
+    sections: [
+        section(BEEF_CHILI_ID, 0, 'Method', [
+            'Heat some oil and cook the onions.',
+            'Add the garlic.',
+            'Simmer for at least 20 minutes.',
+        ]),
+    ],
     recipeIngredients: [
         line(0, 'onion', 1, null, { note: 'diced' }),
         line(1, 'red pepper', 0.5, null, { note: 'diced' }),
@@ -83,7 +105,7 @@ export const lemonDrizzle: Recipe = {
     cookTime: 45,
     createdAt: STAMP,
     updatedAt: STAMP,
-    instructions: 'Bake.',
+    sections: [section('0c1d2e3f-4a5b-4c6d-8e7f-901a2b3c4d5e', 0, 'Method', ['Bake.'])],
     recipeIngredients: [],
 };
 

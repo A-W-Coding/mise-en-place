@@ -20,6 +20,9 @@
  *   one way to create a recipe and a retried upload can't create it twice.
  * - A waiting change the API refused (400) opens with the API's messages
  *   beside their fields, and saving it again uploads it (Step 18).
+ * - The method is sections of steps (3b). Until Step 22's screens, each
+ *   section is one box, a step per line, named after its section when
+ *   there's more than one.
  */
 
 import { useEffect, useReducer, useRef, useState, type FormEvent, type ReactNode } from 'react';
@@ -46,6 +49,7 @@ import {
     mapServerErrors,
     newDraft,
     readAmount,
+    sectionErrorKey,
     type DraftErrors,
     type LineDraft,
     type RecipeDraft,
@@ -72,8 +76,8 @@ interface EditorStart {
 }
 
 /** The API's refusal (400), next to the boxes it's about where it can be. */
-function refusalErrors(message: string, fields: FieldErrors, lineKeys: string[]): DraftErrors {
-    if (Object.keys(fields).length > 0) return mapServerErrors(fields, lineKeys);
+function refusalErrors(message: string, fields: FieldErrors, lineKeys: string[], sectionKeys: string[]): DraftErrors {
+    if (Object.keys(fields).length > 0) return mapServerErrors(fields, lineKeys, sectionKeys);
     if (message === 'One or more ingredient IDs are invalid.') {
         return { form: 'An ingredient on this recipe was deleted elsewhere. Choose it again, then save.' };
     }
@@ -175,7 +179,14 @@ function RecipeEditor({ recipeId, start, onReload }: RecipeEditorProps) {
     // A refused change opens with the API's messages beside their boxes, the first one focused
     const refused = start.problem?.kind === 'refused' ? start.problem : null;
     const [errors, setErrors] = useState<DraftErrors>(() =>
-        refused ? refusalErrors(refused.message, refused.fields, start.draft.lines.map((line) => line.key)) : {},
+        refused
+            ? refusalErrors(
+                  refused.message,
+                  refused.fields,
+                  start.draft.lines.map((line) => line.key),
+                  start.draft.sections.map((section) => section.key),
+              )
+            : {},
     );
     const [open, setOpen] = useState({ ingredients: true, method: true });
     const [conflict, setConflict] = useState(false);
@@ -215,7 +226,7 @@ function RecipeEditor({ recipeId, start, onReload }: RecipeEditorProps) {
         const keys = Object.keys(found);
         setOpen((sections) => ({
             ingredients: sections.ingredients || keys.some((key) => key.startsWith('line:')),
-            method: sections.method || keys.includes('instructions'),
+            method: sections.method || keys.some((key) => key.startsWith('section:')),
         }));
         setFocusErrors((count) => count + 1);
     };
@@ -225,13 +236,13 @@ function RecipeEditor({ recipeId, start, onReload }: RecipeEditorProps) {
         navigate(path, { replace: true });
     };
 
-    const saveFailed = (failure: ApiError, lineKeys: string[]) => {
+    const saveFailed = (failure: ApiError, lineKeys: string[], sectionKeys: string[]) => {
         if (failure.status === 412) {
             setConflict(true);
         } else if (failure.status === 404 && editing) {
             setErrors({ form: "This recipe was deleted on another device, so it can't be saved." });
         } else if (failure.status === 400) {
-            showErrors(refusalErrors(failure.message, failure.fields, lineKeys));
+            showErrors(refusalErrors(failure.message, failure.fields, lineKeys, sectionKeys));
         } else {
             setErrors({ form: errorMessage(failure) });
         }
@@ -260,7 +271,7 @@ function RecipeEditor({ recipeId, start, onReload }: RecipeEditorProps) {
             { recipeId, kind, body: result.body, etag: sendEtag },
             {
                 onSuccess: () => leaveTo(`/recipes/${recipeId}`),
-                onError: (failure) => saveFailed(failure, result.lineKeys),
+                onError: (failure) => saveFailed(failure, result.lineKeys, result.sectionKeys),
             },
         );
     };
@@ -287,7 +298,7 @@ function RecipeEditor({ recipeId, start, onReload }: RecipeEditorProps) {
         addLineRef.current?.focus();
     };
 
-    const setField = (field: Exclude<keyof RecipeDraft, 'lines'>) => (value: string) =>
+    const setField = (field: Exclude<keyof RecipeDraft, 'lines' | 'sections'>) => (value: string) =>
         dispatch({ type: 'field', field, value });
 
     const fieldErrors = Object.keys(errors).filter((key) => key !== 'form').length;
@@ -392,16 +403,24 @@ function RecipeEditor({ recipeId, start, onReload }: RecipeEditorProps) {
                 open={open.method}
                 onToggle={() => setOpen((sections) => ({ ...sections, method: !sections.method }))}
             >
-                <Field label="One step per line" error={errors.instructions} quiet>
-                    {(props) => (
-                        <textarea
-                            {...props}
-                            rows={10}
-                            value={draft.instructions}
-                            onChange={(event) => setField('instructions')(event.target.value)}
-                        />
-                    )}
-                </Field>
+                {draft.sections.map((section, index) => (
+                    <Field
+                        key={section.key}
+                        id={`field-method-${index}`}
+                        label={draft.sections.length === 1 ? 'One step per line' : `${section.name}: one step per line`}
+                        error={errors[sectionErrorKey(section.key, 'steps')] ?? errors[sectionErrorKey(section.key, 'name')]}
+                        quiet
+                    >
+                        {(props) => (
+                            <textarea
+                                {...props}
+                                rows={10}
+                                value={section.text}
+                                onChange={(event) => dispatch({ type: 'sectionText', key: section.key, text: event.target.value })}
+                            />
+                        )}
+                    </Field>
+                ))}
             </Section>
 
             {editing && (
@@ -452,6 +471,8 @@ function RecipeEditor({ recipeId, start, onReload }: RecipeEditorProps) {
 
 interface FieldProps {
     label: string;
+    /** The box's id, when its label isn't unique enough to make one. */
+    id?: string;
     error?: string;
     /** Spans the whole row of fields. */
     wide?: boolean;
@@ -466,8 +487,8 @@ interface FieldProps {
 }
 
 /** A labelled box with its error under it. */
-function Field({ label, error, wide, quiet, children }: FieldProps) {
-    const id = `field-${label.toLowerCase().replace(/\W+/g, '-')}`;
+function Field({ label, id: givenId, error, wide, quiet, children }: FieldProps) {
+    const id = givenId ?? `field-${label.toLowerCase().replace(/\W+/g, '-')}`;
     return (
         <div className={`${styles.field} ${wide ? styles.wide : ''}`}>
             <label htmlFor={id} className={quiet ? styles.quietLabel : styles.label}>

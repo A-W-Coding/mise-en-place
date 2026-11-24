@@ -3,8 +3,8 @@
 # Mise en place: hardening plan (Phase 1 to Phase 3b)
 
 > **Status**
-> - Current step: **Step 20: the 3b schema, and sections and steps through the API**, ready to start once you've reviewed Phase 3b's steps (written 2026-11-24). Phase 3c is complete (2026-11-24): Steps 15–19 merged (PRs #18–#22), deployed on the Pi, and every success criterion met on your phone. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
-> - Last updated: 2026-11-24 (Phase 3b's steps written)
+> - Current step: **Step 21: wireframes for 3b's screens (no code)**, ready to start. Step 20 is done (2026-11-24), with CI to be confirmed when its PR opens; it isn't deployed (3b deploys in Step 26). Phase 3b's steps merged as PR #24. Phase 3c is complete (2026-11-24): Steps 15–19 merged (PRs #18–#22), deployed on the Pi, and every success criterion met on your phone. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
+> - Last updated: 2026-11-24 (Step 20: the 3b schema, and sections and steps)
 > - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
@@ -743,22 +743,22 @@ And since 3c came first, its criteria still hold with all of this: offline, reci
 
 **Why:** the migration touches every recipe, so it comes first and on its own (§7.2), before any new screen depends on it.
 
-- [ ] One migration creates every 3b table and column (§2.3): RecipeSection, Instruction, Image, Tag, RecipeTag, Equipment and RecipeEquipment, `Recipe.primaryImageId` and `RecipeIngredient.sectionId`. Every foreign key is indexed, and tag and equipment names get trigram indexes. `Recipe.instructions` stays for now
-- [ ] The data step is a migration of its own, straight after: every recipe with instructions gets one section, "Method", with a step for each non-empty line, in order, without a leading "1." or "2)" (as the recipe page shows them today). A test runs that SQL on recipes made with instructions, and checks the sections and steps it makes
-- [ ] The recipe body takes `sections` (each `{ name, steps: [{ text, timerSeconds }] }`) and `ingredients[].sectionIndex`, with §3.2's rules:
+- [x] One migration creates every 3b table and column (§2.3): RecipeSection, Instruction, Image, Tag, RecipeTag, Equipment and RecipeEquipment, `Recipe.primaryImageId` and `RecipeIngredient.sectionId`. Every foreign key is indexed, and tag and equipment names get trigram indexes. `Recipe.instructions` stays for now
+- [x] The data step is a migration of its own, straight after: every recipe with instructions gets one section, "Method", with a step for each non-empty line, in order, without a leading "1." or "2)" (as the recipe page shows them today). A test runs that SQL on recipes made with instructions, and checks the sections and steps it makes
+- [x] The recipe body takes `sections` (each `{ name, steps: [{ text, timerSeconds }] }`) and `ingredients[].sectionIndex`, with §3.2's rules:
   - section names 1–100 characters, step text 1–2,000, timers whole seconds from 1 to 86,400 or null
   - `sectionIndex` must point inside `sections`, and a body with `sections` must also have `ingredients`
   - the limits go in `shared/limits.ts`, for the editor too
-- [ ] Responses, and so the snapshot, include `sections` with their `steps`, and each line's `sectionId`. `instructions` is no longer read or written
-- [ ] The client switches over with no new screens yet:
+- [x] Responses, and so the snapshot, include `sections` with their `steps`, and each line's `sectionId`. `instructions` is no longer read or written
+- [x] The client switches over with no new screens yet:
   - the recipe page shows the method from the sections, and so does printing
-  - the editor's method box (one step per line) saves as one section, keeping that section's name; a recipe with several sections can't be made in the app until Step 22
+  - the editor's method box (one step per line) saves as one section, keeping that section's name; a recipe with several sections can't be made in the app until Step 22. (As built: a recipe the API made with several sections gets a box for each, so editing it loses nothing)
   - waiting changes saved before this, with `instructions`, are converted on load into a "Method" section, so they still upload
-- [ ] Tests:
+- [x] Tests:
   - API: the section and step rules, the `sectionIndex` rules, a PATCH replacing sections and lines together, and the data step
   - client: the conversions, in both directions, and an old waiting change converted and uploaded
   - Playwright: the existing tests keep passing
-- [ ] `docs/api.md` and `docs/erd.md`: sections and steps
+- [x] `docs/api.md` and `docs/erd.md`: sections and steps
 
 **Done when:** the tests pass in CI.
 
@@ -1664,3 +1664,24 @@ And since 3c came first, its criteria still hold with all of this: offline, reci
   - **Spec updates:** a tag's colour (any, with presets), and new tags and equipment typed offline (technical spec §3.4).
 
   Next: review Phase 3b's steps, then Step 20.
+- **2026-11-24:** Phase 3b's steps merged (PR #24). Step 20 done.
+  - **Two migrations:**
+    - `phase3b_tables`: every 3b table and column, generated with `prisma migrate diff` and read before applying. It only adds: seven tables, `Recipe.primaryImageId` (unique, `SET NULL`) and `RecipeIngredient.sectionId` (`SET NULL`), an index on every foreign key, and trigram indexes on tag and equipment names.
+    - `instructions_to_steps`: hand-written SQL, one statement. Each recipe's text becomes one section, "Method", with a step per line, trimmed, without a leading "1." or "2)", blank lines skipped, exactly as the page showed them. On the dev database it turned Beef Chili's 14 numbered lines into 14 steps; `migrate dev` then found no drift.
+  - **`Recipe.instructions` stays until Step 26,** read by nothing: the shared Prisma client leaves it out of every read (a global `omit`), so no response can carry it by accident. The seed now writes Beef Chili's method as a "Method" section.
+  - **The API:**
+    - the recipe body takes `sections` and each line's `sectionIndex`, with §3.2's rules; the limits are in `shared/limits.ts`
+    - POST and PATCH are now one interactive transaction each: sections get their ids first, so their lines can name them. PATCH's version check is still its first statement, and locks the row, so a racing write still gets a 412 and nothing changes
+    - responses, and so the snapshot, include `sections` with their `steps`, each line's `sectionId`, and `primaryImageId` (null until Step 24); `instructions` is refused as an unknown field
+  - **The app,** with no new screens:
+    - the recipe page shows the method from the sections, with a heading for each only when there's more than one, or the one isn't called "Method"
+    - the editor keeps a box per section, a step per line. A step kept as it was keeps its timer, and a line keeps its section, so a recipe the API made with several sections survives an edit
+    - waiting changes saved before this are converted on load into a "Method" section, the versions sent with no answer included, and upload as normal
+    - an offline copy from before this (with text, not sections) is fetched again whole rather than shown broken
+  - **Tests:**
+    - The API has 448, 22 of them new. `instructions-migration.test.ts` runs the migration's own SQL on recipes made with text: numbering, blank lines, CRLF, no text, and the text left in place. `sections.test.ts`: create and read, PATCH replacing sections and lines together, a PATCH leaving them, a stale `If-Match` changing nothing, the cascade, a section with no steps grouping lines, and eleven refusals.
+    - The client has 242, 12 of them new: drafts with several sections, timers and grouping; the API's errors on a section's box; old waiting changes converted, and one uploaded through the fake API; an old copy refused; the page's headings; and the editor's boxes.
+    - Playwright: the existing 58 all pass in Chromium against the migrated test database. Firefox runs in CI.
+  - **Docs:** `docs/api.md` (the Section object, the body's rules, `instructions` gone), `docs/erd.md` (a Phase 3b diagram), and the README.
+
+  Next: Step 21, the wireframes for 3b's screens.

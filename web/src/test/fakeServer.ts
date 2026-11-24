@@ -17,6 +17,12 @@ interface LineIn {
     quantityMax?: number | null;
     unit?: string | null;
     note?: string | null;
+    sectionIndex?: number | null;
+}
+
+interface SectionIn {
+    name: string;
+    steps: { text: string; timerSeconds?: number | null }[];
 }
 
 interface RecipeIn {
@@ -26,7 +32,7 @@ interface RecipeIn {
     servings?: number;
     prepTime?: number | null;
     cookTime?: number | null;
-    instructions?: string | null;
+    sections?: SectionIn[];
     ingredients?: LineIn[];
 }
 
@@ -71,6 +77,7 @@ export function fakeServer(seed: { recipes?: Recipe[] } = {}) {
     function build(id: string, input: RecipeIn, createdAt: string): Recipe | null {
         const lines = input.ingredients ?? [];
         if (lines.some((line) => !ingredients.has(line.ingredientId))) return null;
+        const sectionIds = (input.sections ?? []).map((_, index) => `${id}-section-${index}`);
         return {
             id,
             name: input.name.trim(),
@@ -78,7 +85,19 @@ export function fakeServer(seed: { recipes?: Recipe[] } = {}) {
             servings: input.servings ?? 1,
             prepTime: input.prepTime ?? null,
             cookTime: input.cookTime ?? null,
-            instructions: input.instructions ?? null,
+            sections: (input.sections ?? []).map((section, index) => ({
+                id: sectionIds[index]!,
+                recipeId: id,
+                name: section.name,
+                orderIndex: index,
+                steps: section.steps.map((step, orderIndex) => ({
+                    id: `${sectionIds[index]}-${orderIndex}`,
+                    sectionId: sectionIds[index]!,
+                    orderIndex,
+                    text: step.text,
+                    timerSeconds: step.timerSeconds ?? null,
+                })),
+            })),
             createdAt,
             updatedAt: stamp(),
             recipeIngredients: lines.map((line, index) => ({
@@ -90,6 +109,7 @@ export function fakeServer(seed: { recipes?: Recipe[] } = {}) {
                 quantityMax: line.quantityMax ?? null,
                 unit: line.unit ?? null,
                 note: line.note ?? null,
+                sectionId: line.sectionIndex === null || line.sectionIndex === undefined ? null : (sectionIds[line.sectionIndex] ?? null),
                 ingredient: ingredients.get(line.ingredientId)!,
             })),
         };
@@ -150,15 +170,17 @@ export function fakeServer(seed: { recipes?: Recipe[] } = {}) {
                 if (ifMatch && ifMatch !== server.etagOf(current)) {
                     return json({ error: 'The recipe has changed since it was loaded.' }, { status: 412 });
                 }
-                // Like the API, a PATCH without `ingredients` keeps the lines
-                const lines = current.recipeIngredients.map(({ ingredientId, quantity, quantityMax, unit, note }) => ({
+                // Like the API, a PATCH without `ingredients` or `sections` keeps them
+                const sections = current.sections.map((section) => ({ name: section.name, steps: section.steps }));
+                const lines = current.recipeIngredients.map(({ ingredientId, quantity, quantityMax, unit, note, sectionId }) => ({
                     ingredientId,
                     quantity,
                     quantityMax,
                     unit,
                     note,
+                    sectionIndex: sectionId === null ? null : current.sections.findIndex((section) => section.id === sectionId),
                 }));
-                const input = { ...current, ingredients: lines, ...(bodyOf(init) as Partial<RecipeIn>) };
+                const input = { ...current, sections, ingredients: lines, ...(bodyOf(init) as Partial<RecipeIn>) };
                 const recipe = build(current.id, input, current.createdAt);
                 if (!recipe) return invalidIds();
                 recipes.set(current.id, recipe);

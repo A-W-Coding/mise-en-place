@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import type { Ingredient } from '../api/types';
-import { BEEF_CHILI_ID, beefChili, beefChiliSummary } from '../test/fixtures';
+import { BEEF_CHILI_ID, beefChili, beefChiliSummary, section } from '../test/fixtures';
 import { json, mockApi, page, renderApp, sent } from '../test/renderApp';
 
 const RECIPE_PATH = `/api/recipes/${BEEF_CHILI_ID}`;
@@ -51,8 +51,16 @@ describe('RecipeEditorPage: a new recipe', () => {
             servings: 2,
             prepTime: null,
             cookTime: null,
-            instructions: 'Fry.\nToss.',
-            ingredients: [{ ingredientId: lardons.id, quantity: 100, quantityMax: null, unit: 'g', note: null }],
+            sections: [
+                {
+                    name: 'Method',
+                    steps: [
+                        { text: 'Fry.', timerSeconds: null },
+                        { text: 'Toss.', timerSeconds: null },
+                    ],
+                },
+            ],
+            ingredients: [{ ingredientId: lardons.id, quantity: 100, quantityMax: null, unit: 'g', note: null, sectionIndex: null }],
         });
     });
 
@@ -108,6 +116,43 @@ describe('RecipeEditorPage: a new recipe', () => {
 });
 
 describe('RecipeEditorPage: editing', () => {
+    test('a recipe in several sections gets a box for each, and saves each back as its own section (3b)', async () => {
+        const recipe = {
+            ...beefChili,
+            sections: [section(BEEF_CHILI_ID, 0, 'Sauce', ['Fry.', ['Simmer.', 600]]), section(BEEF_CHILI_ID, 1, 'To serve', ['Ladle.'])],
+        };
+        const fetchMock = mockApi([
+            ['GET', RECIPE_PATH, json(recipe, { headers: { ETag: '"1"' } })],
+            ['PATCH', RECIPE_PATH, json(recipe, { headers: { ETag: '"2"' } })],
+        ]);
+        const { user } = renderApp(`/recipes/${BEEF_CHILI_ID}/edit`);
+
+        const serve = await screen.findByLabelText('To serve: one step per line');
+        expect(screen.getByLabelText('Sauce: one step per line')).toHaveValue('Fry.\nSimmer.');
+        await user.type(serve, '{Enter}Garnish.');
+        await user.click(screen.getByRole('button', { name: 'Save' }));
+
+        await waitFor(() => expect(sent(fetchMock, 'PATCH')).toHaveLength(1));
+        expect(sent(fetchMock, 'PATCH')[0]?.body).toMatchObject({
+            sections: [
+                {
+                    name: 'Sauce',
+                    steps: [
+                        { text: 'Fry.', timerSeconds: null },
+                        { text: 'Simmer.', timerSeconds: 600 },
+                    ],
+                },
+                {
+                    name: 'To serve',
+                    steps: [
+                        { text: 'Ladle.', timerSeconds: null },
+                        { text: 'Garnish.', timerSeconds: null },
+                    ],
+                },
+            ],
+        });
+    });
+
     test('loads the recipe, and saves it with If-Match and the lines as they were', async () => {
         const fetchMock = mockApi([
             ['GET', RECIPE_PATH, json(beefChili, { headers: { ETag: '"111"' } })],

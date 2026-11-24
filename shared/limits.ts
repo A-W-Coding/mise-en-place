@@ -21,4 +21,10 @@ export const LIMITS = {
     servings: { min: 1, max: 1000 },
     /** Prep and cook times, in whole minutes: up to about 69 days. */
     minutes: { min: 0, max: 99_999 },
+    /** A method section's name, in characters after trimming (3b). */
+    sectionName: 100,
+    /** A step's text, in characters after trimming (3b). */
+    stepText: 2000,
+    /** A step's timer, in whole seconds: up to a day (3b). */
+    timerSeconds: { min: 1, max: 86_400 },
 } as const;

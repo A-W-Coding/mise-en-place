@@ -8,6 +8,7 @@ import { BEEF_CHILI_ID, beefChili, etagOf, seedCopy } from '../test/fixtures';
 import { json, mockApi, sent } from '../test/renderApp';
 import { getOfflineCopyState } from './copy';
 import { recipeFromChange, uploadWaitingChanges } from './upload';
+import { memoryStorage, setOfflineStorage } from './storage';
 import { keepWaitingChange, loadWaitingChanges, resetWaitingChanges } from './waiting';
 
 const TOAST_ID = 'cccccccc-0000-4000-8000-000000000003';
@@ -27,9 +28,17 @@ function toast(name = 'Sourdough Toast'): DraftBody {
         servings: 1,
         prepTime: null,
         cookTime: null,
-        instructions: 'Toast it.',
+        sections: [{ name: 'Method', steps: [{ text: 'Toast it.', timerSeconds: null }] }],
         ingredients: [
-            { ingredientId: null, ingredientName: 'sourdough', quantity: 2, quantityMax: null, unit: null, note: 'sliced' },
+            {
+                ingredientId: null,
+                ingredientName: 'sourdough',
+                quantity: 2,
+                quantityMax: null,
+                unit: null,
+                note: 'sliced',
+                sectionIndex: null,
+            },
         ],
     };
 }
@@ -194,6 +203,42 @@ describe('uploadWaitingChanges', () => {
     });
 });
 
+describe('a change saved before 3b', () => {
+    test('is converted on load, and uploads with its method as a "Method" section', async () => {
+        const server = fakeServer();
+        const stored = {
+            recipeId: TOAST_ID,
+            kind: 'create',
+            etag: null,
+            createdAt: 1,
+            savedAt: 1,
+            sent: [],
+            problem: null,
+            body: {
+                name: 'Old Toast',
+                description: null,
+                servings: 1,
+                prepTime: null,
+                cookTime: null,
+                instructions: '1. Toast it.\n2. Butter it.',
+                ingredients: [],
+            },
+        };
+        const storage = memoryStorage();
+        await storage.setMany([['waitingChanges', [stored]]]);
+        setOfflineStorage(storage);
+        resetWaitingChanges();
+
+        await upload();
+
+        const uploaded = server.recipes.get(TOAST_ID);
+        expect(uploaded?.sections.map((section) => [section.name, section.steps.map((step) => step.text)])).toEqual([
+            ['Method', ['Toast it.', 'Butter it.']],
+        ]);
+        expect(await afterReload()).toEqual([]);
+    });
+});
+
 describe('recipeFromChange', () => {
     test('shows a waiting change as a whole recipe, new ingredients included', async () => {
         await keepWaitingChange({ recipeId: TOAST_ID, kind: 'create', body: toast(), etag: null }, { now: Date.parse('2026-11-24T08:00:00Z') });
@@ -201,7 +246,8 @@ describe('recipeFromChange', () => {
 
         const recipe = recipeFromChange(change!);
 
-        expect(recipe).toMatchObject({ id: TOAST_ID, name: 'Sourdough Toast', instructions: 'Toast it.', updatedAt: '2026-11-24T08:00:00.000Z' });
+        expect(recipe).toMatchObject({ id: TOAST_ID, name: 'Sourdough Toast', updatedAt: '2026-11-24T08:00:00.000Z' });
+        expect(recipe.sections).toMatchObject([{ name: 'Method', steps: [{ text: 'Toast it.', timerSeconds: null }] }]);
         expect(recipe.recipeIngredients[0]).toMatchObject({ quantity: 2, note: 'sliced', ingredient: { name: 'sourdough' } });
     });
 });

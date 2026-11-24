@@ -120,7 +120,7 @@ describe('Recipe API', () => {
                 servings: 2,
                 prepTime: 10,
                 cookTime: 30,
-                instructions: 'Chop onions, mince garlic, simmer together.',
+                sections: [{ name: 'Method', steps: [{ text: 'Chop onions, mince garlic, simmer together.' }] }],
                 ingredients: [
                     { ingredientId: onion?.id, quantity: 2 }, // a count: no unit
                     { ingredientId: garlic?.id, quantity: 6, unit: 'cloves' },

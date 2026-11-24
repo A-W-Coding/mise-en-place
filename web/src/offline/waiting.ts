@@ -15,11 +15,15 @@
  *   from a change made elsewhere (see `upload.ts`).
  * - A change the API refused (412, 404 or 400) is kept with its `problem`,
  *   and waits for you rather than being retried. Step 18 adds the choices.
+ * - A change saved before 3b holds Phase 1's `instructions`. On load it
+ *   becomes one "Method" section, a step per line, as the migration does on
+ *   the server (spec §7.2), so it still uploads.
  */
 
 import { useEffect, useSyncExternalStore } from 'react';
 import type { FieldErrors } from '../api/client';
 import type { DraftBody } from '../editor/draft';
+import { methodSteps } from '../format';
 import { offlineStorage } from './storage';
 
 export type ChangeProblem =
@@ -71,11 +75,37 @@ function isChange(value: unknown): value is WaitingChange {
     return typeof change.recipeId === 'string' && typeof change.body === 'object' && Array.isArray(change.sent);
 }
 
+/** A body as saved before 3b: the method as text, and lines with no section. */
+type OldBody = Omit<DraftBody, 'sections' | 'ingredients'> & {
+    instructions?: string | null;
+    sections?: DraftBody['sections'];
+    ingredients: (Omit<DraftBody['ingredients'][number], 'sectionIndex'> & { sectionIndex?: number | null })[];
+};
+
+/** Bring a body saved before 3b up to date: its text becomes a "Method" section, as the migration does. */
+export function upgradeBody(body: OldBody): DraftBody {
+    const { instructions, sections, ingredients, ...fields } = body;
+    const steps = methodSteps(instructions ?? null).map((text) => ({ text, timerSeconds: null }));
+    return {
+        ...fields,
+        sections: sections ?? (steps.length > 0 ? [{ name: 'Method', steps }] : []),
+        ingredients: ingredients.map((line) => ({ ...line, sectionIndex: line.sectionIndex ?? null })),
+    };
+}
+
+function upgradeChange(change: WaitingChange): WaitingChange {
+    return {
+        ...change,
+        body: upgradeBody(change.body as OldBody),
+        sent: change.sent.map((body) => upgradeBody(body as OldBody)),
+    };
+}
+
 async function readFromStorage(started: number): Promise<void> {
     let changes: WaitingChange[] = [];
     try {
         const [stored] = await offlineStorage().getMany([KEY]);
-        if (Array.isArray(stored)) changes = stored.filter(isChange);
+        if (Array.isArray(stored)) changes = stored.filter(isChange).map(upgradeChange);
     } catch (error) {
         console.warn("The changes waiting to upload couldn't be read.", error);
     }

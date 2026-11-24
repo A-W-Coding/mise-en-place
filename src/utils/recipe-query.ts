@@ -7,12 +7,18 @@
  */
 
 /**
- * The Prisma `include` for a whole recipe: its ingredient lines in recipe
- * order, each with its Ingredient record, so a client needs one request.
+ * The Prisma `include` for a whole recipe, so a client needs one request:
+ * its ingredient lines in recipe order, each with its Ingredient record and
+ * `sectionId`, and from 3b its method's sections, each with its steps, in
+ * order.
  */
 export const RECIPE_INCLUDE = {
     recipeIngredients: {
         include: { ingredient: true },
+        orderBy: { orderIndex: 'asc' },
+    },
+    sections: {
+        include: { steps: { orderBy: { orderIndex: 'asc' } } },
         orderBy: { orderIndex: 'asc' },
     },
 } as const;

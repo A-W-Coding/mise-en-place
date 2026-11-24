@@ -172,6 +172,10 @@ describe('isSnapshot', () => {
         expect(isSnapshot({ recipes: [], ingredients: [] })).toBe(false);
         expect(isSnapshot({ recipes: [], ingredients: [], etags: { a: 1 } })).toBe(false);
         expect(isSnapshot({ recipes: [{ id: 'a', name: 'A' }], ingredients: [], etags: {} })).toBe(false);
+        // A copy from before 3b, with the method as text, is fetched again whole rather than shown broken
+        expect(isSnapshot({ recipes: [{ id: 'a', name: 'A', recipeIngredients: [], instructions: 'Stir.' }], ingredients: [], etags: {} })).toBe(
+            false,
+        );
         expect(isSnapshot({ recipes: [], ingredients: [{ id: 1, name: 'salt' }], etags: {} })).toBe(false);
     });
 });

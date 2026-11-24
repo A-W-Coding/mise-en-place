@@ -3,32 +3,39 @@
  * CRUD endpoints for the Recipe resource.
  *
  * A single recipe is returned with its nested recipeIngredients (including
- * the related Ingredient record), so the recipe page needs one request.
- * The list returns lighter summaries, without the lines or instructions,
- * so the client can load page after page quickly (Phase 3a).
+ * the related Ingredient record) and, from 3b, its method's sections and
+ * steps, so the recipe page needs one request. The list returns lighter
+ * summaries, without the lines or the method, so the client can load page
+ * after page quickly (Phase 3a).
  *
- * Deleting a recipe cascades to its RecipeIngredient rows but
- * leaves the underlying Ingredient records intact.
+ * A recipe is written as a whole (spec §2.3, note 1): its sections, steps
+ * and lines arrive in its POST or PATCH body and replace what's there, in
+ * one transaction, which also sets its `updatedAt`.
+ *
+ * Deleting a recipe cascades to everything that belongs to it, but leaves
+ * the shared Ingredient records intact.
  *
  * Single-recipe responses carry an `ETag`, and PATCH and DELETE honour
  * `If-Match`, so an edit can't silently overwrite one made elsewhere (F3).
  */
 
+import { randomUUID } from 'crypto';
 import { Router, Request, Response, NextFunction } from 'express';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../prisma/client.js';
 import { isPrismaError } from '../utils/prisma-errors.js';
 import { fuzzySearchByName } from '../utils/fuzzy-search.js';
 import { parseOr400 } from '../utils/validation.js';
 import { recipeEtag, ifMatchDates } from '../utils/etag.js';
 import { RECIPE_INCLUDE } from '../utils/recipe-query.js';
-import { createRecipeSchema, updateRecipeSchema, IngredientLine } from '../schemas/recipes.js';
+import { createRecipeSchema, updateRecipeSchema, IngredientLine, Section } from '../schemas/recipes.js';
 import { listQuerySchema } from '../schemas/list-query.js';
 
 const router = Router();
 
 /**
  * The fields of a recipe in a list: everything but its ingredient lines and
- * instructions. From 3b, its tags and primary image join these.
+ * method. Later in 3b, its tags and primary image join these.
  */
 const RECIPE_SUMMARY_SELECT = {
     id: true,
@@ -42,21 +49,53 @@ const RECIPE_SUMMARY_SELECT = {
 } as const;
 
 /**
- * Map validated ingredient lines into Prisma `create` data.
- * `orderIndex` comes from each line's position in the array.
+ * Write a recipe's sections and their steps, giving each section its id
+ * here, so its lines can name it in the same transaction.
+ * `orderIndex` comes from each one's position in its array.
  *
- * @param lines - Ingredient lines parsed by `ingredientLineSchema`.
- * @returns Array suitable for `recipeIngredients.create`.
+ * @returns The new sections' ids, in order: a line's `sectionIndex` picks one.
  */
-function toRecipeIngredientCreateData(lines: IngredientLine[]) {
-    return lines.map((line, orderIndex) => ({
-        ingredientId: line.ingredientId,
-        orderIndex,
-        quantity: line.quantity ?? null,
-        quantityMax: line.quantityMax ?? null,
-        unit: line.unit,
-        note: line.note ?? null,
-    }));
+async function writeSections(tx: Prisma.TransactionClient, recipeId: string, sections: Section[]): Promise<string[]> {
+    const ids = sections.map(() => randomUUID());
+    await tx.recipeSection.createMany({
+        data: sections.map((section, orderIndex) => ({ id: ids[orderIndex], recipeId, name: section.name, orderIndex })),
+    });
+    await tx.instruction.createMany({
+        data: sections.flatMap((section, index) =>
+            section.steps.map((step, orderIndex) => ({
+                sectionId: ids[index],
+                orderIndex,
+                text: step.text,
+                timerSeconds: step.timerSeconds ?? null,
+            })),
+        ),
+    });
+    return ids;
+}
+
+/**
+ * Write a recipe's ingredient lines. `orderIndex` comes from each line's
+ * position in the array, and `sectionIndex` becomes the id of the section
+ * at that position (the schema has checked it points inside `sections`).
+ */
+async function writeLines(
+    tx: Prisma.TransactionClient,
+    recipeId: string,
+    lines: IngredientLine[],
+    sectionIds: string[],
+): Promise<void> {
+    await tx.recipeIngredient.createMany({
+        data: lines.map((line, orderIndex) => ({
+            recipeId,
+            ingredientId: line.ingredientId,
+            orderIndex,
+            quantity: line.quantity ?? null,
+            quantityMax: line.quantityMax ?? null,
+            unit: line.unit,
+            note: line.note ?? null,
+            sectionId: line.sectionIndex === null || line.sectionIndex === undefined ? null : sectionIds[line.sectionIndex],
+        })),
+    });
 }
 
 /** Sent when `If-Match` names a version of the recipe that's no longer current. */
@@ -167,8 +206,9 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
  *  - `id` (UUID, optional): chosen by the client (3c, D15). A device that
  *    created the recipe offline sends the same id every time it retries the
  *    upload, so a retry after a lost answer gets 409 instead of a second copy.
- *  - `description`, `servings`, `prepTime`, `cookTime`, `instructions` (optional)
- *  - `ingredients` (array of `{ ingredientId, quantity, quantityMax, unit, note }`, optional)
+ *  - `description`, `servings`, `prepTime`, `cookTime` (optional)
+ *  - `sections` (array of `{ name, steps: [{ text, timerSeconds }] }`, optional, 3b)
+ *  - `ingredients` (array of `{ ingredientId, quantity, quantityMax, unit, note, sectionIndex }`, optional)
  *
  * @returns 201 with the created Recipe and its `ETag`, 400 on validation
  *          failure, or 409 if a recipe already has the given `id`.
@@ -180,21 +220,21 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
 
         // Spreading is safe here: the strict schema has already rejected
         // any field that isn't on its allowlist.
-        const { ingredients = [], ...fields } = body;
+        const { ingredients = [], sections = [], ...fields } = body;
 
-        const recipe = await prisma.recipe.create({
-            data: {
-                ...fields,
-                recipeIngredients: { create: toRecipeIngredientCreateData(ingredients) },
-            },
-            include: RECIPE_INCLUDE,
+        // One transaction: a taken id or a bad ingredient id leaves nothing behind
+        const recipe = await prisma.$transaction(async (tx) => {
+            const created = await tx.recipe.create({ data: fields });
+            const sectionIds = await writeSections(tx, created.id, sections);
+            await writeLines(tx, created.id, ingredients, sectionIds);
+            return tx.recipe.findUniqueOrThrow({ where: { id: created.id }, include: RECIPE_INCLUDE });
         });
 
         res.status(201).set('ETag', recipeEtag(recipe.updatedAt)).json(recipe);
     } catch (error) {
         if (isPrismaError(error, 'P2002')) {
-            // A recipe's only unique field is its id, so this is a taken id.
-            // The create and its lines are one statement, so nothing changed.
+            // A recipe's only unique fields are its id and its main image, which
+            // can't be set here, so this is a taken id. The transaction changed nothing.
             res.status(409).json({ error: 'A recipe with that id already exists.' });
         } else if (isPrismaError(error, 'P2003')) {
             res.status(400).json({ error: 'One or more ingredient IDs are invalid.' });
@@ -208,11 +248,13 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
 /**
  * Partially update a recipe. Only supplied fields are changed.
  *
- * `ingredients`:
- *  - absent: the lines are left untouched.
- *  - an array: the lines are **replaced** entirely (delete-all then
- *    re-create, in one nested write that Prisma runs atomically).
- *  - an empty array: all lines are removed.
+ * `ingredients` and `sections` (3b):
+ *  - absent: left untouched.
+ *  - an array: **replaced** entirely (delete all, then re-create), in one
+ *    transaction with the rest of the change.
+ *  - an empty array: all removed.
+ * `sections` comes only with `ingredients` (the schema checks), since new
+ * sections get new ids and the lines are re-created to point at them.
  *
  * `updatedAt` is set explicitly on every PATCH. Prisma's `@updatedAt`
  * can't be relied on when only the lines change, and sync needs the
@@ -230,22 +272,25 @@ router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => 
         if (body === null) return;
 
         // Fields absent from the body are undefined, which Prisma leaves unchanged.
-        const { ingredients, ...fields } = body;
+        const { ingredients, sections, ...fields } = body;
+        const id = req.params.id;
 
-        const recipe = await prisma.recipe.update({
-            where: recipeWhere(req.params.id, expected),
-            data: {
-                ...fields,
-                updatedAt: new Date(),
-                // Replace all ingredient lines when a new array is provided
-                ...(ingredients && {
-                    recipeIngredients: {
-                        deleteMany: {},
-                        create: toRecipeIngredientCreateData(ingredients),
-                    },
-                }),
-            },
-            include: RECIPE_INCLUDE,
+        const recipe = await prisma.$transaction(async (tx) => {
+            // First, and in one statement: the version check and the recipe's own
+            // fields. It locks the row, so a write racing this one waits, then
+            // finds the version has moved on (F3)
+            await tx.recipe.update({ where: recipeWhere(id, expected), data: { ...fields, updatedAt: new Date() } });
+            let sectionIds: string[] = [];
+            if (sections) {
+                // Deleting them also takes their steps, and unsets the lines' sectionId
+                await tx.recipeSection.deleteMany({ where: { recipeId: id } });
+                sectionIds = await writeSections(tx, id, sections);
+            }
+            if (ingredients) {
+                await tx.recipeIngredient.deleteMany({ where: { recipeId: id } });
+                await writeLines(tx, id, ingredients, sectionIds);
+            }
+            return tx.recipe.findUniqueOrThrow({ where: { id }, include: RECIPE_INCLUDE });
         });
 
         res.status(200).set('ETag', recipeEtag(recipe.updatedAt)).json(recipe);

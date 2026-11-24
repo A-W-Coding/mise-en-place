@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
-import { BEEF_CHILI_ID, beefChili } from '../test/fixtures';
+import { BEEF_CHILI_ID, beefChili, section } from '../test/fixtures';
 import { json, mockApi, page, renderApp, sent, unreachable } from '../test/renderApp';
 
 const RECIPE_PATH = `/api/recipes/${BEEF_CHILI_ID}`;
@@ -35,8 +35,41 @@ describe('RecipePage', () => {
         ]);
     });
 
+    test('a method in several sections shows each under its name, numbered from 1 in each', async () => {
+        const recipe = {
+            ...beefChili,
+            sections: [
+                section(BEEF_CHILI_ID, 0, 'Sauce', ['Fry the onions.', 'Simmer.']),
+                section(BEEF_CHILI_ID, 1, 'Grouping only', []),
+                section(BEEF_CHILI_ID, 2, 'To serve', ['Ladle out.']),
+            ],
+        };
+        mockApi([['GET', RECIPE_PATH, json(recipe)]]);
+        renderApp(`/recipes/${BEEF_CHILI_ID}`);
+
+        const method = await screen.findByRole('region', { name: 'Method' });
+        // A section with no steps only groups lines, so it has no place in the method
+        expect(within(method).getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent)).toEqual([
+            'Sauce',
+            'To serve',
+        ]);
+        expect(within(method).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+            '1Fry the onions.',
+            '2Simmer.',
+            '1Ladle out.',
+        ]);
+    });
+
+    test('one section called "Method" needs no heading of its own', async () => {
+        mockApi([['GET', RECIPE_PATH, json(beefChili)]]);
+        renderApp(`/recipes/${BEEF_CHILI_ID}`);
+
+        const method = await screen.findByRole('region', { name: 'Method' });
+        expect(within(method).queryAllByRole('heading', { level: 3 })).toEqual([]);
+    });
+
     test('a recipe with no lines or method says so', async () => {
-        mockApi([['GET', RECIPE_PATH, json({ ...beefChili, instructions: null, recipeIngredients: [] })]]);
+        mockApi([['GET', RECIPE_PATH, json({ ...beefChili, sections: [], recipeIngredients: [] })]]);
         renderApp(`/recipes/${BEEF_CHILI_ID}`);
 
         expect(await screen.findByText('No ingredients yet.')).toBeInTheDocument();
