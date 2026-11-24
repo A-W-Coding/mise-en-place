@@ -3,8 +3,8 @@
 # Mise en place: hardening plan (Phase 1 to Phase 3c)
 
 > **Status**
-> - Current step: **Step 18: when an upload can't go through**, ready to start. Step 17 is done (2026-11-24); its PR #20 failed in Firefox on the first run (reconnecting, see the Progress log), fixed, with CI to be confirmed. Step 16 merged as PR #19, CI green after a fix for Firefox's HTTP cache; Step 15 merged as PR #18. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
-> - Last updated: 2026-11-24 (Step 17: saving offline, and uploading)
+> - Current step: **Step 19: deploy, and check on the phone**, ready to start; it finishes Phase 3c. Step 18 is done (2026-11-24), with CI to be confirmed when its PR opens. Step 17 merged as PR #20, CI green after a fix for Firefox's reconnect; Step 16 as PR #19, after a fix for Firefox's HTTP cache; Step 15 as PR #18. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
+> - Last updated: 2026-11-24 (Step 18: when an upload can't go through)
 > - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
@@ -688,13 +688,13 @@ Phase 3c comes before 3b (D15). Each device keeps a full snapshot of the data (D
 
 **Why:** with one person and two devices these will be rare, so they're kept apart from Step 17. But they're the one place 3c could lose data.
 
-- [ ] Changed elsewhere (412): both versions shown, with Keep mine (saved over the other, using the newer ETag), Keep theirs (mine discarded) and Keep both (mine saved as a new recipe, with "(copy)" after its name)
-- [ ] Deleted elsewhere (404): save it as a new recipe, or discard it
-- [ ] Refused (400): the editor opens on the change, with the API's messages beside their fields. Saving it again uploads it
-- [ ] Nothing is discarded without a tap, and discarding asks first
-- [ ] A 412 while saving online keeps Step 12's dialog: the editor is still open then, so reloading and making the edit again is cheap
-- [ ] Component tests for each choice
-- [ ] Playwright:
+- [x] Changed elsewhere (412): both versions shown, with Keep mine (saved over the other, using the newer ETag), Keep theirs (mine discarded) and Keep both (mine saved as a new recipe, with "(copy)" after its name)
+- [x] Deleted elsewhere (404): save it as a new recipe, or discard it
+- [x] Refused (400): the editor opens on the change, with the API's messages beside their fields. Saving it again uploads it
+- [x] Nothing is discarded without a tap, and discarding asks first
+- [x] A 412 while saving online keeps Step 12's dialog: the editor is still open then, so reloading and making the edit again is cheap
+- [x] Component tests for each choice
+- [x] Playwright:
   - edit a recipe offline while a second context changes it, then come back online and choose each of Keep mine, Keep theirs and Keep both
   - edit a recipe offline while the second context deletes it, and save it as a new recipe
 
@@ -1451,3 +1451,19 @@ Phase 3c comes before 3b (D15). Each device keeps a full snapshot of the data (D
     - Unit tests for both; Chromium: all 48 still pass. CI confirms Firefox.
 
   Next: Step 18, when an upload can't go through.
+- **2026-11-24:** Step 17 merged (PR #20, CI green on its second run, after the reconnect fix). Step 18 done.
+  - **Each choice rewrites the waiting change** (`offline/settle.ts`), then asks for a sync, so it uploads at once if the Pi can be reached, and by itself later if not.
+    - Keep mine: the same edit, with the ETag of their version, from the API or the copy. If theirs changes again first, it's another 412, and the choice comes back.
+    - Keep both: mine becomes a new recipe with an id of its own and "(copy)" after its name, shortened to fit 200 characters, keeping its place in the queue. Theirs is untouched.
+    - Keep theirs: mine is dropped.
+    - Deleted elsewhere: save it as a new recipe (the same name, a new id), or discard it.
+    - Refused: the editor opens on the change with the API's messages beside their boxes, the first one focused. "One or more ingredient IDs are invalid." becomes "An ingredient on this recipe was deleted elsewhere. Choose it again, then save." Saving uploads it.
+  - **Both versions:** a Yours/Theirs switch on the recipe's page shows either. Theirs comes from the API, or from the copy offline.
+  - **Asking first:** Keep theirs and Discard each ask, and so does Keep mine, since it replaces the other device's change. Keep both and saving as new lose nothing, so they don't.
+  - A 412 while saving online still gets Step 12's dialog, for a waiting change opened in the editor too.
+  - **Tests:**
+    - The client has 226, 10 of them new, in `Settle.test.tsx`, against the fake API: both versions; Keep mine with their ETag; Keep theirs, with Cancel first; Keep both; Keep mine offline, then uploading; save as new; discard; the refused editor with its messages and focus; an ingredient deleted elsewhere; `copyName()`.
+    - Playwright: `settle.spec.ts`, four tests, each a real conflict made offline on the phone while the laptop changes or deletes Beef Chili: Keep mine (after looking at both), Keep theirs, Keep both, and save as new. Chromium: all 56 pass. Firefox runs in CI.
+  - Checked in the Browser pane: the panel at phone width, and the Yours/Theirs switch, with a stand-in change put in the pane's storage and removed afterwards. Nothing was written to the dev database.
+
+  Next: Step 19, deploy, and check on the phone (Phase 3c done).

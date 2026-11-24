@@ -12,8 +12,10 @@
  * version on screen.
  *
  * A recipe with a change waiting on the device (3c) shows that version, with
- * a notice saying when it was saved, or why it couldn't be uploaded. That
- * holds for a new recipe the server hasn't seen yet, too.
+ * a notice saying when it was saved. That holds for a new recipe the server
+ * hasn't seen yet, too. A change that couldn't upload says why, with the
+ * choices that settle it (Step 18); one that met a change made elsewhere can
+ * show either version.
  *
  * The cooking mode switch keeps the screen on, and changes nothing else: the
  * whole recipe stays readable. It's off for each recipe you open, and leaving
@@ -28,7 +30,7 @@ import { useRecipe } from '../api/queries';
 import type { Recipe } from '../api/types';
 import { recipeFromChange } from '../offline/upload';
 import { useWaitingChanges } from '../offline/waiting';
-import { WaitingNotice } from '../components/Waiting';
+import { SettleChange, WaitingNotice } from '../components/Waiting';
 import { CookingMode } from '../cooking/CookingMode';
 import { BackLink } from '../components/BackLink';
 import { DeleteRecipeDialog } from '../components/DeleteRecipeDialog';
@@ -48,8 +50,10 @@ export function RecipePage() {
     const navigate = useNavigate();
     const { data, error, isPending, refetch } = useRecipe(id);
     const change = useWaitingChanges().changes.find((candidate) => candidate.recipeId === id);
-    // The version waiting on the device is the newest this device knows
-    const recipe = change ? recipeFromChange(change, data?.data) : data?.data;
+    // Their version or mine, while a change that met theirs is settled; mine otherwise, as the newest this device knows
+    const [theirsFor, setTheirsFor] = useState<string | null>(null);
+    const showingTheirs = theirsFor === id && change?.problem?.kind === 'changed' && data !== undefined;
+    const recipe = change && !showingTheirs ? recipeFromChange(change, data?.data) : data?.data;
     const [deleting, setDeleting] = useState(false);
     // Cooking mode belongs to one recipe: opening another starts with it off
     const [cookingFor, setCookingFor] = useState<string | null>(null);
@@ -80,7 +84,17 @@ export function RecipePage() {
     return (
         <article className={styles.page}>
             <BackLink to={backTo}>Recipes</BackLink>
-            {change && <WaitingNotice change={change} />}
+            {change &&
+                (change.problem ? (
+                    <SettleChange
+                        change={change}
+                        theirs={data}
+                        showingTheirs={showingTheirs}
+                        onShowTheirs={(theirs) => setTheirsFor(theirs ? id : null)}
+                    />
+                ) : (
+                    <WaitingNotice change={change} />
+                ))}
             {error && !change && <ErrorBanner error={error} onRetry={() => void refetch()} />}
             {isPending && !change && (
                 <p role="status" className={page.status}>
@@ -97,7 +111,7 @@ export function RecipePage() {
             )}
             <DeleteRecipeDialog
                 recipe={deleting && recipe ? recipe : null}
-                etag={change ? change.etag : data?.etag}
+                etag={change && !showingTheirs ? change.etag : data?.etag}
                 onClose={() => setDeleting(false)}
                 onDeleted={() => navigate('/', { replace: true })}
             />

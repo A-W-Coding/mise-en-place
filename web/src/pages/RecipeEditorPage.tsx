@@ -18,6 +18,8 @@
  *   that version, with the ETag it started from.
  * - A new recipe's id is made here, on the device, online or off, so there's
  *   one way to create a recipe and a retried upload can't create it twice.
+ * - A waiting change the API refused (400) opens with the API's messages
+ *   beside their fields, and saving it again uploads it (Step 18).
  */
 
 import { useEffect, useReducer, useRef, useState, type FormEvent, type ReactNode } from 'react';
@@ -27,7 +29,8 @@ import { useSaveRecipe } from '../api/mutations';
 import { useRecipe } from '../api/queries';
 import type { ApiError } from '../api/client';
 import { getOfflineCopyState } from '../offline/copy';
-import { useWaitingChanges, waitingChangeFor } from '../offline/waiting';
+import { useWaitingChanges, waitingChangeFor, type ChangeProblem } from '../offline/waiting';
+import type { FieldErrors } from '../api/client';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DeleteRecipeDialog } from '../components/DeleteRecipeDialog';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -64,6 +67,17 @@ interface EditorStart {
     etag: string | null;
     /** A version waiting on the device, rather than one from the server or the copy. */
     fromWaiting: boolean;
+    /** Why that version couldn't upload, if it couldn't. */
+    problem?: ChangeProblem | null;
+}
+
+/** The API's refusal (400), next to the boxes it's about where it can be. */
+function refusalErrors(message: string, fields: FieldErrors, lineKeys: string[]): DraftErrors {
+    if (Object.keys(fields).length > 0) return mapServerErrors(fields, lineKeys);
+    if (message === 'One or more ingredient IDs are invalid.') {
+        return { form: 'An ingredient on this recipe was deleted elsewhere. Choose it again, then save.' };
+    }
+    return { form: message };
 }
 
 function NewRecipe() {
@@ -86,7 +100,13 @@ function EditRecipe({ id }: { id: string }) {
     if (start === null && waiting.status === 'ready') {
         const change = waiting.changes.find((candidate) => candidate.recipeId === id);
         if (change) {
-            setStart({ draft: draftFromBody(change.body), kind: change.kind, etag: change.etag, fromWaiting: true });
+            setStart({
+                draft: draftFromBody(change.body),
+                kind: change.kind,
+                etag: change.etag,
+                fromWaiting: true,
+                problem: change.problem,
+            });
         } else if (loaded) {
             setStart({ draft: draftFromRecipe(loaded.data), kind: 'edit', etag: loaded.etag, fromWaiting: false });
         }
@@ -148,11 +168,15 @@ function RecipeEditor({ recipeId, start, onReload }: RecipeEditorProps) {
     const [initial] = useState(start.draft);
     const etag = start.etag;
     const [draft, dispatch] = useReducer(draftReducer, start.draft);
-    const [errors, setErrors] = useState<DraftErrors>({});
+    // A refused change opens with the API's messages beside their boxes, the first one focused
+    const refused = start.problem?.kind === 'refused' ? start.problem : null;
+    const [errors, setErrors] = useState<DraftErrors>(() =>
+        refused ? refusalErrors(refused.message, refused.fields, start.draft.lines.map((line) => line.key)) : {},
+    );
     const [open, setOpen] = useState({ ingredients: true, method: true });
     const [conflict, setConflict] = useState(false);
     const [deleting, setDeleting] = useState(false);
-    const [focusErrors, setFocusErrors] = useState(0);
+    const [focusErrors, setFocusErrors] = useState(refused ? 1 : 0);
     const save = useSaveRecipe();
     const formRef = useRef<HTMLFormElement>(null);
     const addLineRef = useRef<HTMLButtonElement>(null);
@@ -202,10 +226,8 @@ function RecipeEditor({ recipeId, start, onReload }: RecipeEditorProps) {
             setConflict(true);
         } else if (failure.status === 404 && editing) {
             setErrors({ form: "This recipe was deleted on another device, so it can't be saved." });
-        } else if (failure.status === 400 && Object.keys(failure.fields).length > 0) {
-            showErrors(mapServerErrors(failure.fields, lineKeys));
-        } else if (failure.status === 400 && failure.message === 'One or more ingredient IDs are invalid.') {
-            setErrors({ form: 'An ingredient on this recipe was deleted elsewhere. Choose it again, then save.' });
+        } else if (failure.status === 400) {
+            showErrors(refusalErrors(failure.message, failure.fields, lineKeys));
         } else {
             setErrors({ form: errorMessage(failure) });
         }
