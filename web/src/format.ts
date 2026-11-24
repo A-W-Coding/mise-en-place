@@ -1,11 +1,11 @@
 /**
  * @module web/src/format
- * Text the pages show: times, a recipe's summary line, its method steps, and
- * how old something is.
+ * Text the pages show: times, a recipe's summary line, its method steps, its
+ * ingredient lines grouped by section, and how old something is.
  * Amounts come from `shared/quantity.ts`, which the API shares.
  */
 
-import type { RecipeSummary } from './api/types';
+import type { Recipe, RecipeIngredient, RecipeSection, RecipeSummary } from './api/types';
 
 /** Minutes as a cook reads them: "20 min", "2 h", "1 h 30 min". */
 export function formatMinutes(minutes: number): string {
@@ -59,4 +59,22 @@ export function formatAge(then: number, now: number): string {
     const hours = Math.floor(minutes / 60);
     if (hours < 24) return relative.format(-hours, 'hour');
     return relative.format(-Math.floor(hours / 24), 'day');
+}
+
+/**
+ * The ingredient lines in their groups: those in no section first, under no
+ * heading, then each section's, in the sections' order. A recipe with no
+ * line in a section is one group with no heading.
+ */
+export function ingredientGroups(recipe: Recipe): { section: RecipeSection | null; lines: RecipeIngredient[] }[] {
+    const known = new Set(recipe.sections.map((section) => section.id));
+    const inSection = (line: RecipeIngredient) => (line.sectionId !== null && known.has(line.sectionId) ? line.sectionId : null);
+    const groups = [
+        { section: null, lines: recipe.recipeIngredients.filter((line) => inSection(line) === null) },
+        ...recipe.sections.map((section) => ({
+            section,
+            lines: recipe.recipeIngredients.filter((line) => inSection(line) === section.id),
+        })),
+    ];
+    return groups.filter((group) => group.lines.length > 0);
 }

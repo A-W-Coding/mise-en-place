@@ -1,14 +1,17 @@
 /**
  * @module shared/quantity
- * Showing and reading ingredient amounts (F5).
+ * Showing and reading ingredient amounts (F5), and step timers' lengths (3b).
  *
  * The API stores amounts as numbers: `quantity`, plus `quantityMax` for a
  * range, and a canonical `unit`. People write them as "1½ tbsp", "1 1/2" or
  * "2–3 cloves", so the web client shows them with `formatAmount()` and reads
- * them back with `parseAmount()`. Like `shared/units`, this has no server or
- * browser imports, so it's tested once, in the Jest suite.
+ * them back with `parseAmount()`. A step's timer is stored in seconds and
+ * written as "15 min" or "1 h 30 min": `formatDuration()` and
+ * `parseDuration()`. Like `shared/units`, this has no server or browser
+ * imports, so it's tested once, in the Jest suite.
  */
 
+import { LIMITS } from './limits.js';
 import { canonicaliseUnit, type Unit } from './units.js';
 
 /** Units shown as decimals (250 g, 1.5 l). Every other unit, and a count, gets fractions. */
@@ -212,4 +215,108 @@ export function parseAmount(text: string): ParsedAmount {
     const parsed = parseQuantity(numberText);
     if ('error' in parsed) return { error: parsed.error === READ_ERROR ? AMOUNT_ERROR : parsed.error };
     return { ...parsed, unit };
+}
+
+// ── Timer lengths (3b) ─────────────────────────────────────────────────────
+
+/** The result of reading a timer's length: whole seconds for the API, or a message to show. */
+export type ParsedDuration = { seconds: number } | { error: string };
+
+type DurationUnit = 'h' | 'min' | 's';
+
+/** Seconds in each unit, largest first: the order a length is written in. */
+const DURATION_UNITS: ReadonlyArray<readonly [unit: DurationUnit, seconds: number]> = [
+    ['h', 3600],
+    ['min', 60],
+    ['s', 1],
+];
+
+/** Every spelling of each unit, as typed. */
+const DURATION_WORDS: Readonly<Record<string, DurationUnit>> = {
+    h: 'h', hr: 'h', hrs: 'h', hour: 'h', hours: 'h',
+    m: 'min', min: 'min', mins: 'min', minute: 'min', minutes: 'min',
+    s: 's', sec: 's', secs: 's', second: 's', seconds: 's',
+};
+
+const DURATION_ERROR = "Couldn't read that. Try 90 s, 15 min or 1 h 30 min.";
+
+/**
+ * Show a timer's length as a cook writes it: "20 min", "1 h 30 min", "45 s".
+ * `parseDuration()` reads it back.
+ *
+ * @example
+ * formatDuration(1200); // '20 min'
+ * formatDuration(5400); // '1 h 30 min'
+ * formatDuration(90);   // '1 min 30 s'
+ */
+export function formatDuration(seconds: number): string {
+    let rest = Math.round(seconds);
+    const parts: string[] = [];
+    for (const [unit, size] of DURATION_UNITS) {
+        const count = Math.floor(rest / size);
+        rest -= count * size;
+        if (count > 0) parts.push(`${count} ${unit}`);
+    }
+    return parts.length > 0 ? parts.join(' ') : '0 s';
+}
+
+/**
+ * Read a timer's length, as typed into a step's timer sheet.
+ *
+ * A number on its own is minutes ("15"). Otherwise it's numbers with units,
+ * largest first, each unit once: "90 s", "15 min", "1.5 h", "1 h 30 min",
+ * "1h30m", "2 hours and 15 minutes". A number left at the end takes the
+ * next smaller unit, so "1 h 30" is 1 h 30 min. The result is rounded to
+ * whole seconds, and must be from 1 second to a day (`LIMITS.timerSeconds`).
+ *
+ * Like `parseAmount()`, it never guesses: "1:30" could be 1 h 30 min or
+ * 1 min 30 s, so it's an error.
+ *
+ * @example
+ * parseDuration('15');        // { seconds: 900 }
+ * parseDuration('1 h 30 min'); // { seconds: 5400 }
+ * parseDuration('1:30');      // { error: "Couldn't read that…" }
+ */
+export function parseDuration(text: string): ParsedDuration {
+    const cleaned = text.trim().toLowerCase().replace(/,|\band\b/g, ' ').trim();
+    if (cleaned === '') return { error: 'Type how long, like 15 min.' };
+
+    let total: number;
+    if (/^(\d+(\.\d+)?|\.\d+)$/.test(cleaned)) {
+        total = Number(cleaned) * 60;
+    } else {
+        total = 0;
+        // Each piece is a number and the word after it, which may be missing on the last one
+        const piece = /(\d+(?:\.\d+)?|\.\d+)\s*([a-z]*)\s*/y;
+        let previous = -1;
+        let position = 0;
+        while (position < cleaned.length) {
+            piece.lastIndex = position;
+            const match = piece.exec(cleaned);
+            if (!match) return { error: DURATION_ERROR };
+            position = piece.lastIndex;
+
+            const word = match[2];
+            let index: number;
+            if (word === '') {
+                // Only the last number may go without a unit, and only after one that had one
+                if (position < cleaned.length || previous === -1) return { error: DURATION_ERROR };
+                index = previous + 1;
+            } else {
+                const unit = DURATION_WORDS[word];
+                if (!unit) return { error: DURATION_ERROR };
+                index = DURATION_UNITS.findIndex(([candidate]) => candidate === unit);
+            }
+            const entry = DURATION_UNITS[index];
+            if (!entry || index <= previous) return { error: DURATION_ERROR };
+            total += Number(match[1]) * entry[1];
+            previous = index;
+        }
+    }
+
+    const seconds = Math.round(total);
+    const { min, max } = LIMITS.timerSeconds;
+    if (seconds < min) return { error: 'A timer needs to be at least 1 second.' };
+    if (seconds > max) return { error: 'Keep a timer to a day (24 h) or less.' };
+    return { seconds };
 }

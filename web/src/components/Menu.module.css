@@ -84,3 +84,40 @@
     font-weight: 400;
     color: var(--muted);
 }
+
+/* A group of choices, such as a line's Section, under a small heading */
+.group {
+    display: flex;
+    flex-direction: column;
+    margin: 4px 0;
+    padding: 4px 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+}
+
+.group:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.groupLabel {
+    padding: 8px 12px 4px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.checked {
+    background: var(--accent-soft);
+    font-weight: 600;
+}
+
+/* Room for the tick, so the choices line up whether or not they're ticked */
+.tick {
+    width: 18px;
+    flex-shrink: 0;
+    display: flex;
+}

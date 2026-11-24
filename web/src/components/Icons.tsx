@@ -138,3 +138,11 @@ export function CloseIcon(props: IconProps) {
         </Icon>
     );
 }
+
+export function CheckIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d="M5 12l5 5 9-11" />
+        </Icon>
+    );
+}

@@ -37,7 +37,12 @@ test('create a recipe with lines and a new ingredient, edit it, and delete it', 
     await page.getByRole('option', { name: 'Create ingredient “salted butter”' }).click();
     await expect(page.getByRole('combobox', { name: 'Ingredient, line 2' })).toHaveValue('salted butter');
 
-    await page.getByLabel('One step per line').fill('Mix the butter and garlic.\nSpread on the bread.\nBake for 10 minutes.');
+    // A box per step: Enter starts the next one
+    await page.getByRole('textbox', { name: 'Step 1' }).fill('Mix the butter and garlic.');
+    await page.getByRole('textbox', { name: 'Step 1' }).press('Enter');
+    await page.keyboard.type('Spread on the bread.');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('Bake for 10 minutes.');
     await page.getByRole('button', { name: 'Save' }).click();
 
     await expect(page.getByRole('heading', { level: 1, name: 'Garlic Bread' })).toBeVisible();

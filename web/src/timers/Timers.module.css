@@ -294,3 +294,34 @@
         display: none;
     }
 }
+
+/* A step's timer on the recipe page (3b): one tap to start, then its time left */
+.stepStart,
+.stepRunning {
+    min-height: 40px;
+    padding: 0 14px;
+    border-radius: var(--radius-pill);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9375rem;
+    font-weight: 600;
+}
+
+.stepStart {
+    border: 1px solid var(--accent);
+    background: transparent;
+    color: var(--accent);
+    cursor: pointer;
+}
+
+.stepStart:hover {
+    background: var(--accent-soft);
+}
+
+.stepRunning {
+    background: var(--accent);
+    color: var(--accent-text);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
