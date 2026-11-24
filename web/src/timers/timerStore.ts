@@ -20,6 +20,8 @@ export interface Timer {
     durationMs: number;
     /** When it rings, in milliseconds since 1970 (`Date.now()`). */
     endsAt: number;
+    /** What started it, such as a recipe's step (`step:<id>`), so the step can show it running (3b). */
+    source?: string;
 }
 
 interface TimerState {
@@ -38,7 +40,8 @@ function isTimer(value: unknown): value is Timer {
         typeof timer.id === 'string' &&
         typeof timer.label === 'string' &&
         typeof timer.durationMs === 'number' &&
-        typeof timer.endsAt === 'number'
+        typeof timer.endsAt === 'number' &&
+        (timer.source === undefined || typeof timer.source === 'string')
     );
 }
 
@@ -82,8 +85,8 @@ function subscribe(listener: () => void): () => void {
 
 let nextId = 0;
 
-/** Start a timer. Returns its id. */
-export function startTimer(minutes: number, label: string, now = Date.now()): string {
+/** Start a timer. Returns its id. `source` says what started it, such as a step (3b). */
+export function startTimer(minutes: number, label: string, now = Date.now(), source?: string): string {
     nextId += 1;
     const durationMs = Math.round(minutes * 60_000);
     const timer: Timer = {
@@ -91,6 +94,7 @@ export function startTimer(minutes: number, label: string, now = Date.now()): st
         label: label.trim() || 'Timer',
         durationMs,
         endsAt: now + durationMs,
+        ...(source === undefined ? {} : { source }),
     };
     update({ timers: [...getState().timers, timer] });
     return timer.id;

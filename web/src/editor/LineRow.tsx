@@ -3,17 +3,24 @@
  * One ingredient line in the editor: Amount, Ingredient and a ⋮ menu (Move
  * up, Move down, Add note, Remove line), on one row at every screen size. A
  * note shows under its line only when it has one (technical spec §3.4).
+ *
+ * Once the method has sections of its own (3b), the menu also chooses the
+ * line's section, and moving a line keeps it within its section.
  */
 
 import { Menu } from '../components/Menu';
 import { IngredientPicker } from './IngredientPicker';
-import { lineErrorKey, type DraftAction, type DraftErrors, type LineDraft } from './draft';
+import { lineErrorKey, type DraftAction, type DraftErrors, type LineDraft, type SectionDraft } from './draft';
 import styles from './Editor.module.css';
 
 interface LineRowProps {
     line: LineDraft;
-    index: number;
-    count: number;
+    /** Its number among all the lines, from 1, for the boxes' names. */
+    n: number;
+    canMoveUp: boolean;
+    canMoveDown: boolean;
+    /** The sections it can be put in, or null when the method has none of its own yet. */
+    sections: SectionDraft[] | null;
     errors: DraftErrors;
     dispatch: (action: DraftAction) => void;
     /** Check this line's amount as you leave the box. */
@@ -21,8 +28,7 @@ interface LineRowProps {
     onRemove: (line: LineDraft) => void;
 }
 
-export function LineRow({ line, index, count, errors, dispatch, onAmountBlur, onRemove }: LineRowProps) {
-    const n = index + 1;
+export function LineRow({ line, n, canMoveUp, canMoveDown, sections, errors, dispatch, onAmountBlur, onRemove }: LineRowProps) {
     const amountError = errors[lineErrorKey(line.key, 'amount')];
     const ingredientError = errors[lineErrorKey(line.key, 'ingredient')];
     const noteError = errors[lineErrorKey(line.key, 'note')];
@@ -61,12 +67,12 @@ export function LineRow({ line, index, count, errors, dispatch, onAmountBlur, on
                     items={[
                         {
                             label: 'Move up',
-                            disabled: index === 0,
+                            disabled: !canMoveUp,
                             onSelect: () => dispatch({ type: 'move', key: line.key, by: -1 }),
                         },
                         {
                             label: 'Move down',
-                            disabled: index === count - 1,
+                            disabled: !canMoveDown,
                             onSelect: () => dispatch({ type: 'move', key: line.key, by: 1 }),
                         },
                         line.showNote
@@ -78,6 +84,7 @@ export function LineRow({ line, index, count, errors, dispatch, onAmountBlur, on
                                   label: 'Add note',
                                   onSelect: () => dispatch({ type: 'line', key: line.key, patch: { showNote: true, focus: 'note' } }),
                               },
+                        ...(sections ? sectionChoices(line, sections, dispatch) : []),
                         { label: 'Remove line', danger: true, onSelect: () => onRemove(line) },
                     ]}
                 />
@@ -111,4 +118,18 @@ export function LineRow({ line, index, count, errors, dispatch, onAmountBlur, on
             )}
         </li>
     );
+}
+
+/** The menu's Section choice: no section, or one of the method's, by name. */
+function sectionChoices(line: LineDraft, sections: SectionDraft[], dispatch: (action: DraftAction) => void) {
+    const choose = (sectionKey: string | null) => () => dispatch({ type: 'lineSection', key: line.key, sectionKey });
+    return [
+        { label: 'No section', group: 'Section', checked: !line.sectionKey, onSelect: choose(null) },
+        ...sections.map((section, index) => ({
+            label: section.name.trim() || `Section ${index + 1}`,
+            group: 'Section',
+            checked: line.sectionKey === section.key,
+            onSelect: choose(section.key),
+        })),
+    ];
 }

@@ -6,11 +6,14 @@ import {
     draftFromBody,
     draftFromRecipe,
     draftReducer,
+    hasNamedSections,
     isDirty,
     lineErrorKey,
+    lineGroups,
     mapServerErrors,
     newDraft,
     sectionErrorKey,
+    stepErrorKey,
     type LineDraft,
     type RecipeDraft,
     type SectionDraft,
@@ -31,9 +34,21 @@ function line(key: string, amount: string, ingredient: LineDraft['ingredient'], 
     };
 }
 
-/** A method section as the editor holds it: one box of text, a step per line. */
-function method(text: string, extra: Partial<SectionDraft> = {}): SectionDraft {
-    return { key: 'm', name: 'Method', text, timers: {}, ...extra };
+/**
+ * A method section as the editor holds it: a box per step, keyed after the
+ * section (`m-0`, `m-1`…). A step given as `[text, seconds]` has a timer.
+ */
+function method(steps: (string | [string, number])[], extra: Partial<SectionDraft> = {}): SectionDraft {
+    const key = extra.key ?? 'm';
+    return {
+        key,
+        name: 'Method',
+        steps: steps.map((step, index) => {
+            const [text, timerSeconds] = typeof step === 'string' ? [step, null] : step;
+            return { key: `${key}-${index}`, text, timerSeconds };
+        }),
+        ...extra,
+    };
 }
 
 function draft(overrides: Partial<RecipeDraft> = {}): RecipeDraft {
@@ -49,7 +64,7 @@ describe('buildRecipeBody', () => {
                 servings: '2',
                 prepTime: '10',
                 cookTime: '',
-                sections: [method('1. Chop.\n\nSimmer.')],
+                sections: [method([' Chop. ', '', ['Simmer.', 600]])],
                 lines: [
                     line('a', '2 cloves', garlic, { note: ' crushed ', showNote: true }),
                     line('b', '', onion),
@@ -64,13 +79,13 @@ describe('buildRecipeBody', () => {
                 servings: 2,
                 prepTime: 10,
                 cookTime: null,
-                // A step per line, numbered by the page rather than the text
+                // Each step trimmed, with its timer; an empty box is left out
                 sections: [
                     {
                         name: 'Method',
                         steps: [
                             { text: 'Chop.', timerSeconds: null },
-                            { text: 'Simmer.', timerSeconds: null },
+                            { text: 'Simmer.', timerSeconds: 600 },
                         ],
                     },
                 ],
@@ -97,6 +112,7 @@ describe('buildRecipeBody', () => {
             },
             lineKeys: ['a', 'b'],
             sectionKeys: ['m'],
+            stepKeys: [['m-0', 'm-2']],
         });
     });
 
@@ -107,7 +123,7 @@ describe('buildRecipeBody', () => {
     });
 
     test('clearing a box sends null, so the field is cleared', () => {
-        const result = buildRecipeBody(draft({ description: '   ', sections: [method('  \n ')] }));
+        const result = buildRecipeBody(draft({ description: '   ', sections: [method(['  ', ' '])] }));
 
         // An empty method saves no sections at all, as a recipe without one has
         expect(result).toMatchObject({ body: { description: null, sections: [] }, sectionKeys: [] });
@@ -163,7 +179,7 @@ describe('mapServerErrors', () => {
                 'ingredients.1.note': 'Too long.',
                 mystery: 'Odd.',
             },
-            ['first', 'second'],
+            { lineKeys: ['first', 'second'] },
         );
 
         expect(errors).toEqual({
@@ -253,15 +269,20 @@ describe('sections of the method (3b)', () => {
         sectionId: index === 0 ? twoSections.sections[1]!.id : null,
     }));
 
-    test('a recipe with several sections opens with a box for each, and saves back as it was', () => {
+    const body = (d: RecipeDraft) => {
+        const result = buildRecipeBody(d);
+        if ('errors' in result) throw new Error(`Expected a body: ${JSON.stringify(result.errors)}`);
+        return result;
+    };
+
+    test('a recipe with several sections opens with a box per step, and saves back as it was', () => {
         const loaded = draftFromRecipe(twoSections);
 
-        expect(loaded.sections.map((s) => [s.name, s.text])).toEqual([
-            ['Sauce', 'Fry the onions.\nSimmer.'],
-            ['To serve', 'Ladle out.'],
+        expect(loaded.sections.map((s) => [s.name, s.steps.map((step) => [step.text, step.timerSeconds])])).toEqual([
+            ['Sauce', [['Fry the onions.', null], ['Simmer.', 1200]]],
+            ['To serve', [['Ladle out.', null]]],
         ]);
-        const result = buildRecipeBody(loaded);
-        if ('errors' in result) throw new Error('Expected a body.');
+        const result = body(loaded);
         expect(result.body.sections).toEqual([
             {
                 name: 'Sauce',
@@ -272,31 +293,26 @@ describe('sections of the method (3b)', () => {
             },
             { name: 'To serve', steps: [{ text: 'Ladle out.', timerSeconds: null }] },
         ]);
-        // The first line stays in "To serve", the rest in none
-        expect(result.body.ingredients.map((l) => l.sectionIndex)).toEqual([1, null, null, null, null, null, null]);
+        // Lines in no section come first, as the editor and the page show them; the first line stays in "To serve"
+        expect(result.body.ingredients.map((l) => l.sectionIndex)).toEqual([null, null, null, null, null, null, 1]);
+        expect(result.body.ingredients[6]?.ingredientName).toBe(beefChili.recipeIngredients[0]!.ingredient.name);
     });
 
-    test('a step kept as it was keeps its timer; a step changed loses it', () => {
+    test("editing a step's text keeps its timer, which only the timer sheet changes", () => {
         const loaded = draftFromRecipe(twoSections);
-        const sauce = loaded.sections[0]!;
-        const edited = draftReducer(loaded, { type: 'sectionText', key: sauce.key, text: 'Fry the onions well.\nSimmer.' });
-        const retimed = draftReducer(loaded, { type: 'sectionText', key: sauce.key, text: 'Fry the onions.\nSimmer gently.' });
+        const simmer = loaded.sections[0]!.steps[1]!;
+        const edited = draftReducer(loaded, { type: 'step', key: simmer.key, patch: { text: 'Simmer gently.' } });
+        const retimed = draftReducer(edited, { type: 'step', key: simmer.key, patch: { timerSeconds: 1500 } });
+        const untimed = draftReducer(edited, { type: 'step', key: simmer.key, patch: { timerSeconds: null } });
 
-        const steps = (d: RecipeDraft) => {
-            const result = buildRecipeBody(d);
-            if ('errors' in result) throw new Error('Expected a body.');
-            return result.body.sections[0]!.steps;
-        };
-        expect(steps(edited)).toEqual([
-            { text: 'Fry the onions well.', timerSeconds: null },
-            { text: 'Simmer.', timerSeconds: 1200 },
-        ]);
-        expect(steps(retimed)[1]).toEqual({ text: 'Simmer gently.', timerSeconds: null });
+        expect(body(edited).body.sections[0]!.steps[1]).toEqual({ text: 'Simmer gently.', timerSeconds: 1200 });
+        expect(body(retimed).body.sections[0]!.steps[1]).toEqual({ text: 'Simmer gently.', timerSeconds: 1500 });
+        expect(body(untimed).body.sections[0]!.steps[1]).toEqual({ text: 'Simmer gently.', timerSeconds: null });
     });
 
     test("a section with no steps is kept while a line is in it, and dropped once none is", () => {
         const grouping = draft({
-            sections: [method('Stir.'), method('', { key: 'dressing', name: 'Dressing' })],
+            sections: [method(['Stir.']), method([''], { key: 'dressing', name: 'Dressing' })],
             lines: [line('a', '1', garlic, { sectionKey: 'dressing' })],
         });
         const kept = buildRecipeBody(grouping);
@@ -307,32 +323,166 @@ describe('sections of the method (3b)', () => {
         expect(dropped).toMatchObject({ body: { sections: [{ name: 'Method' }] }, sectionKeys: ['m'] });
     });
 
-    test('a step over 2,000 characters is refused before the API sees it', () => {
-        const result = buildRecipeBody(draft({ sections: [method(`Fine.\n${'x'.repeat(2001)}`)] }));
-
-        expect(result).toEqual({ errors: { [sectionErrorKey('m', 'steps')]: 'Keep each step to 2000 characters or fewer.' } });
-    });
-
-    test("the API's messages about a section land on its box", () => {
-        const errors = mapServerErrors(
-            { 'sections.1.steps.0.text': 'Must not be empty.', 'sections.0.name': 'Must not be empty.' },
-            [],
-            ['first', 'second'],
+    test('a section in use needs a name, and a step over 2,000 characters is refused, before the API sees them', () => {
+        const result = buildRecipeBody(
+            draft({ sections: [method(['Fine.', 'x'.repeat(2001)]), method(['Toss.'], { key: 's2', name: '  ' })] }),
         );
 
-        expect(errors).toEqual({
-            [sectionErrorKey('second', 'steps')]: 'Must not be empty.',
-            [sectionErrorKey('first', 'name')]: 'Must not be empty.',
+        expect(result).toEqual({
+            errors: {
+                [stepErrorKey('m-1', 'text')]: 'Keep each step to 2000 characters or fewer.',
+                [sectionErrorKey('s2', 'name')]: 'Give the section a name.',
+            },
         });
     });
 
-    test('a version saved on the device reopens with its sections and grouping', () => {
-        const first = buildRecipeBody(draftFromRecipe(twoSections));
-        if ('errors' in first) throw new Error('Expected a body.');
+    test("the API's messages about a section or a step land on its box", () => {
+        const errors = mapServerErrors(
+            {
+                'sections.1.steps.0.text': 'Must not be empty.',
+                'sections.1.steps.1.timerSeconds': 'Must be at most 86400.',
+                'sections.0.name': 'Must not be empty.',
+                'sections.0.steps': 'Must be an array of steps.',
+            },
+            { sectionKeys: ['first', 'second'], stepKeys: [['a'], ['b', 'c']] },
+        );
+
+        expect(errors).toEqual({
+            [stepErrorKey('b', 'text')]: 'Must not be empty.',
+            [stepErrorKey('c', 'timer')]: 'Must be at most 86400.',
+            [sectionErrorKey('first', 'name')]: 'Must not be empty.',
+            [sectionErrorKey('first', 'steps')]: 'Must be an array of steps.',
+        });
+    });
+
+    test('a version saved on the device reopens with its sections, timers and grouping', () => {
+        const first = body(draftFromRecipe(twoSections));
 
         const reopened = buildRecipeBody(draftFromBody(first.body));
 
         expect(reopened).toMatchObject({ body: first.body });
+    });
+
+    test('a recipe whose lines came out of order opens with them grouped, no section first', () => {
+        const mixed = {
+            ...twoSections,
+            recipeIngredients: twoSections.recipeIngredients.map((l, index) => ({
+                ...l,
+                sectionId: index % 2 === 0 ? twoSections.sections[0]!.id : null,
+            })),
+        };
+
+        const loaded = draftFromRecipe(mixed);
+
+        expect(loaded.lines.map((l) => l.key)).toEqual([1, 3, 5, 0, 2, 4, 6].map((i) => mixed.recipeIngredients[i]!.id));
+    });
+
+    test('lines can be put in sections once the method has a section of its own', () => {
+        expect(hasNamedSections([{ name: 'Method' }])).toBe(false);
+        expect(hasNamedSections([{ name: 'Sauce' }])).toBe(true);
+        expect(hasNamedSections([{ name: 'Method' }, { name: 'To serve' }])).toBe(true);
+        expect(hasNamedSections([])).toBe(false);
+    });
+});
+
+describe('draftReducer: sections and steps (3b)', () => {
+    const start = draft({
+        sections: [method(['Fry.', 'Simmer.']), method(['Serve.'], { key: 'n', name: 'To serve' })],
+        lines: [
+            line('a', '1', garlic),
+            line('b', '2', onion),
+            line('c', '3', onion, { sectionKey: 'm' }),
+            line('d', '4', onion, { sectionKey: 'm' }),
+            line('e', '5', garlic, { sectionKey: 'n' }),
+        ],
+    });
+    const keys = (d: RecipeDraft) => d.lines.map((l) => l.key);
+    const steps = (d: RecipeDraft, index = 0) => d.sections[index]!.steps.map((step) => step.text);
+
+    test('a line moves only within its group, and its section menu sends it to the end of the new one', () => {
+        expect(keys(draftReducer(start, { type: 'move', key: 'd', by: -1 }))).toEqual(['a', 'b', 'd', 'c', 'e']);
+        // The first line of a group doesn't jump into the group above
+        expect(draftReducer(start, { type: 'move', key: 'c', by: -1 })).toBe(start);
+        expect(draftReducer(start, { type: 'move', key: 'b', by: 1 })).toBe(start);
+
+        const moved = draftReducer(start, { type: 'lineSection', key: 'a', sectionKey: 'm' });
+        expect(keys(moved)).toEqual(['b', 'c', 'd', 'a', 'e']);
+        expect(moved.lines[3]?.sectionKey).toBe('m');
+        expect(keys(draftReducer(start, { type: 'lineSection', key: 'e', sectionKey: null }))).toEqual(['a', 'b', 'e', 'c', 'd']);
+    });
+
+    test('lineGroups gives each group with lines, no section first', () => {
+        expect(lineGroups(start).map((group) => [group.section?.name ?? null, group.lines.map((l) => l.key)])).toEqual([
+            [null, ['a', 'b']],
+            ['Method', ['c', 'd']],
+            ['To serve', ['e']],
+        ]);
+    });
+
+    test('a new line joins the last group, just above the Add button', () => {
+        const added = draftReducer(start, { type: 'add' });
+
+        expect(added.lines[5]).toMatchObject({ sectionKey: 'n', focus: 'amount' });
+    });
+
+    test('moving a section moves its lines with it; removing one keeps its lines, in no section', () => {
+        const swapped = draftReducer(start, { type: 'moveSection', key: 'n', by: -1 });
+        expect(swapped.sections.map((section) => section.key)).toEqual(['n', 'm']);
+        expect(keys(swapped)).toEqual(['a', 'b', 'e', 'c', 'd']);
+        expect(draftReducer(start, { type: 'moveSection', key: 'm', by: -1 })).toBe(start);
+
+        const removed = draftReducer(start, { type: 'removeSection', key: 'm' });
+        expect(removed.sections.map((section) => section.key)).toEqual(['n']);
+        expect(removed.lines.map((l) => [l.key, l.sectionKey ?? null])).toEqual([
+            ['a', null],
+            ['b', null],
+            ['c', null],
+            ['d', null],
+            ['e', 'n'],
+        ]);
+    });
+
+    test('Add section adds an empty one to name, with a box for its first step', () => {
+        const added = draftReducer(start, { type: 'addSection' });
+
+        expect(added.sections[2]).toMatchObject({ name: '', focus: true, steps: [{ text: '', timerSeconds: null }] });
+    });
+
+    test('Enter splits a step at the cursor, and the new step takes the focus', () => {
+        const split = draftReducer(start, { type: 'splitStep', key: 'm-0', before: 'Fry the onions. ', after: ' Then the garlic.' });
+
+        expect(steps(split)).toEqual(['Fry the onions.', 'Then the garlic.', 'Simmer.']);
+        expect(split.sections[0]!.steps[1]?.focus).toBe(true);
+        // Enter at the end makes an empty step to type in
+        expect(steps(draftReducer(start, { type: 'splitStep', key: 'm-1', before: 'Simmer.', after: '' }))).toEqual(['Fry.', 'Simmer.', '']);
+    });
+
+    test('pasting several lines makes a step of each, without their numbers or blank lines', () => {
+        const pasted = draftReducer(start, { type: 'pasteSteps', key: 'm-0', text: '1. Heat the oil.\n\n2) Fry the onions.\r\n3 eggs, beaten in.' });
+
+        expect(steps(pasted)).toEqual(['Heat the oil.', 'Fry the onions.', '3 eggs, beaten in.', 'Simmer.']);
+    });
+
+    test('steps move within their section and are removed, always leaving a box to type in', () => {
+        expect(steps(draftReducer(start, { type: 'moveStep', key: 'm-1', by: -1 }))).toEqual(['Simmer.', 'Fry.']);
+        expect(draftReducer(start, { type: 'moveStep', key: 'm-1', by: 1 }).sections).toEqual(start.sections);
+        expect(steps(draftReducer(start, { type: 'removeStep', key: 'm-0' }))).toEqual(['Simmer.']);
+
+        const emptied = draftReducer(start, { type: 'removeStep', key: 'n-0' });
+        expect(emptied.sections[1]!.steps).toMatchObject([{ text: '', focus: true }]);
+    });
+
+    test('Add step adds an empty, focused box at the end of its section', () => {
+        const added = draftReducer(start, { type: 'addStep', sectionKey: 'n' });
+
+        expect(added.sections[1]!.steps.map((step) => [step.text, step.focus ?? false])).toEqual([
+            ['Serve.', false],
+            ['', true],
+        ]);
+    });
+
+    test('renames a section', () => {
+        expect(draftReducer(start, { type: 'sectionName', key: 'n', name: 'Garnish' }).sections[1]?.name).toBe('Garnish');
     });
 });
 
@@ -401,5 +551,15 @@ describe('isDirty', () => {
         expect(isDirty(start, { ...start, lines: start.lines.map((l) => ({ ...l, focus: 'note' as const })) })).toBe(false);
         expect(isDirty(start, draftReducer(start, { type: 'field', field: 'servings', value: '3' }))).toBe(true);
         expect(isDirty(start, draftReducer(start, { type: 'move', key: start.lines[0]!.key, by: 1 }))).toBe(true);
+    });
+
+    test("notices a step's text or timer changing, but not which box wants focus (3b)", () => {
+        const start = draftFromRecipe(beefChili);
+        const step = start.sections[0]!.steps[0]!;
+
+        expect(isDirty(start, draftReducer(start, { type: 'step', key: step.key, patch: { text: 'Changed.' } }))).toBe(true);
+        expect(isDirty(start, draftReducer(start, { type: 'step', key: step.key, patch: { timerSeconds: 60 } }))).toBe(true);
+        const focused = { ...start, sections: start.sections.map((s) => ({ ...s, focus: true, steps: s.steps.map((st) => ({ ...st, focus: true })) })) };
+        expect(isDirty(start, focused)).toBe(false);
     });
 });

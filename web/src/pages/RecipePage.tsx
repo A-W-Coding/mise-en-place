@@ -17,6 +17,10 @@
  * choices that settle it (Step 18); one that met a change made elsewhere can
  * show either version.
  *
+ * From 3b the ingredients are grouped by section, lines in no section first
+ * with no heading, and the method is shown by section. A step with a timer
+ * has a button that starts it with one tap.
+ *
  * The cooking mode switch keeps the screen on, and changes nothing else: the
  * whole recipe stays readable. It's off for each recipe you open, and leaving
  * the recipe turns it off. Printing shows only the name, ingredients and
@@ -32,13 +36,14 @@ import { recipeFromChange } from '../offline/upload';
 import { useWaitingChanges } from '../offline/waiting';
 import { SettleChange, WaitingNotice } from '../components/Waiting';
 import { CookingMode } from '../cooking/CookingMode';
+import { StepTimerButton } from '../timers/StepTimerButton';
 import { BackLink } from '../components/BackLink';
 import { DeleteRecipeDialog } from '../components/DeleteRecipeDialog';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Menu } from '../components/Menu';
 import { recipeMenuItems } from '../components/recipeMenu';
 import { useDocumentTitle } from '../components/useDocumentTitle';
-import { recipeMeta } from '../format';
+import { ingredientGroups, recipeMeta } from '../format';
 import page from '../components/Page.module.css';
 import styles from './RecipePage.module.css';
 
@@ -131,6 +136,7 @@ function RecipeContent({ recipe, onDelete, cooking, onCookingChange }: RecipeCon
     const method = recipe.sections.filter((section) => section.steps.length > 0);
     // One section called "Method" needs no heading of its own: it's what a migrated recipe has
     const named = method.length > 1 || (method.length === 1 && method[0]?.name !== 'Method');
+    const groups = ingredientGroups(recipe);
 
     return (
         <>
@@ -159,22 +165,27 @@ function RecipeContent({ recipe, onDelete, cooking, onCookingChange }: RecipeCon
                     <h2 id="ingredients-heading" className={styles.sectionTitle}>
                         Ingredients
                     </h2>
-                    {recipe.recipeIngredients.length === 0 ? (
+                    {groups.length === 0 ? (
                         <p className={styles.empty}>No ingredients yet.</p>
                     ) : (
-                        <ul className={styles.lines}>
-                            {recipe.recipeIngredients.map((line) => (
-                                <li key={line.id} className={styles.line}>
-                                    <span className={styles.amount}>
-                                        {formatAmount(line.quantity, line.quantityMax, line.unit)}
-                                    </span>
-                                    <span>
-                                        {line.ingredient.name}
-                                        {line.note && <span className={styles.note}>, {line.note}</span>}
-                                    </span>
-                                </li>
-                            ))}
-                        </ul>
+                        groups.map((group) => (
+                            <div key={group.section?.id ?? 'none'} className={styles.ingredientGroup}>
+                                {group.section && <h3 className={styles.groupName}>{group.section.name}</h3>}
+                                <ul className={styles.lines}>
+                                    {group.lines.map((line) => (
+                                        <li key={line.id} className={styles.line}>
+                                            <span className={styles.amount}>
+                                                {formatAmount(line.quantity, line.quantityMax, line.unit)}
+                                            </span>
+                                            <span>
+                                                {line.ingredient.name}
+                                                {line.note && <span className={styles.note}>, {line.note}</span>}
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        ))
                     )}
                 </section>
 
@@ -192,7 +203,18 @@ function RecipeContent({ recipe, onDelete, cooking, onCookingChange }: RecipeCon
                                     {section.steps.map((step, index) => (
                                         <li key={step.id} className={styles.step}>
                                             <span className={styles.stepNumber}>{index + 1}</span>
-                                            <span>{step.text}</span>
+                                            <div className={styles.stepBody}>
+                                                <span>{step.text}</span>
+                                                {step.timerSeconds !== null && (
+                                                    <span className={styles.stepTimer}>
+                                                        <StepTimerButton
+                                                            stepId={step.id}
+                                                            seconds={step.timerSeconds}
+                                                            label={named ? `${section.name}, step ${index + 1}` : `Step ${index + 1}`}
+                                                        />
+                                                    </span>
+                                                )}
+                                            </div>
                                         </li>
                                     ))}
                                 </ol>

@@ -60,6 +60,30 @@ describe('RecipePage', () => {
         ]);
     });
 
+    test('ingredients in sections show under their names, lines in no section first with no heading (3b)', async () => {
+        const recipe = {
+            ...beefChili,
+            sections: [section(BEEF_CHILI_ID, 0, 'Chilli', ['Fry.']), section(BEEF_CHILI_ID, 1, 'To serve', [])],
+        };
+        // Saved in an order that mixes the groups: the page still groups them
+        recipe.recipeIngredients = beefChili.recipeIngredients.map((line, index) => ({
+            ...line,
+            sectionId: index === 0 || index === 5 ? recipe.sections[0]!.id : index === 6 ? recipe.sections[1]!.id : null,
+        }));
+        mockApi([['GET', RECIPE_PATH, json(recipe)]]);
+        renderApp(`/recipes/${BEEF_CHILI_ID}`);
+
+        const ingredients = await screen.findByRole('region', { name: 'Ingredients' });
+        expect(within(ingredients).getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent)).toEqual([
+            'Chilli',
+            'To serve',
+        ]);
+        expect(within(ingredients).getAllByRole('list').map((list) => within(list).getAllByRole('listitem').length)).toEqual([
+            4, 2, 1,
+        ]);
+        expect(within(ingredients).getAllByRole('listitem')[4]?.textContent).toBe('1onion, diced');
+    });
+
     test('one section called "Method" needs no heading of its own', async () => {
         mockApi([['GET', RECIPE_PATH, json(beefChili)]]);
         renderApp(`/recipes/${BEEF_CHILI_ID}`);

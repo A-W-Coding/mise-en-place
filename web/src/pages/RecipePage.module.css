@@ -97,16 +97,29 @@
     color: var(--muted);
 }
 
-/* A section of the method (3b); Step 22 gives these their final look */
+/* Ingredient lines grouped by section (3b): a small heading over each section's */
+.ingredientGroup + .ingredientGroup {
+    margin-top: 14px;
+}
+
+.groupName {
+    margin: 0 0 2px;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+/* A section of the method (3b) */
 .methodSection + .methodSection {
     margin-top: 20px;
 }
 
 .methodSectionName {
     margin: 0 0 10px;
-    font-size: 1rem;
+    font-size: 1.0625rem;
     font-weight: 700;
-    color: var(--muted);
 }
 
 .steps {
@@ -123,6 +136,18 @@
     gap: 12px;
     font-size: 1.0625rem;
     line-height: 1.5;
+}
+
+.stepBody {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.stepTimer {
+    display: inline-flex;
 }
 
 .stepNumber {
@@ -222,7 +247,8 @@
     .page > :first-child,
     .titleRow > :not(.title),
     .cooking,
-    .description {
+    .description,
+    .stepTimer {
         display: none;
     }
 

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { act, screen, within } from '@testing-library/react';
 import { setPreference } from '../preferences';
-import { BEEF_CHILI_ID, beefChili } from '../test/fixtures';
+import { BEEF_CHILI_ID, beefChili, section } from '../test/fixtures';
 import { json, mockApi, renderApp } from '../test/renderApp';
 import { playChime, unlockAudio, vibrate } from './sound';
 import { RING_EVERY_MS, RING_FOR_MS } from './TimerBar';
@@ -152,6 +152,57 @@ describe('timers', () => {
         await user.click(within(timerBar()).getByRole('button', { name: 'Add a timer' }));
 
         expect(screen.getByRole('dialog', { name: 'New timer' })).toBeInTheDocument();
+    });
+});
+
+describe("a step's timer (3b)", () => {
+    const sectioned = {
+        ...beefChili,
+        sections: [
+            section(BEEF_CHILI_ID, 0, 'Chilli', ['Fry the onions.', ['Simmer.', 20 * 60]]),
+            section(BEEF_CHILI_ID, 1, 'To serve', [['Cook the rice.', 12 * 60]]),
+        ],
+    };
+
+    test('starts with one tap; the step shows its time left, and its chip is named after the step', async () => {
+        mockApi([['GET', `/api/recipes/${BEEF_CHILI_ID}`, json(sectioned)]]);
+        const { user } = renderApp(`/recipes/${BEEF_CHILI_ID}`);
+        const method = await screen.findByRole('region', { name: 'Method' });
+        // A step with no timer has no button
+        expect(within(method).getAllByRole('button').map((button) => button.textContent)).toEqual([
+            'Start 20 min timer',
+            'Start 12 min timer',
+        ]);
+
+        await user.click(within(method).getByRole('button', { name: 'Start 20 min timer' }));
+
+        // The tap that starts it lets the page chime later
+        expect(unlockAudio).toHaveBeenCalled();
+        expect(within(timerBar()).getByText('Chilli, step 2 20:00')).toBeInTheDocument();
+        expect(within(method).getByText('20:00 left')).toBeInTheDocument();
+        expect(within(method).getByText('Chilli, step 2 timer running, 20 minutes left')).toBeInTheDocument();
+        expect(within(method).queryByRole('button', { name: 'Start 20 min timer' })).not.toBeInTheDocument();
+        expect(within(method).getByRole('button', { name: 'Start 12 min timer' })).toBeInTheDocument();
+
+        pass(5 * MINUTE);
+        expect(within(method).getByText('15:00 left')).toBeInTheDocument();
+
+        // Once it rings, the step can start it again
+        pass(15 * MINUTE);
+        expect(within(timerBar()).getByRole('alert')).toHaveTextContent("Chilli, step 2: time's up");
+        expect(within(method).getByRole('button', { name: 'Start 20 min timer' })).toBeInTheDocument();
+    });
+
+    test('a recipe with just "Method" names its timers "Step 3"; cancelling the chip frees the step', async () => {
+        const timed = { ...beefChili, sections: [section(BEEF_CHILI_ID, 0, 'Method', ['Fry.', 'Stir.', ['Simmer.', 90]])] };
+        mockApi([['GET', `/api/recipes/${BEEF_CHILI_ID}`, json(timed)]]);
+        const { user } = renderApp(`/recipes/${BEEF_CHILI_ID}`);
+
+        await user.click(await screen.findByRole('button', { name: 'Start 1 min 30 s timer' }));
+        expect(within(timerBar()).getByText('Step 3 1:30')).toBeInTheDocument();
+
+        await user.click(within(timerBar()).getByRole('button', { name: 'Cancel Step 3 timer' }));
+        expect(screen.getByRole('button', { name: 'Start 1 min 30 s timer' })).toBeInTheDocument();
     });
 });
 

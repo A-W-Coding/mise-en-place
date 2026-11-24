@@ -130,6 +130,7 @@ textarea.input {
 .hint {
     margin: 0;
     font-size: 0.8125rem;
+    font-weight: 400;
     line-height: 1.45;
     color: var(--muted);
 }
@@ -316,6 +317,192 @@ textarea.input {
     font-size: 0.9375rem;
     font-weight: 600;
     cursor: pointer;
+}
+
+/* Ingredient lines grouped by section (3b) */
+.groupHeading {
+    margin: 8px 0 0;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+/* The method: a card per section, a box per step (3b) */
+.methodSections {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.methodSection {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface);
+}
+
+.sectionHead {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.sectionName {
+    flex-grow: 1;
+    font-weight: 700;
+}
+
+.steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.step {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    min-width: 0;
+}
+
+.stepNumber {
+    width: 28px;
+    height: 28px;
+    margin-top: 9px;
+    flex-shrink: 0;
+    border-radius: 14px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 0.875rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.stepBody {
+    flex-grow: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* Grows with its text where the browser can, so a long step needs no scrolling */
+textarea.stepText {
+    min-height: 4.25rem;
+    resize: none;
+    field-sizing: content;
+}
+
+.stepTools {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.spacer {
+    flex-grow: 1;
+}
+
+.timerAdd,
+.timerSet {
+    min-height: 36px;
+    padding: 0 12px;
+    border-radius: var(--radius-pill);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.timerAdd {
+    border: 1px dashed var(--border);
+    background: transparent;
+    color: var(--muted);
+}
+
+.timerSet {
+    border: none;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 700;
+}
+
+.addStep {
+    composes: addLine;
+    min-height: var(--tap);
+    border-radius: 10px;
+    background: var(--bg);
+}
+
+/* The step timer sheet */
+.timerHeading {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.timerStep {
+    margin: 0;
+    font-size: 0.9375rem;
+    line-height: 1.45;
+    color: var(--muted);
+}
+
+.timerActions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.removeTimer {
+    min-height: var(--tap);
+    padding: 0 4px;
+    border: none;
+    background: transparent;
+    color: var(--danger);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.secondaryButton,
+.primaryButton {
+    min-height: var(--tap);
+    padding: 0 18px;
+    border-radius: var(--radius-pill);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.secondaryButton {
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+}
+
+.primaryButton {
+    border: none;
+    background: var(--accent);
+    color: var(--accent-text);
 }
 
 /* Wider screens: an ordinary heading row, with Cancel and Save beside it */

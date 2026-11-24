@@ -38,7 +38,9 @@ describe('RecipeEditorPage: a new recipe', () => {
         await user.type(screen.getByLabelText('Amount, line 1'), '100g');
         await user.type(screen.getByRole('combobox', { name: 'Ingredient, line 1' }), 'lard');
         await user.click(await screen.findByRole('option', { name: 'lardons' }));
-        await user.type(screen.getByLabelText('One step per line'), 'Fry.{Enter}Toss.');
+        // Enter starts the next step, so a method is typed straight through
+        await user.type(screen.getByRole('textbox', { name: 'Step 1' }), 'Fry.{Enter}Toss.');
+        expect(screen.getByRole('textbox', { name: 'Step 2' })).toHaveValue('Toss.');
 
         await user.click(screen.getByRole('button', { name: 'Save' }));
 
@@ -116,7 +118,7 @@ describe('RecipeEditorPage: a new recipe', () => {
 });
 
 describe('RecipeEditorPage: editing', () => {
-    test('a recipe in several sections gets a box for each, and saves each back as its own section (3b)', async () => {
+    test('a recipe in several sections opens with a card for each and a box per step, and saves them back (3b)', async () => {
         const recipe = {
             ...beefChili,
             sections: [section(BEEF_CHILI_ID, 0, 'Sauce', ['Fry.', ['Simmer.', 600]]), section(BEEF_CHILI_ID, 1, 'To serve', ['Ladle.'])],
@@ -127,9 +129,14 @@ describe('RecipeEditorPage: editing', () => {
         ]);
         const { user } = renderApp(`/recipes/${BEEF_CHILI_ID}/edit`);
 
-        const serve = await screen.findByLabelText('To serve: one step per line');
-        expect(screen.getByLabelText('Sauce: one step per line')).toHaveValue('Fry.\nSimmer.');
-        await user.type(serve, '{Enter}Garnish.');
+        expect(await screen.findByRole('textbox', { name: 'Section 2' })).toHaveValue('To serve');
+        expect(screen.getByRole('textbox', { name: 'Sauce, step 2' })).toHaveValue('Simmer.');
+        expect(screen.getByRole('button', { name: 'Timer for Sauce, step 2: 10 min. Change it' })).toHaveTextContent('10 min');
+        expect(screen.getByRole('button', { name: 'Add a timer to Sauce, step 1' })).toBeInTheDocument();
+
+        await user.click(screen.getByRole('button', { name: 'Add step to To serve' }));
+        expect(screen.getByRole('textbox', { name: 'To serve, step 2' })).toHaveFocus();
+        await user.keyboard('Garnish.');
         await user.click(screen.getByRole('button', { name: 'Save' }));
 
         await waitFor(() => expect(sent(fetchMock, 'PATCH')).toHaveLength(1));
@@ -151,6 +158,159 @@ describe('RecipeEditorPage: editing', () => {
                 },
             ],
         });
+    });
+
+    test("a step's Timer button sets its timer in a sheet: typed, from a preset, or removed (3b)", async () => {
+        const fetchMock = mockApi([
+            ['GET', RECIPE_PATH, json(beefChili, { headers: { ETag: '"1"' } })],
+            ['PATCH', RECIPE_PATH, json(beefChili, { headers: { ETag: '"2"' } })],
+        ]);
+        const { user } = renderApp(`/recipes/${BEEF_CHILI_ID}/edit`);
+
+        await user.click(await screen.findByRole('button', { name: 'Add a timer to step 3' }));
+        let sheet = screen.getByRole('dialog', { name: 'Timer for step 3' });
+        expect(sheet).toHaveTextContent('Simmer for at least 20 minutes.');
+        const length = within(sheet).getByRole('textbox', { name: 'How long' });
+        expect(length).toHaveFocus();
+        // Something it can't read is refused in the sheet
+        await user.type(length, '1:30');
+        await user.click(within(sheet).getByRole('button', { name: 'Set timer' }));
+        expect(within(sheet).getByText("Couldn't read that. Try 90 s, 15 min or 1 h 30 min.")).toBeInTheDocument();
+        expect(length).toHaveAttribute('aria-invalid', 'true');
+        await user.clear(length);
+        await user.type(length, '1h 30');
+        await user.click(within(sheet).getByRole('button', { name: 'Set timer' }));
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Timer for step 3: 1 h 30 min. Change it' })).toBeInTheDocument();
+
+        // Changed with a preset; the sheet opens with the length it has
+        await user.click(screen.getByRole('button', { name: 'Timer for step 3: 1 h 30 min. Change it' }));
+        sheet = screen.getByRole('dialog', { name: 'Timer for step 3' });
+        expect(within(sheet).getByRole('textbox', { name: 'How long' })).toHaveValue('1 h 30 min');
+        await user.click(within(sheet).getByRole('button', { name: '20 min' }));
+        expect(within(sheet).getByRole('button', { name: '20 min' })).toHaveAttribute('aria-pressed', 'true');
+        await user.click(within(sheet).getByRole('button', { name: 'Set timer' }));
+
+        // Removed from another step
+        await user.click(screen.getByRole('button', { name: 'Add a timer to step 1' }));
+        sheet = screen.getByRole('dialog', { name: 'Timer for step 1' });
+        expect(within(sheet).queryByRole('button', { name: 'Remove timer' })).not.toBeInTheDocument();
+        await user.click(within(sheet).getByRole('button', { name: '5 min' }));
+        await user.click(within(sheet).getByRole('button', { name: 'Set timer' }));
+        await user.click(screen.getByRole('button', { name: 'Timer for step 1: 5 min. Change it' }));
+        await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Remove timer' }));
+        expect(screen.getByRole('button', { name: 'Add a timer to step 1' })).toBeInTheDocument();
+
+        await user.click(screen.getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(sent(fetchMock, 'PATCH')).toHaveLength(1));
+        expect(sent(fetchMock, 'PATCH')[0]?.body).toMatchObject({
+            sections: [
+                {
+                    name: 'Method',
+                    steps: [
+                        { text: 'Heat some oil and cook the onions.', timerSeconds: null },
+                        { text: 'Add the garlic.', timerSeconds: null },
+                        { text: 'Simmer for at least 20 minutes.', timerSeconds: 1200 },
+                    ],
+                },
+            ],
+        });
+    });
+
+    test("Add section, then a line's ⋮ menu puts it in that section, shown under its name (3b)", async () => {
+        const fetchMock = mockApi([
+            ['GET', RECIPE_PATH, json(beefChili, { headers: { ETag: '"1"' } })],
+            ['PATCH', RECIPE_PATH, json(beefChili, { headers: { ETag: '"2"' } })],
+        ]);
+        const { user } = renderApp(`/recipes/${BEEF_CHILI_ID}/edit`);
+
+        // With only "Method", lines aren't offered a section
+        await user.click(await screen.findByRole('button', { name: 'Options for line 1' }));
+        expect(screen.queryByRole('menuitemradio')).not.toBeInTheDocument();
+        await user.keyboard('{Escape}');
+
+        await user.click(screen.getByRole('button', { name: 'Add section' }));
+        expect(screen.getByRole('textbox', { name: 'Section 2' })).toHaveFocus();
+        await user.keyboard('To serve');
+
+        await user.click(screen.getByRole('button', { name: 'Options for line 1' }));
+        const choice = screen.getByRole('group', { name: 'Section' });
+        expect(within(choice).getByRole('menuitemradio', { name: 'No section' })).toHaveAttribute('aria-checked', 'true');
+        await user.click(within(choice).getByRole('menuitemradio', { name: 'To serve' }));
+
+        // Lines in no section first, then the new section's, under its name
+        expect(screen.getByRole('heading', { name: 'No section' })).toBeInTheDocument();
+        const serving = screen.getByRole('list', { name: 'Ingredient lines: To serve' });
+        expect(within(serving).getByRole('combobox', { name: 'Ingredient, line 7' })).toHaveValue('onion');
+        // The first line of a group can't move up into the group above
+        await user.click(screen.getByRole('button', { name: 'Options for line 7' }));
+        expect(screen.getByRole('menuitem', { name: 'Move up' })).toHaveAttribute('aria-disabled', 'true');
+        await user.keyboard('{Escape}');
+
+        await user.click(screen.getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(sent(fetchMock, 'PATCH')).toHaveLength(1));
+        const body = sent(fetchMock, 'PATCH')[0]?.body as { sections: unknown[]; ingredients: { sectionIndex: number | null }[] };
+        // A section with no steps is kept, to hold its line
+        expect(body.sections).toEqual([expect.objectContaining({ name: 'Method' }), { name: 'To serve', steps: [] }]);
+        expect(body.ingredients.map((line) => line.sectionIndex)).toEqual([null, null, null, null, null, null, 1]);
+    });
+
+    test('removing a section with steps or lines asks first, and its lines stay, in no section (3b)', async () => {
+        const recipe = {
+            ...beefChili,
+            sections: [section(BEEF_CHILI_ID, 0, 'Chilli', ['Fry.']), section(BEEF_CHILI_ID, 1, 'To serve', ['Ladle.'])],
+        };
+        recipe.recipeIngredients = beefChili.recipeIngredients.map((line, index) => ({
+            ...line,
+            sectionId: index === 0 ? recipe.sections[1]!.id : null,
+        }));
+        mockApi([['GET', RECIPE_PATH, json(recipe)]]);
+        const { user } = renderApp(`/recipes/${BEEF_CHILI_ID}/edit`);
+
+        await user.click(await screen.findByRole('button', { name: 'Options for section To serve' }));
+        await user.click(screen.getByRole('menuitem', { name: 'Remove section…' }));
+        const dialog = screen.getByRole('alertdialog', { name: 'Remove To serve?' });
+        expect(dialog).toHaveTextContent('Its 1 step goes with it. Its 1 ingredient line stays, in no section.');
+        await user.click(within(dialog).getByRole('button', { name: 'Remove section' }));
+
+        expect(screen.queryByRole('textbox', { name: 'Section 2' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: 'No section' })).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Add section' })).toHaveFocus();
+
+        // An empty section goes at once
+        await user.click(screen.getByRole('button', { name: 'Add section' }));
+        await user.click(screen.getByRole('button', { name: 'Options for section Section 2' }));
+        await user.click(screen.getByRole('menuitem', { name: 'Remove section…' }));
+        expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+        expect(screen.queryByRole('textbox', { name: 'Section 2' })).not.toBeInTheDocument();
+    });
+
+    test("pasting several lines into a step makes a step of each; the API's message on a step lands on its box (3b)", async () => {
+        mockApi([
+            ['GET', RECIPE_PATH, json(beefChili)],
+            [
+                'PATCH',
+                RECIPE_PATH,
+                json({ error: 'Validation failed.', fields: { 'sections.0.steps.1.text': 'Must not be empty.' } }, { status: 400 }),
+            ],
+        ]);
+        const { user } = renderApp(`/recipes/${BEEF_CHILI_ID}/edit`);
+
+        const first = await screen.findByRole('textbox', { name: 'Step 1' });
+        await user.clear(first);
+        await user.click(first);
+        await user.paste('1. Heat the oil.\n2. Fry the onions.');
+        expect(first).toHaveValue('Heat the oil.');
+        expect(screen.getByRole('textbox', { name: 'Step 2' })).toHaveValue('Fry the onions.');
+        expect(screen.getByRole('textbox', { name: 'Step 3' })).toHaveValue('Add the garlic.');
+
+        // The Method closed, so the API's message has to open it
+        await user.click(screen.getByRole('button', { name: 'Method' }));
+        await user.click(screen.getByRole('button', { name: 'Save' }));
+
+        expect(await screen.findByText('Must not be empty.')).toBeInTheDocument();
+        expect(screen.getByRole('textbox', { name: 'Step 2' })).toHaveAttribute('aria-invalid', 'true');
+        expect(screen.getByRole('textbox', { name: 'Step 2' })).toHaveFocus();
     });
 
     test('loads the recipe, and saves it with If-Match and the lines as they were', async () => {

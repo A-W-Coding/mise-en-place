@@ -20,9 +20,11 @@
  *   one way to create a recipe and a retried upload can't create it twice.
  * - A waiting change the API refused (400) opens with the API's messages
  *   beside their fields, and saving it again uploads it (Step 18).
- * - The method is sections of steps (3b). Until Step 22's screens, each
- *   section is one box, a step per line, named after its section when
- *   there's more than one.
+ * - The method is sections of steps (3b, as the wireframes have it): a card
+ *   per section, a box per step, and a Timer button on each step that opens
+ *   a sheet to set it. Removing a section asks first when it has steps or
+ *   lines. Once the method has sections of its own, each ingredient line's
+ *   ⋮ menu puts it in one, and the lines show grouped under their sections.
  */
 
 import { useEffect, useReducer, useRef, useState, type FormEvent, type ReactNode } from 'react';
@@ -43,18 +45,25 @@ import {
     buildRecipeBody,
     draftFromBody,
     draftFromRecipe,
+    draftKeys,
     draftReducer,
+    hasNamedSections,
     isDirty,
     lineErrorKey,
+    lineGroups,
     mapServerErrors,
     newDraft,
     readAmount,
-    sectionErrorKey,
+    sectionTitle,
+    type BodyKeys,
     type DraftErrors,
     type LineDraft,
     type RecipeDraft,
+    type SectionDraft,
 } from '../editor/draft';
 import { LineRow } from '../editor/LineRow';
+import { MethodSection } from '../editor/MethodSection';
+import { StepTimerSheet, type TimerTarget } from '../editor/StepTimerSheet';
 import page from '../components/Page.module.css';
 import styles from '../editor/Editor.module.css';
 
@@ -76,8 +85,8 @@ interface EditorStart {
 }
 
 /** The API's refusal (400), next to the boxes it's about where it can be. */
-function refusalErrors(message: string, fields: FieldErrors, lineKeys: string[], sectionKeys: string[]): DraftErrors {
-    if (Object.keys(fields).length > 0) return mapServerErrors(fields, lineKeys, sectionKeys);
+function refusalErrors(message: string, fields: FieldErrors, keys: BodyKeys): DraftErrors {
+    if (Object.keys(fields).length > 0) return mapServerErrors(fields, keys);
     if (message === 'One or more ingredient IDs are invalid.') {
         return { form: 'An ingredient on this recipe was deleted elsewhere. Choose it again, then save.' };
     }
@@ -179,22 +188,19 @@ function RecipeEditor({ recipeId, start, onReload }: RecipeEditorProps) {
     // A refused change opens with the API's messages beside their boxes, the first one focused
     const refused = start.problem?.kind === 'refused' ? start.problem : null;
     const [errors, setErrors] = useState<DraftErrors>(() =>
-        refused
-            ? refusalErrors(
-                  refused.message,
-                  refused.fields,
-                  start.draft.lines.map((line) => line.key),
-                  start.draft.sections.map((section) => section.key),
-              )
-            : {},
+        refused ? refusalErrors(refused.message, refused.fields, draftKeys(start.draft)) : {},
     );
     const [open, setOpen] = useState({ ingredients: true, method: true });
     const [conflict, setConflict] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    // The step whose timer is being set, and a section waiting for "Remove" to be confirmed
+    const [timerFor, setTimerFor] = useState<TimerTarget | null>(null);
+    const [removingSection, setRemovingSection] = useState<SectionDraft | null>(null);
     const [focusErrors, setFocusErrors] = useState(refused ? 1 : 0);
     const save = useSaveRecipe();
     const formRef = useRef<HTMLFormElement>(null);
     const addLineRef = useRef<HTMLButtonElement>(null);
+    const addSectionRef = useRef<HTMLButtonElement>(null);
     // Set just before leaving on purpose (after saving or deleting), so the unsaved-changes check lets it through
     const leaving = useRef(false);
 
@@ -226,7 +232,7 @@ function RecipeEditor({ recipeId, start, onReload }: RecipeEditorProps) {
         const keys = Object.keys(found);
         setOpen((sections) => ({
             ingredients: sections.ingredients || keys.some((key) => key.startsWith('line:')),
-            method: sections.method || keys.some((key) => key.startsWith('section:')),
+            method: sections.method || keys.some((key) => key.startsWith('section:') || key.startsWith('step:')),
         }));
         setFocusErrors((count) => count + 1);
     };
@@ -236,13 +242,13 @@ function RecipeEditor({ recipeId, start, onReload }: RecipeEditorProps) {
         navigate(path, { replace: true });
     };
 
-    const saveFailed = (failure: ApiError, lineKeys: string[], sectionKeys: string[]) => {
+    const saveFailed = (failure: ApiError, keys: BodyKeys) => {
         if (failure.status === 412) {
             setConflict(true);
         } else if (failure.status === 404 && editing) {
             setErrors({ form: "This recipe was deleted on another device, so it can't be saved." });
         } else if (failure.status === 400) {
-            showErrors(refusalErrors(failure.message, failure.fields, lineKeys, sectionKeys));
+            showErrors(refusalErrors(failure.message, failure.fields, keys));
         } else {
             setErrors({ form: errorMessage(failure) });
         }
@@ -271,7 +277,7 @@ function RecipeEditor({ recipeId, start, onReload }: RecipeEditorProps) {
             { recipeId, kind, body: result.body, etag: sendEtag },
             {
                 onSuccess: () => leaveTo(`/recipes/${recipeId}`),
-                onError: (failure) => saveFailed(failure, result.lineKeys, result.sectionKeys),
+                onError: (failure) => saveFailed(failure, result),
             },
         );
     };
@@ -296,6 +302,40 @@ function RecipeEditor({ recipeId, start, onReload }: RecipeEditorProps) {
     const removeLine = (line: LineDraft) => {
         dispatch({ type: 'remove', key: line.key });
         addLineRef.current?.focus();
+    };
+
+    // Removing a section loses its steps and ungroups its lines, so that asks first
+    const linesIn = (section: SectionDraft) => draft.lines.filter((line) => line.sectionKey === section.key).length;
+    const stepsIn = (section: SectionDraft) => section.steps.filter((step) => step.text.trim() !== '').length;
+    const removeSection = (section: SectionDraft) => {
+        if (stepsIn(section) > 0 || linesIn(section) > 0) setRemovingSection(section);
+        else {
+            dispatch({ type: 'removeSection', key: section.key });
+            addSectionRef.current?.focus();
+        }
+    };
+
+    // Lines show under their sections once there are sections to put them in, and one is
+    const sectioned = hasNamedSections(draft.sections);
+    const groups = sectioned && draft.lines.some((line) => line.sectionKey) ? lineGroups(draft) : null;
+    const lineRow = (line: LineDraft) => {
+        const position = draft.lines.indexOf(line);
+        const sameGroup = (other: LineDraft | undefined) =>
+            other !== undefined && (other.sectionKey ?? null) === (line.sectionKey ?? null);
+        return (
+            <LineRow
+                key={line.key}
+                line={line}
+                n={position + 1}
+                canMoveUp={sameGroup(draft.lines[position - 1])}
+                canMoveDown={sameGroup(draft.lines[position + 1])}
+                sections={sectioned ? draft.sections : null}
+                errors={errors}
+                dispatch={dispatch}
+                onAmountBlur={checkAmount}
+                onRemove={removeLine}
+            />
+        );
     };
 
     const setField = (field: Exclude<keyof RecipeDraft, 'lines' | 'sections'>) => (value: string) =>
@@ -376,21 +416,29 @@ function RecipeEditor({ recipeId, start, onReload }: RecipeEditorProps) {
                 open={open.ingredients}
                 onToggle={() => setOpen((sections) => ({ ...sections, ingredients: !sections.ingredients }))}
             >
-                <p className={styles.hint}>Type the amount and unit together, like 100 g, 1½ tbsp or 2-3.</p>
-                <ol className={styles.lines} aria-label="Ingredient lines">
-                    {draft.lines.map((line, index) => (
-                        <LineRow
-                            key={line.key}
-                            line={line}
-                            index={index}
-                            count={draft.lines.length}
-                            errors={errors}
-                            dispatch={dispatch}
-                            onAmountBlur={checkAmount}
-                            onRemove={removeLine}
-                        />
-                    ))}
-                </ol>
+                <p className={styles.hint}>
+                    Type the amount and unit together, like 100 g, 1½ tbsp or 2-3.
+                    {sectioned && ' A line’s ⋮ menu puts it in a section.'}
+                </p>
+                {groups ? (
+                    groups.map((group) => {
+                        const name = group.section
+                            ? sectionTitle(group.section, draft.sections.indexOf(group.section))
+                            : 'No section';
+                        return (
+                            <div key={group.section?.key ?? 'none'} className={styles.sectionBody}>
+                                <h3 className={styles.groupHeading}>{name}</h3>
+                                <ol className={styles.lines} aria-label={`Ingredient lines: ${name}`}>
+                                    {group.lines.map(lineRow)}
+                                </ol>
+                            </div>
+                        );
+                    })
+                ) : (
+                    <ol className={styles.lines} aria-label="Ingredient lines">
+                        {draft.lines.map(lineRow)}
+                    </ol>
+                )}
                 <button ref={addLineRef} type="button" className={styles.addLine} onClick={() => dispatch({ type: 'add' })}>
                     <PlusIcon size={18} />
                     Add ingredient
@@ -403,24 +451,33 @@ function RecipeEditor({ recipeId, start, onReload }: RecipeEditorProps) {
                 open={open.method}
                 onToggle={() => setOpen((sections) => ({ ...sections, method: !sections.method }))}
             >
-                {draft.sections.map((section, index) => (
-                    <Field
-                        key={section.key}
-                        id={`field-method-${index}`}
-                        label={draft.sections.length === 1 ? 'One step per line' : `${section.name}: one step per line`}
-                        error={errors[sectionErrorKey(section.key, 'steps')] ?? errors[sectionErrorKey(section.key, 'name')]}
-                        quiet
-                    >
-                        {(props) => (
-                            <textarea
-                                {...props}
-                                rows={10}
-                                value={section.text}
-                                onChange={(event) => dispatch({ type: 'sectionText', key: section.key, text: event.target.value })}
-                            />
-                        )}
-                    </Field>
-                ))}
+                <p className={styles.hint}>
+                    Each step is its own box; Enter starts the next one. Timer sets one the recipe page starts with a tap.
+                </p>
+                <ol className={styles.methodSections} aria-label="Method sections">
+                    {draft.sections.map((section, index) => (
+                        <MethodSection
+                            key={section.key}
+                            section={section}
+                            index={index}
+                            count={draft.sections.length}
+                            named={sectioned}
+                            errors={errors}
+                            dispatch={dispatch}
+                            onTimer={setTimerFor}
+                            onRemove={removeSection}
+                        />
+                    ))}
+                </ol>
+                <button
+                    ref={addSectionRef}
+                    type="button"
+                    className={styles.addLine}
+                    onClick={() => dispatch({ type: 'addSection' })}
+                >
+                    <PlusIcon size={18} />
+                    Add section
+                </button>
             </Section>
 
             {editing && (
@@ -441,6 +498,31 @@ function RecipeEditor({ recipeId, start, onReload }: RecipeEditorProps) {
                 onCancel={() => blocker.reset?.()}
             >
                 <p>Your changes to {draft.name.trim() || 'this recipe'} will be lost.</p>
+            </ConfirmDialog>
+
+            <StepTimerSheet
+                target={timerFor}
+                onSet={(seconds) => {
+                    if (timerFor) dispatch({ type: 'step', key: timerFor.key, patch: { timerSeconds: seconds } });
+                    setTimerFor(null);
+                }}
+                onClose={() => setTimerFor(null)}
+            />
+
+            <ConfirmDialog
+                open={removingSection !== null}
+                title={`Remove ${removingSection ? sectionTitle(removingSection, draft.sections.indexOf(removingSection)) : 'this section'}?`}
+                confirmLabel="Remove section"
+                cancelLabel="Keep it"
+                tone="dangerOutline"
+                onConfirm={() => {
+                    if (removingSection) dispatch({ type: 'removeSection', key: removingSection.key });
+                    setRemovingSection(null);
+                    addSectionRef.current?.focus();
+                }}
+                onCancel={() => setRemovingSection(null)}
+            >
+                {removingSection && <p>{removalSummary(stepsIn(removingSection), linesIn(removingSection))}</p>}
             </ConfirmDialog>
 
             <ConfirmDialog
@@ -469,6 +551,15 @@ function RecipeEditor({ recipeId, start, onReload }: RecipeEditorProps) {
     );
 }
 
+/** What removing a section does: "Its 4 steps go with it. Its 2 ingredient lines stay, in no section." */
+function removalSummary(steps: number, lines: number): string {
+    const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+    const parts: string[] = [];
+    if (steps > 0) parts.push(`Its ${plural(steps, 'step')} ${steps === 1 ? 'goes' : 'go'} with it.`);
+    if (lines > 0) parts.push(`Its ${plural(lines, 'ingredient line')} ${lines === 1 ? 'stays' : 'stay'}, in no section.`);
+    return parts.join(' ');
+}
+
 interface FieldProps {
     label: string;
     /** The box's id, when its label isn't unique enough to make one. */
@@ -476,7 +567,7 @@ interface FieldProps {
     error?: string;
     /** Spans the whole row of fields. */
     wide?: boolean;
-    /** A small, muted label, as for the method's "One step per line". */
+    /** A small, muted label. */
     quiet?: boolean;
     children: (props: {
         id: string;

@@ -3,8 +3,8 @@
 # Mise en place: hardening plan (Phase 1 to Phase 3b)
 
 > **Status**
-> - Current step: **Step 22: sections and steps in the editor and on the page**, ready to start. Step 21 is done (2026-11-24): the 3b wireframes, reviewed, with everything as recommended. Step 20 merged as PR #25 (CI green); it isn't deployed (3b deploys in Step 26). Phase 3b's steps merged as PR #24. Phase 3c is complete (2026-11-24): Steps 15–19 merged (PRs #18–#22), deployed on the Pi, and every success criterion met on your phone. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
-> - Last updated: 2026-11-24 (Step 21: the 3b wireframes)
+> - Current step: **Step 22: sections and steps in the editor and on the page**, done (2026-11-24), with CI to be confirmed when its PR opens. Next: Step 23, tags and equipment. Step 21 (the 3b wireframes) merged as PR #26. Step 20 merged as PR #25 (CI green); it isn't deployed (3b deploys in Step 26). Phase 3b's steps merged as PR #24. Phase 3c is complete (2026-11-24): Steps 15–19 merged (PRs #18–#22), deployed on the Pi, and every success criterion met on your phone. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
+> - Last updated: 2026-11-24 (Step 22: sections and steps in the editor and on the page)
 > - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
@@ -785,14 +785,14 @@ And since 3c came first, its criteria still hold with all of this: offline, reci
 
 **Why:** Step 20 changed the data; this gives it its screens, as the wireframes settle.
 
-- [ ] The editor's method becomes sections, as the wireframes have it:
-  - a card per section, with its name and a ⋮ menu (Move section up, Move section down, Remove section…, asking first when it has steps), and "Add section" below them
-  - each step its own box, numbered, with a ⋮ menu (move up, move down, remove) and "Add step to <section>" below the steps
+- [x] The editor's method becomes sections, as the wireframes have it:
+  - a card per section, with its name and a ⋮ menu (Move section up, Move section down, Remove section…, asking first when it has steps), and "Add section" below them. (As built: it also asks when lines are in the section, and says they stay, in no section)
+  - each step its own box, numbered, with a ⋮ menu (move up, move down, remove) and "Add step to <section>" below the steps. (As built: Enter in a step starts the next one, and pasting several lines makes a step of each, numbering dropped)
   - an optional timer on a step: its Timer button opens a sheet, where the length is typed as "15 min" or "1 h 30 min" and read by `parseDuration()` in `shared/quantity.ts`, beside `parseAmount()`, or chosen from presets (5, 10, 15, 20 and 30 min, 1 h); the sheet also removes a timer. A step with one shows it on the button ("20 min")
-- [ ] Ingredient lines can be put in a section, sent as `sectionIndex`: a line's ⋮ menu gains a Section choice (No section, or one of the recipe's sections). The editor groups the lines under their section's name, lines in no section first
-- [ ] The recipe page groups the ingredients the same way, lines in no section first with no heading, and shows the method by section. A step with a timer has a "Start 20 min timer" button that starts it with one tap, through the existing timers; while it runs the button shows the time left, and its chip in the timer bar is named after the step ("Chilli, step 4"). Printing keeps the sections
-- [ ] The editor checks the new limits before saving, so a change saved offline is rarely refused later. The copy and waiting changes already carry sections (Step 20)
-- [ ] Tests:
+- [x] Ingredient lines can be put in a section, sent as `sectionIndex`: a line's ⋮ menu gains a Section choice (No section, or one of the recipe's sections). The editor groups the lines under their section's name, lines in no section first. (As built: the choice appears once the method has a section of its own, as the page's headings do; a line moves within its group, and a new line joins the last group, just above Add ingredient)
+- [x] The recipe page groups the ingredients the same way, lines in no section first with no heading, and shows the method by section. A step with a timer has a "Start 20 min timer" button that starts it with one tap, through the existing timers; while it runs the button shows the time left, and its chip in the timer bar is named after the step ("Chilli, step 4"). Printing keeps the sections
+- [x] The editor checks the new limits before saving, so a change saved offline is rarely refused later. The copy and waiting changes already carry sections (Step 20)
+- [x] Tests:
   - unit: `parseDuration()` (in the Jest suite, like `parseAmount()`), and the draft's sections and grouping
   - component: the editor's sections and timers, and the page
   - Playwright: a recipe with two sections, a step with a timer and grouped lines; then the step's timer started from the page
@@ -1717,3 +1717,21 @@ And since 3c came first, its criteria still hold with all of this: offline, reci
   - **Steps adjusted to match:** 22 (the section cards, step boxes, the timer sheet, the line's Section choice, the page's timer button), 23 (where tags and equipment sit, the colour picker, the filter row, `recipeCount`, Options › Tags), 24 (the main-image rule and its test) and 25 (the Photos page, its menu and its messages).
 
   Next: Step 22, sections and steps in the editor and on the page.
+- **2026-11-24:** Step 21 merged (PR #26). Step 22 done: sections and steps in the editor and on the page, as the wireframes have them.
+  - **Timer lengths:** `parseDuration()` and `formatDuration()` in `shared/quantity.ts`, beside `parseAmount()`. A number alone is minutes ("15"); otherwise numbers with units, largest first ("90 s", "1.5 h", "1 h 30 min", "1h30m"), and a last number with no unit takes the next smaller one ("1 h 30"). Like `parseAmount()` it never guesses, so "1:30" is an error. 1 second to a day, from `LIMITS.timerSeconds`.
+  - **The draft:** each section holds its steps, each with its own key, text and timer, so a step's timer stays with it whatever its text becomes (Step 20 matched timers by text). The lines are kept in the order they're shown, grouped: no section first, then each section's. A line moves only within its group; choosing a section sends it to the end of that group; moving or removing a section regroups the lines. What's saved is therefore always in the order the editor showed. The API's messages find their box down to the step (`sections.1.steps.0.text`).
+  - **The editor:**
+    - a card per section: its name, a ⋮ menu (move, remove), its steps, and "Add step to <section>"; "Add section" under the cards
+    - a box per step, numbered, with a Timer button and a ⋮ menu (move, remove). Enter starts the next step, taking what's after the cursor; pasting several lines makes a step of each, numbering dropped, as the migration did
+    - the timer sheet: typed or a preset (5, 10, 15, 20, 30 min, 1 h), and Remove timer. It's drawn at the end of the page rather than inside the editor's form, and its submit stops there: the first version, nested in the form, saved the recipe when you pressed Set timer (a test caught it)
+    - removing a section asks first when it has steps or lines ("Its 4 steps go with it. Its 2 ingredient lines stay, in no section.")
+    - a line's ⋮ menu gains a Section choice, once the method has a section of its own (more than one, or one not called "Method"), shown as ticked choices under a "Section" heading. The menu component gained grouped `menuitemradio` items for it. The lines then show under their section's name, "No section" first
+  - **The recipe page:** ingredients grouped the same way (no section first, with no heading; then a small heading per section); the method by section; and a "Start 20 min timer" button on a step with a timer. While its timer runs the button becomes the time left ("18:42 left"), and the timer's chip is named after the step ("Chilli, step 4", or "Step 3" when the method is just "Method"). A timer now remembers the step that started it (`source`). Printing hides the buttons and keeps the sections.
+  - **A label change for the tests' sake:** the section's name box is labelled "Section 1", not "Name of section 1", because Playwright's `getByLabel('Name')` matches part of a label, and every spec uses it for the recipe's name.
+  - **Tests:**
+    - Jest: 501, 53 of them new, for `parseDuration()` and `formatDuration()`, including reading back everything `formatDuration()` writes.
+    - The client: 262, 20 of them new: the draft's steps, grouping and moves, Enter and paste, the API's messages on a step; the editor's section cards, the timer sheet (typed, refused, preset, removed), the Section choice and grouping, removing a section, paste and a step's error; the page's grouped ingredients; and a step's timer started with one tap, counting down on the step and named on its chip.
+    - Playwright: `sections.spec.ts` makes a recipe with two sections, a timed step and a line in the second section, checks the page, starts the step's timer and lets five minutes pass on Playwright's clock, then reopens the editor. `editing.spec.ts` types its method step by step. All 60 pass in Chromium; Firefox runs in CI.
+  - **Docs:** no API change, so none.
+
+  Next: Step 23, tags and equipment.

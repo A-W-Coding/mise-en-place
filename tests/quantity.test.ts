@@ -1,10 +1,18 @@
 /**
  * @module tests/quantity.test
  * Unit tests for `formatQuantity()`, `formatAmount()`, `parseQuantity()` and
- * `parseAmount()` (F5).
+ * `parseAmount()` (F5), and for timer lengths: `formatDuration()` and
+ * `parseDuration()` (3b).
  */
 
-import { formatAmount, formatQuantity, parseAmount, parseQuantity } from '../shared/quantity.js';
+import {
+    formatAmount,
+    formatDuration,
+    formatQuantity,
+    parseAmount,
+    parseDuration,
+    parseQuantity,
+} from '../shared/quantity.js';
 
 describe('formatQuantity', () => {
     test.each([
@@ -184,5 +192,83 @@ describe('parseAmount', () => {
     ])('reads back formatAmount(%p, %p, %p)', (quantity, quantityMax, unit) => {
         const shown = formatAmount(quantity, quantityMax, unit);
         expect(parseAmount(shown)).toEqual({ quantity, quantityMax, unit: quantity === null ? null : unit });
+    });
+});
+
+describe('formatDuration', () => {
+    test.each([
+        [1200, '20 min'],
+        [5400, '1 h 30 min'],
+        [3600, '1 h'],
+        [45, '45 s'],
+        [90, '1 min 30 s'],
+        [3725, '1 h 2 min 5 s'],
+        [86_400, '24 h'],
+    ])('shows %p seconds as %p', (seconds, expected) => {
+        expect(formatDuration(seconds)).toBe(expected);
+    });
+
+    test('reads back through parseDuration', () => {
+        for (const seconds of [1, 45, 90, 600, 1200, 3600, 3725, 5400, 86_400]) {
+            expect(parseDuration(formatDuration(seconds))).toEqual({ seconds });
+        }
+    });
+});
+
+describe('parseDuration', () => {
+    test.each([
+        // A number on its own is minutes
+        ['15', 900],
+        ['1.5', 90],
+        [' 20 ', 1200],
+        // Units, in any of their spellings
+        ['90 s', 90],
+        ['90s', 90],
+        ['45 sec', 45],
+        ['30 seconds', 30],
+        ['15 min', 900],
+        ['15m', 900],
+        ['1 minute', 60],
+        ['10 MINS', 600],
+        ['1 h', 3600],
+        ['2 hrs', 7200],
+        ['1.5 hours', 5400],
+        ['.5 h', 1800],
+        // Several, largest first
+        ['1 h 30 min', 5400],
+        ['1h30m', 5400],
+        ['1 hour, 30 minutes', 5400],
+        ['2 hours and 15 minutes', 8100],
+        ['1 min 30 s', 90],
+        // A last number with no unit takes the next smaller one
+        ['1 h 30', 5400],
+        ['1h30', 5400],
+        ['2 min 15', 135],
+        // Rounded to whole seconds
+        ['0.01 min', 1],
+        // The limits: a second to a day
+        ['1 s', 1],
+        ['24 h', 86_400],
+    ])('reads %p as %p seconds', (text, seconds) => {
+        expect(parseDuration(text)).toEqual({ seconds });
+    });
+
+    test.each(['1:30', 'abc', 'min', '15 minutes.', '30 s 5', '1 min 2 h', '1 h 2 h', '15 eggs', '-5', '1/2 h', '15 min 30 s 2'])(
+        "refuses %p, which it can't read without guessing",
+        (text) => {
+            expect(parseDuration(text)).toEqual({ error: "Couldn't read that. Try 90 s, 15 min or 1 h 30 min." });
+        },
+    );
+
+    test.each(['', '   '])('asks for a length when given %p', (text) => {
+        expect(parseDuration(text)).toEqual({ error: 'Type how long, like 15 min.' });
+    });
+
+    test.each(['0', '0 s', '0.001 min'])('refuses %p, under a second', (text) => {
+        expect(parseDuration(text)).toEqual({ error: 'A timer needs to be at least 1 second.' });
+    });
+
+    test.each(['25 h', '1441', '24 h 1 s'])('refuses %p, over a day', (text) => {
+        expect(parseDuration(text)).toEqual({ error: 'Keep a timer to a day (24 h) or less.' });
     });
 });
