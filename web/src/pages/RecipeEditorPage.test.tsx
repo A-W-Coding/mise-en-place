@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import type { Ingredient } from '../api/types';
 import { BEEF_CHILI_ID, beefChili, beefChiliSummary } from '../test/fixtures';
@@ -22,7 +22,8 @@ function ingredientSearch(all: Ingredient[]) {
 }
 
 describe('RecipeEditorPage: a new recipe', () => {
-    test('picks ingredients as you type, saves, and opens the new recipe', async () => {
+    test('picks ingredients as you type, saves with the id made on the device, and opens the new recipe', async () => {
+        vi.spyOn(crypto, 'randomUUID').mockReturnValue(NEW_ID);
         const fetchMock = mockApi([
             ['GET', '/api/ingredients', ingredientSearch([lardons])],
             ['POST', '/api/recipes', json({ ...beefChili, id: NEW_ID, name: 'Carbonara' }, { status: 201 })],
@@ -44,6 +45,7 @@ describe('RecipeEditorPage: a new recipe', () => {
         expect(await screen.findByRole('heading', { level: 1, name: 'Carbonara' })).toBeInTheDocument();
         expect(router.state.location.pathname).toBe(`/recipes/${NEW_ID}`);
         expect(sent(fetchMock, 'POST')[0]?.body).toEqual({
+            id: NEW_ID,
             name: 'Carbonara',
             description: null,
             servings: 2,

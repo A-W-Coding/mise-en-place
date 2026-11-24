@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { beefChili, lemonDrizzle, snapshotOf } from '../test/fixtures';
+import { beefChili, etagOf, lemonDrizzle, snapshotOf } from '../test/fixtures';
 import type { OfflineCopy } from './copy';
 import { listFromCopy, matchesSearch, recipeFromCopy, servedFromCopy } from './read';
 
@@ -48,8 +48,13 @@ describe('listFromCopy', () => {
 });
 
 describe('recipeFromCopy', () => {
-    test('finds a recipe by id, with no ETag', () => {
-        expect(recipeFromCopy(copy, beefChili.id)).toEqual({ data: beefChili, etag: null, totalCount: null, fromCopy: true });
+    test('finds a recipe by id, with the ETag the snapshot gave it', () => {
+        expect(recipeFromCopy(copy, beefChili.id)).toEqual({
+            data: beefChili,
+            etag: etagOf(beefChili),
+            totalCount: null,
+            fromCopy: true,
+        });
     });
 
     test("returns null for a recipe the copy hasn't got", () => {

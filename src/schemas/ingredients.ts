@@ -6,6 +6,7 @@
  */
 
 import { z } from 'zod';
+import { LIMITS } from '../../shared/limits.js';
 
 /** POST and PATCH /api/ingredients. The name is stored trimmed and lowercase. */
 export const ingredientBodySchema = z.strictObject({
@@ -14,5 +15,5 @@ export const ingredientBodySchema = z.strictObject({
         .trim()
         .toLowerCase()
         .min(1, 'Must not be empty.')
-        .max(100, 'Must be at most 100 characters.'),
+        .max(LIMITS.ingredientName, `Must be at most ${LIMITS.ingredientName} characters.`),
 });

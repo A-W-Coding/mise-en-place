@@ -6,14 +6,17 @@
  * Where the page has the recipe's ETag (its own page, or the editor), the
  * delete sends it, so a recipe changed elsewhere since it was loaded isn't
  * deleted unseen: the dialog says so instead, and the recipe refreshes. A
- * recipe already deleted elsewhere counts as done.
+ * recipe already deleted elsewhere counts as done, and so does a new recipe
+ * that never left the device: its waiting change is dropped either way.
+ * Deleting needs a connection, and says so offline (3c).
  */
 
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { errorMessage } from '../api/errorMessage';
+import { onlineOnlyMessage } from '../api/errorMessage';
 import { useDeleteRecipe } from '../api/mutations';
 import { queryKeys } from '../api/queries';
+import { discardWaitingChange } from '../offline/waiting';
 import { ConfirmDialog } from './ConfirmDialog';
 
 interface DeleteRecipeDialogProps {
@@ -44,12 +47,13 @@ export function DeleteRecipeDialog({ recipe, etag, onClose, onDeleted }: DeleteR
                 onSuccess: onDeleted,
                 onError: (failure) => {
                     if (failure.status === 404) {
+                        void discardWaitingChange(recipe.id).catch(() => {});
                         onDeleted();
                     } else if (failure.status === 412) {
                         setError('This recipe changed on another device since it was loaded. Check the latest version first.');
                         void queryClient.invalidateQueries({ queryKey: queryKeys.recipe(recipe.id) });
                     } else {
-                        setError(errorMessage(failure));
+                        setError(onlineOnlyMessage(failure, 'Deleting a recipe'));
                     }
                 },
             },

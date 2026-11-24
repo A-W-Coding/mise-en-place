@@ -718,12 +718,15 @@ Offline clients keep a full copy of the data, refreshed from one snapshot endpoi
 {
   "recipes": [...],
   "ingredients": [...],
+  "etags": { "<recipe id>": "<ETag>" },
   "tags": [...],
   "equipment": [...]
 }
 ```
 
-Each recipe is as `GET /api/recipes/:id` returns it, and each shared list holds every row. 3c comes before 3b (D15), so until 3b the snapshot holds `recipes` and `ingredients`; `tags` and `equipment` join it with 3b.
+Each recipe is as `GET /api/recipes/:id` returns it, and each shared list holds every row. 3c comes before 3b (D15), so until 3b the snapshot holds `recipes`, `ingredients` and `etags`; `tags` and `equipment` join it with 3b.
+
+`etags` gives each recipe the ETag its own `GET` sends, so a device can edit a recipe from its copy with `If-Match` (D15). It sits beside the recipes rather than in them, so each recipe stays as its `GET` returns it, and the ETags stay opaque: the client never works one out from `updatedAt`. Added in Step 17.
 
 **Implementation:**
 - The response is deterministic. Every array is sorted (recipes and the shared lists by name, then id; everything inside a recipe by `orderIndex`), and the body holds no timestamp of its own, so the same data always gives the same bytes.

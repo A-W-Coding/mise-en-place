@@ -180,6 +180,24 @@ describe('the refresh schedule', () => {
         expect(times).toEqual([0, 15_000, 45_000, back, back + 15_000]);
     });
 
+    test('the connection coming back refreshes at once, even after the app started with none', async () => {
+        const { times } = syncRoute(() => unreachable());
+        Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false });
+        try {
+            startSync(new QueryClient());
+            await vi.advanceTimersByTimeAsync(5_000);
+
+            // The browser's own event, with no offline event before it
+            Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => true });
+            window.dispatchEvent(new Event('online'));
+            await vi.advanceTimersByTimeAsync(0);
+
+            expect(times).toEqual([0, 5_000]);
+        } finally {
+            delete (navigator as { onLine?: boolean }).onLine;
+        }
+    });
+
     test('the connection coming back refreshes at once', async () => {
         const { times } = syncRoute(() => unreachable());
         startSync(new QueryClient());

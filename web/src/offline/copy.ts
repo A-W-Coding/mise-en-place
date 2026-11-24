@@ -12,6 +12,9 @@
  *   confirming the copy doesn't rewrite the whole snapshot.
  * - It's read from storage once, then kept in memory as well. Components
  *   follow it with `useOfflineCopy()`.
+ * - When this device uploads a change (Step 17), the API's reply goes into
+ *   the copy straight away (`putRecipeInCopy()`), so a page never steps back
+ *   to the old version while the next snapshot loads.
  */
 
 import { useEffect, useSyncExternalStore } from 'react';
@@ -22,6 +25,8 @@ import { offlineStorage } from './storage';
 export interface Snapshot {
     recipes: Recipe[];
     ingredients: Ingredient[];
+    /** Each recipe's ETag, by id, for `If-Match` when it's edited from the copy. */
+    etags: Record<string, string>;
 }
 
 export interface OfflineCopy {
@@ -58,6 +63,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
  */
 export function isSnapshot(value: unknown): value is Snapshot {
     if (!isObject(value) || !Array.isArray(value.recipes) || !Array.isArray(value.ingredients)) return false;
+    if (!isObject(value.etags) || !Object.values(value.etags).every((etag) => typeof etag === 'string')) return false;
     const named = (item: unknown): item is Record<string, unknown> =>
         isObject(item) && typeof item.id === 'string' && typeof item.name === 'string';
     return (
@@ -115,6 +121,38 @@ export async function replaceOfflineCopy(data: Snapshot, etag: string | null, no
         [CHECKED_KEY, now],
     ]);
     update({ status: 'ready', copy: { ...stored, checkedAt: now } });
+}
+
+/** Put an item in a list kept in the API's order, by name then id, replacing any with the same id. */
+function placeByName<T extends { id: string; name: string }>(items: T[], item: T): T[] {
+    const others = items.filter((existing) => existing.id !== item.id);
+    const after = others.findIndex(
+        (existing) => existing.name.localeCompare(item.name) > 0 || (existing.name === item.name && existing.id > item.id),
+    );
+    return after === -1 ? [...others, item] : [...others.slice(0, after), item, ...others.slice(after)];
+}
+
+/**
+ * Put a recipe the API has just sent back into the copy, with its ETag and
+ * any ingredients the copy hasn't got yet. The copy keeps its snapshot ETag,
+ * so the next refresh still fetches the whole snapshot.
+ */
+export async function putRecipeInCopy(recipe: Recipe, etag: string | null): Promise<void> {
+    const copy = await loadOfflineCopy();
+    if (!copy) return;
+    let ingredients = copy.data.ingredients;
+    for (const line of recipe.recipeIngredients) {
+        if (!ingredients.some((ingredient) => ingredient.id === line.ingredient.id)) {
+            ingredients = placeByName(ingredients, line.ingredient);
+        }
+    }
+    const etags = { ...copy.data.etags };
+    if (etag) etags[recipe.id] = etag;
+    else delete etags[recipe.id];
+    const data: Snapshot = { recipes: placeByName(copy.data.recipes, recipe), ingredients, etags };
+    const stored: StoredSnapshot = { data, etag: copy.etag, fetchedAt: copy.fetchedAt };
+    await offlineStorage().setMany([[SNAPSHOT_KEY, stored]]);
+    update({ status: 'ready', copy: { ...copy, data } });
 }
 
 /** The API says the copy is still current (a 304). */

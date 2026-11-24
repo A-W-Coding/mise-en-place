@@ -11,6 +11,10 @@
  * than showing an error. Deleting from its ⋮ menu sends the ETag of the
  * version on screen.
  *
+ * A recipe with a change waiting on the device (3c) shows that version, with
+ * a notice saying when it was saved, or why it couldn't be uploaded. That
+ * holds for a new recipe the server hasn't seen yet, too.
+ *
  * The cooking mode switch keeps the screen on, and changes nothing else: the
  * whole recipe stays readable. It's off for each recipe you open, and leaving
  * the recipe turns it off. Printing shows only the name, ingredients and
@@ -22,6 +26,9 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'reac
 import { formatAmount } from '../../../shared/quantity';
 import { useRecipe } from '../api/queries';
 import type { Recipe } from '../api/types';
+import { recipeFromChange } from '../offline/upload';
+import { useWaitingChanges } from '../offline/waiting';
+import { WaitingNotice } from '../components/Waiting';
 import { CookingMode } from '../cooking/CookingMode';
 import { BackLink } from '../components/BackLink';
 import { DeleteRecipeDialog } from '../components/DeleteRecipeDialog';
@@ -40,12 +47,14 @@ export function RecipePage() {
     const backTo = (location.state as { from?: string } | null)?.from ?? '/';
     const navigate = useNavigate();
     const { data, error, isPending, refetch } = useRecipe(id);
-    const recipe = data?.data;
+    const change = useWaitingChanges().changes.find((candidate) => candidate.recipeId === id);
+    // The version waiting on the device is the newest this device knows
+    const recipe = change ? recipeFromChange(change, data?.data) : data?.data;
     const [deleting, setDeleting] = useState(false);
     // Cooking mode belongs to one recipe: opening another starts with it off
     const [cookingFor, setCookingFor] = useState<string | null>(null);
     const cooking = cookingFor === id;
-    const deleted = error?.status === 404;
+    const deleted = !change && error?.status === 404;
     useDocumentTitle(deleted ? null : (recipe?.name ?? null));
 
     // Print from a ⋮ menu arrives as ?print: print once the recipe is on screen
@@ -71,8 +80,9 @@ export function RecipePage() {
     return (
         <article className={styles.page}>
             <BackLink to={backTo}>Recipes</BackLink>
-            {error && <ErrorBanner error={error} onRetry={() => void refetch()} />}
-            {isPending && (
+            {change && <WaitingNotice change={change} />}
+            {error && !change && <ErrorBanner error={error} onRetry={() => void refetch()} />}
+            {isPending && !change && (
                 <p role="status" className={page.status}>
                     Loading recipe…
                 </p>
@@ -87,7 +97,7 @@ export function RecipePage() {
             )}
             <DeleteRecipeDialog
                 recipe={deleting && recipe ? recipe : null}
-                etag={data?.etag}
+                etag={change ? change.etag : data?.etag}
                 onClose={() => setDeleting(false)}
                 onDeleted={() => navigate('/', { replace: true })}
             />

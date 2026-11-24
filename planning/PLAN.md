@@ -3,8 +3,8 @@
 # Mise en place: hardening plan (Phase 1 to Phase 3c)
 
 > **Status**
-> - Current step: **Step 17: saving offline, and uploading**, ready to start once one question is settled: offline edits need each recipe's ETag, which the snapshot doesn't carry yet (see the Progress log for 2026-11-24). Step 16 is done (2026-11-24); its PR #19 failed in Firefox on the first run (the browser's HTTP cache, see the Progress log), fixed, with CI to be confirmed. Step 15 merged as PR #18, CI green. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
-> - Last updated: 2026-11-24 (Step 16: the offline copy)
+> - Current step: **Step 18: when an upload can't go through**, ready to start. Step 17 is done (2026-11-24), with CI to be confirmed when its PR opens. Step 16 merged as PR #19, CI green after a fix for Firefox's HTTP cache; Step 15 merged as PR #18. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
+> - Last updated: 2026-11-24 (Step 17: saving offline, and uploading)
 > - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
@@ -661,22 +661,23 @@ Phase 3c comes before 3b (D15). Each device keeps a full snapshot of the data (D
 
 **Why:** Step 14 showed the phone is often off the tailnet. Saving offline is the main thing D15 adds.
 
-- [ ] Every new recipe gets its id on the device (`crypto.randomUUID()`), online or off, so there's only one way to create a recipe
-- [ ] Save tries the Pi first. If it can't be reached (no answer, or a 502 or 504 from Tailscale), the change is kept in IndexedDB as a waiting change, and the editor closes as it does after any save
-- [ ] At most one waiting change per recipe: editing a recipe that has one edits that version, and keeps the ETag it started from. Waiting changes survive a reload and the app being closed
-- [ ] Waiting changes show at once, marked "Waiting to upload": a new recipe in the list, and an edit on its recipe page, with when it was saved. Options › Offline copy counts them
-- [ ] Offline, the ingredient picker suggests names from the offline copy. A name that isn't there becomes a new ingredient, created when the change uploads; if that gets a 409, the existing ingredient is used
-- [ ] The editor checks what the API would refuse before saving (a missing name, lengths, amounts, number ranges), so a change saved offline is rarely refused later. Limits the API and the editor share move into `shared/`
-- [ ] Offline, deleting a recipe and renaming or deleting an ingredient say they need a connection
-- [ ] Uploading:
+- [x] `GET /api/sync` gives each recipe's ETag (`etags`, by id), so an edit started from the offline copy keeps the ETag it started from. Added 2026-11-24, as agreed after Step 16: the API's ETags are opaque, so the client can't work one out from `updatedAt`
+- [x] Every new recipe gets its id on the device (`crypto.randomUUID()`), online or off, so there's only one way to create a recipe
+- [x] Save tries the Pi first. If it can't be reached (no answer, or a 502 or 504 from Tailscale), the change is kept in IndexedDB as a waiting change, and the editor closes as it does after any save
+- [x] At most one waiting change per recipe: editing a recipe that has one edits that version, and keeps the ETag it started from. Waiting changes survive a reload and the app being closed
+- [x] Waiting changes show at once, marked "Waiting to upload": a new recipe in the list, and an edit on its recipe page, with when it was saved. Options › Offline copy counts them
+- [x] Offline, the ingredient picker suggests names from the offline copy. A name that isn't there becomes a new ingredient, created when the change uploads; if that gets a 409, the existing ingredient is used
+- [x] The editor checks what the API would refuse before saving (a missing name, lengths, amounts, number ranges), so a change saved offline is rarely refused later. Limits the API and the editor share move into `shared/`
+- [x] Offline, deleting a recipe and renaming or deleting an ingredient say they need a connection
+- [x] Uploading:
   - at the same moments as the snapshot refresh, and on its retry schedule, before the snapshot is fetched
   - oldest first: new ingredients, then a `POST` with the id for a new recipe, or a `PATCH` with `If-Match` for an edit
   - each success replaces the recipe in the offline copy with the API's reply, so the page never steps back to the old version
   - a 409 on a create counts as uploaded: an earlier attempt arrived but its answer was lost
   - if the Pi can't be reached, the round stops and tries again later
-- [ ] A 412, 404 or 400 marks the change "Needs your attention" and keeps it on the device, with a banner. Step 18 adds the choices
-- [ ] Unit tests for the waiting changes and the uploader: one per recipe, the order, the 409, stopping when the Pi can't be reached, and nothing lost on a reload
-- [ ] Playwright:
+- [x] A 412, 404 or 400 marks the change "Needs your attention" and keeps it on the device, with a banner. Step 18 adds the choices
+- [x] Unit tests for the waiting changes and the uploader: one per recipe, the order, the 409, stopping when the Pi can't be reached, and nothing lost on a reload
+- [x] Playwright:
   - offline, create a recipe with a new ingredient and edit another. Reload while still offline, and find both, marked as waiting. Come back online, and see both reach a second context without a tap
   - let a create reach the API but lose its answer, and check the retry doesn't make a second copy
 
@@ -1415,3 +1416,32 @@ Phase 3c comes before 3b (D15). Each device keeps a full snapshot of the data (D
   - **Docs:** the README's structure. `docs/architecture.md` still says recipes come from the API until 3c; Step 19 updates it, as planned.
 
   Next: Step 17, saving offline, once the snapshot's ETags are settled.
+- **2026-11-24:** Step 16 merged (PR #19, CI green on its second run, after the HTTP cache fix). The snapshot's ETags were agreed: `/api/sync` gives them. Step 17 done.
+  - **The snapshot's ETags:** `GET /api/sync` adds `etags: { "<recipe id>": "<ETag>" }` beside the recipes, so each recipe stays exactly as its GET returns it and the ETags stay opaque. An edit from the offline copy sends `If-Match` like one from the API. The API's test checks each against the recipe's own GET, and that an edit made with one goes through.
+  - **Shared limits** (`shared/limits.ts`): the API's schemas and the editor read the same lengths and ranges.
+    - New maxima: servings up to 1000, prep and cook times up to 99999 minutes (about 69 days). Beyond Postgres's 32-bit integers the API answered 500, which an upload would retry forever, holding up every change behind it. It's now a 400, before anything is written.
+    - The editor checks them all before saving, and a new ingredient's name (100 characters).
+  - **Saving** (`api/mutations.ts`, `offline/upload.ts`):
+    - A new recipe's id is made on the device (`crypto.randomUUID()`), online or off.
+    - Save tries the Pi first. With no answer (or Tailscale's 502 or 504), the change is kept as a waiting change, and the editor closes as after any save. A save that gets through drops any older waiting version.
+  - **Waiting changes** (`offline/waiting.ts`): one per recipe, in IndexedDB beside the copy, oldest first. Saving one again keeps its place in the queue; the editor opens it with its own kind and ETag. The list in memory changes only once it's stored. A version whose upload got no answer is remembered (`sent`).
+  - **Uploading:** each round, before the snapshot is fetched.
+    - New ingredients first, by name; a 409 means it exists, and that one is used. Then a POST with the id, or a PATCH with `If-Match`. Each reply goes into the offline copy at once (`putRecipeInCopy()`).
+    - A Pi out of reach, or a 5xx, stops the round. A 412, 404 or 400 marks the change, which then waits for you (Step 18).
+  - **A lost answer:** when a retry hears 409 (a create) or 412 (an edit), the recipe is read back and compared.
+    - It's this version: it arrived, and counts as uploaded.
+    - It's a version sent before from this device: that arrived, and the newer one is saved over it, with the ETag just read.
+    - Anything else changed it elsewhere: a 412, and it isn't saved over.
+    - So a dropped connection never creates a recipe twice, and a retry never overwrites someone else's change. If a change uploads while it's being saved again, the newer version stays waiting, as an edit of the one that uploaded.
+  - **What shows:** a "Waiting to upload" list above the recipes, searched on the device; an edited recipe's row with its new name and a tag; a notice on the recipe's page with when it was saved, or why it couldn't upload; a banner on every page while a change needs your attention. Options counts them, and says they'd go with an unprotected copy.
+  - **The editor offline:** a recipe opens from the copy, with its ETag. The ingredient picker suggests from the copy, and a name that isn't there is picked as new, to be created when the recipe uploads.
+  - **Still online only:** deleting a recipe, and renaming or deleting an ingredient, say they need a connection. Deleting a recipe drops its waiting change; a new one that never left the device counts as deleted (404).
+  - **Fixed on the way:** TanStack Query assumes it starts online and only hears of changes. An app opened with no network never noticed the network coming back, so nothing uploaded until the next retry, up to 5 minutes later. `startSync()` now tells it `navigator.onLine`. Playwright found it; a unit test fails without the fix.
+  - **Tests:**
+    - The API has 426, 6 of them new: the snapshot's ETags, and the limits (400, not 500).
+    - The client has 216, 33 of them new, with `test/fakeServer.ts`, an in-memory API that honours `If-Match` and can drop an answer. `waiting.test.ts`; `upload.test.ts` (the order, new ingredients and their 409, a lost answer on a create and on an edit, a create edited after its lost answer, 412, 404 and 400, stopping when the Pi can't be reached or answers 500); `OfflineEditing.test.tsx`; and updates for the new body and limits.
+    - Playwright: `offline-editing.spec.ts`, two tests. Offline, a new recipe with a new ingredient and an edit to another, a fresh start, then back online with no tap; and a create whose answer is lost, with no second copy. Chromium: all 48 pass. Firefox runs in CI.
+  - Checked in the Browser pane: the recipe's notice and the list's waiting section at phone width, with the API stopped. That throwaway change was deleted from the pane's storage before the API came back, so it never uploaded.
+  - **Docs:** `docs/api.md` (the limits, the snapshot's `etags`), and the README.
+
+  Next: Step 18, when an upload can't go through.

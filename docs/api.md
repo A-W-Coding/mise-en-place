@@ -65,8 +65,8 @@ The mise-en-place API as of Phase 1, plus Phase 3a's JSON 404s and recipe ETags,
 | `id` | string (UUID) | |
 | `name` | string | 1–200 characters, stored trimmed |
 | `description` | string or null | |
-| `servings` | integer | At least 1. Defaults to 1 |
-| `prepTime`, `cookTime` | integer or null | Minutes, 0 or more |
+| `servings` | integer | 1 to 1000. Defaults to 1 |
+| `prepTime`, `cookTime` | integer or null | Minutes, 0 to 99999 |
 | `instructions` | string or null | Plain text |
 | `createdAt` | timestamp | |
 | `updatedAt` | timestamp | Changes on every PATCH, including one that only changes the lines |
@@ -169,8 +169,8 @@ Creates a recipe and its lines in one write.
 | `name` | yes | String, 1–200 characters after trimming |
 | `id` | no | A UUID chosen by the client, stored in lowercase. Absent: the server makes one |
 | `description` | no | String or null |
-| `servings` | no | Integer, at least 1. Default 1. Not null |
-| `prepTime`, `cookTime` | no | Integer, 0 or more, or null |
+| `servings` | no | Integer, 1 to 1000. Default 1. Not null |
+| `prepTime`, `cookTime` | no | Integer, 0 to 99999 (about 69 days), or null |
 | `instructions` | no | String or null |
 | `ingredients` | no | Array of lines, in recipe order. Default: none |
 
@@ -303,12 +303,14 @@ Everything a device needs to work offline, in one response (Phase 3c). The web c
 ```json
 {
   "recipes": [ … ],
-  "ingredients": [ … ]
+  "ingredients": [ … ],
+  "etags": { "0b9e6a52-…": "\"1763836800123\"", … }
 }
 ```
 
 - `recipes`: every [Recipe](#recipe), exactly as `GET /api/recipes/:id` returns it, lines included, sorted by name, then id.
 - `ingredients`: every [Ingredient](#ingredient), sorted by name, then id.
+- `etags`: each recipe's id, with the [ETag](#etags-and-if-match) its own `GET` sends. A device that edits a recipe from its copy sends that ETag in `If-Match`, so a change made elsewhere meanwhile gets a 412 rather than being overwritten. They're opaque here too.
 
 Phase 3b adds `tags` and `equipment`. A deleted recipe is simply missing from the next snapshot.
 

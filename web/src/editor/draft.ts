@@ -4,16 +4,24 @@
  * are tested without rendering anything.
  *
  * A draft holds what's typed, as strings. `buildRecipeBody()` turns it into
- * the API's body, checking it first, and `mapServerErrors()` puts a 400's
- * `fields` back next to the inputs they belong to.
+ * what's saved, checking it first against the limits the API shares
+ * (`shared/limits.ts`), so a change saved offline is rarely refused when it
+ * uploads (3c). `mapServerErrors()` puts a 400's `fields` back next to the
+ * inputs they belong to.
+ *
+ * What's saved names each line's ingredient as well as its id, because an
+ * ingredient picked offline may not exist yet: its id is null until the
+ * recipe is sent, when it's created by name. `apiBody()` then gives the
+ * API's own body, with ids only.
  */
 
+import { LIMITS } from '../../../shared/limits';
 import { formatAmount, parseAmount } from '../../../shared/quantity';
 import type { Recipe } from '../api/types';
 
-/** An ingredient picked for a line. */
+/** An ingredient picked for a line. A null id is a new one, created by name when the recipe is sent (3c). */
 export interface PickedIngredient {
-    id: string;
+    id: string | null;
     name: string;
 }
 
@@ -68,28 +76,44 @@ export function newDraft(): RecipeDraft {
     return { name: '', description: '', servings: '1', prepTime: '', cookTime: '', instructions: '', lines: [newLine()] };
 }
 
-/** An existing recipe, ready to edit. Amounts are shown as the recipe page shows them. */
+/** A saved line, ready to edit. The amount is shown as the recipe page shows it. */
+function lineDraft(key: string, line: LineBody): LineDraft {
+    const amount = formatAmount(line.quantity, line.quantityMax, line.unit);
+    return {
+        key,
+        amount,
+        ingredient: { id: line.ingredientId, name: line.ingredientName },
+        ingredientText: line.ingredientName,
+        note: line.note ?? '',
+        showNote: line.note !== null && line.note !== '',
+        saved: { amount, quantity: line.quantity, quantityMax: line.quantityMax, unit: line.unit },
+    };
+}
+
+function fieldsDraft(saved: Omit<DraftBody, 'ingredients'>): Omit<RecipeDraft, 'lines'> {
+    return {
+        name: saved.name,
+        description: saved.description ?? '',
+        servings: String(saved.servings),
+        prepTime: saved.prepTime === null ? '' : String(saved.prepTime),
+        cookTime: saved.cookTime === null ? '' : String(saved.cookTime),
+        instructions: saved.instructions ?? '',
+    };
+}
+
+/** An existing recipe, ready to edit. */
 export function draftFromRecipe(recipe: Recipe): RecipeDraft {
     return {
-        name: recipe.name,
-        description: recipe.description ?? '',
-        servings: String(recipe.servings),
-        prepTime: recipe.prepTime === null ? '' : String(recipe.prepTime),
-        cookTime: recipe.cookTime === null ? '' : String(recipe.cookTime),
-        instructions: recipe.instructions ?? '',
-        lines: recipe.recipeIngredients.map((line) => {
-            const amount = formatAmount(line.quantity, line.quantityMax, line.unit);
-            return {
-                key: line.id,
-                amount,
-                ingredient: { id: line.ingredient.id, name: line.ingredient.name },
-                ingredientText: line.ingredient.name,
-                note: line.note ?? '',
-                showNote: line.note !== null && line.note !== '',
-                saved: { amount, quantity: line.quantity, quantityMax: line.quantityMax, unit: line.unit },
-            };
-        }),
+        ...fieldsDraft(recipe),
+        lines: recipe.recipeIngredients.map((line) =>
+            lineDraft(line.id, { ...line, ingredientId: line.ingredient.id, ingredientName: line.ingredient.name }),
+        ),
     };
+}
+
+/** A version saved on the device and not yet uploaded, ready to edit again (3c). */
+export function draftFromBody(body: DraftBody): RecipeDraft {
+    return { ...fieldsDraft(body), lines: body.ingredients.map((line, index) => lineDraft(`saved-${index}`, line)) };
 }
 
 /** True when the draft differs from where it started, ignoring which box wants focus. */
@@ -155,14 +179,29 @@ export function draftReducer(draft: RecipeDraft, action: DraftAction): RecipeDra
 
 // ── Saving ─────────────────────────────────────────────────────────────────
 
-/** The body for `POST /api/recipes` or `PATCH /api/recipes/:id`. */
-export interface RecipeBody {
+/** One line as it's saved: its ingredient by id, or a new one by name alone (a null id). */
+export interface LineBody {
+    ingredientId: string | null;
+    ingredientName: string;
+    quantity: number | null;
+    quantityMax: number | null;
+    unit: string | null;
+    note: string | null;
+}
+
+/** A recipe as the editor saves it, online or kept on the device. */
+export interface DraftBody {
     name: string;
     description: string | null;
     servings: number;
     prepTime: number | null;
     cookTime: number | null;
     instructions: string | null;
+    ingredients: LineBody[];
+}
+
+/** The body for `POST /api/recipes` or `PATCH /api/recipes/:id`: every ingredient by id. */
+export interface RecipeBody extends Omit<DraftBody, 'ingredients'> {
     ingredients: {
         ingredientId: string;
         quantity: number | null;
@@ -172,8 +211,23 @@ export interface RecipeBody {
     }[];
 }
 
+/**
+ * The API's body, once every ingredient has an id.
+ *
+ * @param idOf - The id of a new ingredient, by name, once it's been created.
+ */
+export function apiBody(body: DraftBody, idOf: (name: string) => string): RecipeBody {
+    return {
+        ...body,
+        ingredients: body.ingredients.map(({ ingredientId, ingredientName, ...line }) => ({
+            ingredientId: ingredientId ?? idOf(ingredientName),
+            ...line,
+        })),
+    };
+}
+
 export type BuildResult =
-    | { body: RecipeBody; lineKeys: string[] }
+    | { body: DraftBody; lineKeys: string[] }
     | { errors: DraftErrors };
 
 const WHOLE_NUMBER = /^\d+$/;
@@ -203,21 +257,26 @@ export function buildRecipeBody(draft: RecipeDraft): BuildResult {
 
     const name = draft.name.trim();
     if (name === '') errors.name = 'Give the recipe a name.';
-    else if (name.length > 200) errors.name = 'Keep the name to 200 characters or fewer.';
+    else if (name.length > LIMITS.recipeName) errors.name = `Keep the name to ${LIMITS.recipeName} characters or fewer.`;
 
     const servings = draft.servings.trim();
-    if (!WHOLE_NUMBER.test(servings) || Number(servings) < 1) errors.servings = 'A whole number, 1 or more.';
+    const { min, max } = LIMITS.servings;
+    if (!WHOLE_NUMBER.test(servings) || Number(servings) < min || Number(servings) > max) {
+        errors.servings = `A whole number from ${min} to ${max}.`;
+    }
 
     const minutes = (field: 'prepTime' | 'cookTime'): number | null => {
         const value = draft[field].trim();
         if (value === '') return null;
-        if (!WHOLE_NUMBER.test(value)) errors[field] = 'Whole minutes, or leave it empty.';
+        if (!WHOLE_NUMBER.test(value) || Number(value) > LIMITS.minutes.max) {
+            errors[field] = `Whole minutes, up to ${LIMITS.minutes.max}, or leave it empty.`;
+        }
         return Number(value);
     };
     const prepTime = minutes('prepTime');
     const cookTime = minutes('cookTime');
 
-    const ingredients: RecipeBody['ingredients'] = [];
+    const ingredients: LineBody[] = [];
     const lineKeys: string[] = [];
     for (const line of draft.lines) {
         if (isBlank(line)) continue;
@@ -229,15 +288,18 @@ export function buildRecipeBody(draft: RecipeDraft): BuildResult {
         if (!line.ingredient) {
             errors[lineErrorKey(line.key, 'ingredient')] =
                 typed === '' ? 'Choose an ingredient.' : `Choose “${typed}” from the list, or create it.`;
+        } else if (line.ingredient.name.length > LIMITS.ingredientName) {
+            errors[lineErrorKey(line.key, 'ingredient')] =
+                `Keep the ingredient's name to ${LIMITS.ingredientName} characters or fewer.`;
         }
 
         const note = optionalText(line.note);
-        if (note !== null && note.length > 200) {
-            errors[lineErrorKey(line.key, 'note')] = 'Keep the note to 200 characters or fewer.';
+        if (note !== null && note.length > LIMITS.note) {
+            errors[lineErrorKey(line.key, 'note')] = `Keep the note to ${LIMITS.note} characters or fewer.`;
         }
 
         if (!('error' in amount) && line.ingredient) {
-            ingredients.push({ ingredientId: line.ingredient.id, ...amount, note });
+            ingredients.push({ ingredientId: line.ingredient.id, ingredientName: line.ingredient.name, ...amount, note });
             lineKeys.push(line.key);
         }
     }

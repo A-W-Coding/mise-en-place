@@ -11,10 +11,13 @@
  *   recipe changed elsewhere since, the API answers 412 and a dialog offers
  *   to reload it (F3).
  * - Leaving with unsaved changes asks first, and so does closing the tab.
- * - A recipe from the offline copy isn't edited: it has no ETag, so its save
- *   couldn't be checked against a change made elsewhere. With no connection,
- *   the editor says it can't reach the server. Step 17 makes offline edits
- *   wait on the device instead.
+ * - Offline (3c, D15): a recipe opens from the offline copy, with the ETag
+ *   the snapshot gave it. Save tries the Pi first, and if it can't be
+ *   reached, keeps the change on the device to upload by itself later; the
+ *   editor closes as after any save. A recipe with a change waiting opens
+ *   that version, with the ETag it started from.
+ * - A new recipe's id is made here, on the device, online or off, so there's
+ *   one way to create a recipe and a retried upload can't create it twice.
  */
 
 import { useEffect, useReducer, useRef, useState, type FormEvent, type ReactNode } from 'react';
@@ -22,7 +25,9 @@ import { Link, useBlocker, useLocation, useNavigate, useParams } from 'react-rou
 import { errorMessage } from '../api/errorMessage';
 import { useSaveRecipe } from '../api/mutations';
 import { useRecipe } from '../api/queries';
-import { ApiError, NETWORK_ERROR_MESSAGE } from '../api/client';
+import type { ApiError } from '../api/client';
+import { getOfflineCopyState } from '../offline/copy';
+import { useWaitingChanges, waitingChangeFor } from '../offline/waiting';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DeleteRecipeDialog } from '../components/DeleteRecipeDialog';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -30,6 +35,7 @@ import { PlusIcon } from '../components/Icons';
 import { useDocumentTitle } from '../components/useDocumentTitle';
 import {
     buildRecipeBody,
+    draftFromBody,
     draftFromRecipe,
     draftReducer,
     isDirty,
@@ -47,28 +53,54 @@ import styles from '../editor/Editor.module.css';
 
 export function RecipeEditorPage() {
     const { id } = useParams();
-    return id ? <EditRecipe key={id} id={id} /> : <RecipeEditor initial={newDraft()} />;
+    return id ? <EditRecipe key={id} id={id} /> : <NewRecipe />;
 }
 
-/** Load the recipe, then edit the version that arrived. */
+/** What the form opened: fixed for its life, so later refreshes don't touch it. */
+interface EditorStart {
+    draft: RecipeDraft;
+    kind: 'create' | 'edit';
+    /** The ETag of the version opened, sent as `If-Match`. */
+    etag: string | null;
+    /** A version waiting on the device, rather than one from the server or the copy. */
+    fromWaiting: boolean;
+}
+
+function NewRecipe() {
+    const [start] = useState<EditorStart>(() => ({ draft: newDraft(), kind: 'create', etag: null, fromWaiting: false }));
+    // Made on the device, online or off (see the module comment)
+    const [id] = useState(() => crypto.randomUUID());
+    return <RecipeEditor recipeId={id} start={start} />;
+}
+
+/** Load the recipe, then edit the version that arrived: a change waiting on the device, or the latest one. */
 function EditRecipe({ id }: { id: string }) {
     const recipe = useRecipe(id);
+    const waiting = useWaitingChanges();
+    const [start, setStart] = useState<EditorStart | null>(null);
     // Bumped by "Reload recipe", which starts the form again from the latest version
     const [version, setVersion] = useState(0);
 
-    // Only the API's version can be edited, never the offline copy's (see the module comment)
-    const loaded = recipe.data && !recipe.data.fromCopy ? recipe.data : undefined;
+    // A recipe from the copy needs its ETag to be edited; one from the API always has it
+    const loaded = recipe.data && !(recipe.data.fromCopy && recipe.data.etag === null) ? recipe.data : undefined;
+    if (start === null && waiting.status === 'ready') {
+        const change = waiting.changes.find((candidate) => candidate.recipeId === id);
+        if (change) {
+            setStart({ draft: draftFromBody(change.body), kind: change.kind, etag: change.etag, fromWaiting: true });
+        } else if (loaded) {
+            setStart({ draft: draftFromRecipe(loaded.data), kind: 'edit', etag: loaded.etag, fromWaiting: false });
+        }
+    }
 
-    // Once the form has the recipe, later refreshes don't touch it: it edits the version it opened
-    if (loaded) {
+    if (start) {
         return (
             <RecipeEditor
                 key={version}
                 recipeId={id}
-                initial={draftFromRecipe(loaded.data)}
-                etag={loaded.etag}
+                start={start}
                 onReload={async () => {
-                    await recipe.refetch();
+                    const { data } = await recipe.refetch();
+                    if (data) setStart({ draft: draftFromRecipe(data.data), kind: 'edit', etag: data.etag, fromWaiting: false });
                     setVersion((value) => value + 1);
                 }}
             />
@@ -86,15 +118,11 @@ function EditRecipe({ id }: { id: string }) {
         );
     }
 
-    // The copy answered because the API didn't
-    const unreachable = recipe.data && !recipe.isFetching ? new ApiError(0, NETWORK_ERROR_MESSAGE) : null;
-    const error = recipe.error ?? unreachable;
-
     return (
         <div className={styles.page}>
             <h1 className={styles.heading}>Edit recipe</h1>
-            {error ? (
-                <ErrorBanner error={error} onRetry={() => void recipe.refetch()} />
+            {recipe.error ? (
+                <ErrorBanner error={recipe.error} onRetry={() => void recipe.refetch()} />
             ) : (
                 <p role="status" className={page.status}>
                     Loading recipe…
@@ -105,22 +133,21 @@ function EditRecipe({ id }: { id: string }) {
 }
 
 interface RecipeEditorProps {
-    /** Absent for a new recipe. */
-    recipeId?: string;
-    initial: RecipeDraft;
-    etag?: string | null;
+    recipeId: string;
+    start: EditorStart;
     onReload?: () => Promise<void>;
 }
 
-function RecipeEditor({ recipeId, initial: initialDraft, etag: initialEtag, onReload }: RecipeEditorProps) {
-    const editing = recipeId !== undefined;
+function RecipeEditor({ recipeId, start, onReload }: RecipeEditorProps) {
+    // A brand-new form; a new recipe waiting on the device is already a recipe to edit
+    const editing = start.kind === 'edit' || start.fromWaiting;
     const navigate = useNavigate();
     const location = useLocation();
 
     // What the form started from, and the version it's editing: fixed for this form's life
-    const [initial] = useState(initialDraft);
-    const [etag] = useState(initialEtag ?? null);
-    const [draft, dispatch] = useReducer(draftReducer, initialDraft);
+    const [initial] = useState(start.draft);
+    const etag = start.etag;
+    const [draft, dispatch] = useReducer(draftReducer, start.draft);
     const [errors, setErrors] = useState<DraftErrors>({});
     const [open, setOpen] = useState({ ingredients: true, method: true });
     const [conflict, setConflict] = useState(false);
@@ -192,10 +219,21 @@ function RecipeEditor({ recipeId, initial: initialDraft, etag: initialEtag, onRe
             return;
         }
         setErrors({});
+        let { kind } = start;
+        let sendEtag = etag;
+        if (start.fromWaiting && !waitingChangeFor(recipeId)) {
+            // It uploaded while the form was open: this saves over the version it became
+            const uploaded = getOfflineCopyState().copy?.data.etags[recipeId];
+            if (uploaded) {
+                kind = 'edit';
+                sendEtag = uploaded;
+            }
+        }
+        // Uploaded or kept on the device, the editor closes the same way
         save.mutate(
-            { id: recipeId, body: result.body, etag },
+            { recipeId, kind, body: result.body, etag: sendEtag },
             {
-                onSuccess: (saved) => leaveTo(`/recipes/${saved.data.id}`),
+                onSuccess: () => leaveTo(`/recipes/${recipeId}`),
                 onError: (failure) => saveFailed(failure, result.lineKeys),
             },
         );

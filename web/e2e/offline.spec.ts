@@ -6,13 +6,9 @@
  * seed: Beef Chili and its ingredients.
  */
 
-import type { APIRequestContext, Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-
-async function addRecipe(request: APIRequestContext, name: string) {
-    const response = await request.post('/api/recipes', { data: { name } });
-    expect(response.status()).toBe(201);
-}
+import { addRecipe, offlineBanner as banner, openAndSaveCopy } from './helpers';
 
 /** A stand-in wake lock: a headless browser may refuse the real one. */
 async function standInWakeLock(page: Page) {
@@ -30,18 +26,6 @@ async function standInWakeLock(page: Page) {
         });
     });
 }
-
-/** Open the app and wait until it can start offline: the service worker controls it, and the copy is stored. */
-async function openAndSaveCopy(page: Page, recipes: string) {
-    await page.goto('/options');
-    await page.evaluate(async () => {
-        await navigator.serviceWorker.ready;
-    });
-    await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null)).toBe(true);
-    await expect(page.getByRole('region', { name: 'Offline copy' })).toContainText(`${recipes} on this device`);
-}
-
-const banner = (page: Page) => page.getByRole('status').filter({ hasText: 'Showing the copy saved on this device' });
 
 /** Search the list, open Beef Chili, and turn on cooking mode. */
 async function searchAndCook(page: Page) {

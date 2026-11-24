@@ -13,10 +13,11 @@
  *   still be out of reach, with Tailscale off, say. Nothing retries while
  *   the app is hidden; coming back to it is a refresh moment of its own,
  *   and each moment starts the schedule afresh.
- * - **Afterwards:** once a refresh succeeds, any page showing the copy
- *   fetches again from the API.
- *
- * Step 17 uploads changes waiting on the device at the start of each round.
+ * - **Uploads first:** each round uploads the changes waiting on the device
+ *   (Step 17, `upload.ts`), then fetches the snapshot, so the snapshot
+ *   already holds them. If the Pi can't be reached, the round stops there.
+ * - **Afterwards:** once a round succeeds, any page showing the copy fetches
+ *   again from the API.
  */
 
 import { focusManager, onlineManager, type QueryClient } from '@tanstack/react-query';
@@ -24,6 +25,7 @@ import { useSyncExternalStore } from 'react';
 import { ApiError, NETWORK_ERROR_MESSAGE, apiRequestIfChanged } from '../api/client';
 import { confirmOfflineCopy, isSnapshot, loadOfflineCopy, replaceOfflineCopy } from './copy';
 import { servedFromCopy } from './read';
+import { uploadWaitingChanges } from './upload';
 
 export const FIRST_RETRY_MS = 15_000;
 export const MAX_RETRY_MS = 5 * 60_000;
@@ -102,6 +104,7 @@ function attempt(): Promise<void> {
     setStatus({ refreshing: true });
     const run = (async () => {
         try {
+            await uploadWaitingChanges(owner);
             await refreshOfflineCopy();
             if (client !== owner) return;
             failures = 0;
@@ -160,6 +163,10 @@ export function noteUnreachable(): void {
 export function startSync(queryClient: QueryClient): () => void {
     stopSync();
     client = queryClient;
+    // TanStack Query assumes it starts online, and only hears of a change. An app
+    // started with no network would then never notice the network coming back:
+    // nothing would upload until the next retry, up to 5 minutes later
+    onlineManager.setOnline(navigator.onLine);
     unsubscribe = [
         focusManager.subscribe((focused) => (focused ? requestSync() : cancelRetry())),
         onlineManager.subscribe((online) => {

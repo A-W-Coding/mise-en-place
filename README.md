@@ -109,7 +109,7 @@ Run tests with `npm test`, which sets up the environment Jest needs. It:
 3. runs the test files one at a time, because they share one database
 4. resets the database to the sample data before each test, and empties it after
 
-There are 420 tests in [`tests/`](tests): integration tests that send real requests to the API with Supertest, and unit tests for the request schemas, the units list, the quantity formatting and the helpers. `npm test -- --coverage` prints a coverage table and writes an HTML report to `coverage/lcov-report/index.html`.
+There are 426 tests in [`tests/`](tests): integration tests that send real requests to the API with Supertest, and unit tests for the request schemas, the units list, the quantity formatting and the helpers. `npm test -- --coverage` prints a coverage table and writes an HTML report to `coverage/lcov-report/index.html`.
 
 The tests don't type-check (ts-jest only transpiles), so run `npx tsc --noEmit` as well.
 
@@ -145,7 +145,7 @@ GitHub Actions runs on every pull request into `main` and every push to `main`, 
 | POST | `/api/ingredients` | Create an ingredient. 409 if the name exists |
 | PATCH | `/api/ingredients/:id` | Rename an ingredient. 409 if the name exists |
 | DELETE | `/api/ingredients/:id` | Delete an ingredient. 409 while a recipe uses it |
-| GET | `/api/sync` | Every recipe and ingredient, for the offline copy. 304 when `If-None-Match` names the current `ETag` |
+| GET | `/api/sync` | Every recipe and ingredient, with each recipe's ETag, for the offline copy. 304 when `If-None-Match` names the current `ETag` |
 
 Lists return a JSON array, with the total across all pages in the `X-Total-Count` header. [`docs/api.md`](docs/api.md) has every parameter, body, response and error.
 
@@ -174,6 +174,7 @@ src/
 shared/                  Code the API and the web client share
   units.ts               The canonical unit list and canonicaliseUnit()
   quantity.ts            Shows and reads amounts as fractions (1½, 2–3)
+  limits.ts              Lengths and number ranges the API accepts, which the editor checks too
 web/                     The web client: Vite, React and TypeScript, with its own package.json
   src/                   Pages, components, the API module, the offline copy and the theme
   e2e/                   Playwright end-to-end tests

@@ -5,12 +5,13 @@
  *
  * Every recipe draws from this one list, so a rename shows in every recipe
  * using it. The API refuses a name that's taken (409) and a delete while a
- * recipe still uses the ingredient (409), and the page says which.
+ * recipe still uses the ingredient (409), and the page says which. Both need
+ * a connection, and say so offline (3c).
  */
 
 import { useState, type FormEvent } from 'react';
 import type { ApiError } from '../api/client';
-import { errorMessage } from '../api/errorMessage';
+import { onlineOnlyMessage } from '../api/errorMessage';
 import { useDeleteIngredient, useRenameIngredient } from '../api/mutations';
 import { useIngredientList } from '../api/queries';
 import type { Ingredient } from '../api/types';
@@ -63,7 +64,7 @@ export function IngredientsPage() {
                     closeDelete();
                     void list.refetch();
                 } else {
-                    setDeleteError(errorMessage(failure));
+                    setDeleteError(onlineOnlyMessage(failure, 'Deleting an ingredient'));
                 }
             },
         });
@@ -173,7 +174,7 @@ export function IngredientsPage() {
 /** The message for a refused rename: a taken name gets a clearer one than the API's. */
 function renameError(failure: ApiError, name: string): string {
     if (failure.status === 409) return `Another ingredient is already called “${name}”.`;
-    return failure.fields.name ?? errorMessage(failure);
+    return failure.fields.name ?? onlineOnlyMessage(failure, 'Renaming an ingredient');
 }
 
 /** A row turned into a small form: the new name, Cancel and Save. Escape cancels. */

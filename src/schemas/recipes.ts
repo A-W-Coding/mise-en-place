@@ -7,9 +7,13 @@
  * new recipe's `id`, which the client may choose (3c, D15); nothing can
  * change an existing one. Parsing also normalises: names are trimmed and
  * units become canonical symbols.
+ *
+ * Lengths and number ranges come from `shared/limits.ts`, which the web
+ * client's editor checks too.
  */
 
 import { z } from 'zod';
+import { LIMITS } from '../../shared/limits.js';
 import { canonicaliseUnit, UNIT_SYMBOLS } from '../../shared/units.js';
 
 /** Message for a missing required field vs. one of the wrong type. */
@@ -20,19 +24,21 @@ const recipeName = z
     .string({ error: requiredOr('Must be a string.') })
     .trim()
     .min(1, 'Must not be empty.')
-    .max(200, 'Must be at most 200 characters.');
+    .max(LIMITS.recipeName, `Must be at most ${LIMITS.recipeName} characters.`);
 
 const text = z.string({ error: 'Must be a string or null.' }).nullable();
 
 const servings = z
     .number({ error: 'Must be a number.' })
     .int('Must be a whole number.')
-    .min(1, 'Must be at least 1.');
+    .min(LIMITS.servings.min, `Must be at least ${LIMITS.servings.min}.`)
+    .max(LIMITS.servings.max, `Must be at most ${LIMITS.servings.max}.`);
 
 const minutes = z
     .number({ error: 'Must be a number or null.' })
     .int('Must be a whole number.')
-    .min(0, 'Must be 0 or more.')
+    .min(LIMITS.minutes.min, `Must be ${LIMITS.minutes.min} or more.`)
+    .max(LIMITS.minutes.max, `Must be at most ${LIMITS.minutes.max}.`)
     .nullable();
 
 /** A unit as typed, converted to its canonical symbol; null means a count. */
@@ -62,7 +68,11 @@ export const ingredientLineSchema = z
         quantity: z.number({ error: 'Must be a number or null.' }).positive('Must be greater than 0.').nullable().optional(),
         quantityMax: z.number({ error: 'Must be a number or null.' }).nullable().optional(),
         unit,
-        note: z.string({ error: 'Must be a string or null.' }).max(200, 'Must be at most 200 characters.').nullable().optional(),
+        note: z
+            .string({ error: 'Must be a string or null.' })
+            .max(LIMITS.note, `Must be at most ${LIMITS.note} characters.`)
+            .nullable()
+            .optional(),
     })
     .superRefine((line, ctx) => {
         if (line.quantityMax === null || line.quantityMax === undefined) return;
