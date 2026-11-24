@@ -3,8 +3,8 @@
 # Mise en place: hardening plan (Phase 1 to Phase 3b)
 
 > **Status**
-> - Current step: **Step 21: wireframes for 3b's screens (no code)**, ready to start. Step 20 is done (2026-11-24), with CI to be confirmed when its PR opens; it isn't deployed (3b deploys in Step 26). Phase 3b's steps merged as PR #24. Phase 3c is complete (2026-11-24): Steps 15–19 merged (PRs #18–#22), deployed on the Pi, and every success criterion met on your phone. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
-> - Last updated: 2026-11-24 (Step 20: the 3b schema, and sections and steps)
+> - Current step: **Step 22: sections and steps in the editor and on the page**, ready to start. Step 21 is done (2026-11-24): the 3b wireframes, reviewed, with everything as recommended. Step 20 merged as PR #25 (CI green); it isn't deployed (3b deploys in Step 26). Phase 3b's steps merged as PR #24. Phase 3c is complete (2026-11-24): Steps 15–19 merged (PRs #18–#22), deployed on the Pi, and every success criterion met on your phone. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
+> - Last updated: 2026-11-24 (Step 21: the 3b wireframes)
 > - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
@@ -767,7 +767,7 @@ And since 3c came first, its criteria still hold with all of this: offline, reci
 
 **Why:** you asked for them, as for 3a. The editor gains the most, and sections, step timers and ingredient grouping all have to fit a phone, used with one hand.
 
-- [ ] A canvas of the new screens:
+- [x] A canvas of the new screens:
   - the method editor: sections, steps, and a timer on a step
   - ingredient lines grouped by section
   - the recipe page, and cooking mode, with sections and a step's timer button
@@ -776,7 +776,7 @@ And since 3c came first, its criteria still hold with all of this: offline, reci
   - equipment lines
   - the image gallery, the main image, and adding one from the camera
   - Options › Advanced › Tags and Equipment
-- [ ] Reviewed together. The Progress log records what they settle, and the steps below are adjusted to match
+- [x] Reviewed together. The Progress log records what they settle, and the steps below are adjusted to match
 
 **Done when:** you've reviewed them and the log records the outcome.
 
@@ -785,9 +785,12 @@ And since 3c came first, its criteria still hold with all of this: offline, reci
 
 **Why:** Step 20 changed the data; this gives it its screens, as the wireframes settle.
 
-- [ ] The editor's method becomes sections: add, rename, move and remove a section; add, move and remove a step; an optional timer on a step, typed as "15 min" or "1 h 30 min" and read by `parseDuration()` in `shared/quantity.ts`, beside `parseAmount()`
-- [ ] Ingredient lines can be put in a section, sent as `sectionIndex`
-- [ ] The recipe page groups the ingredients and the method by section. A step with a timer has a small button that starts it with one tap, through the existing timers. Printing keeps the sections
+- [ ] The editor's method becomes sections, as the wireframes have it:
+  - a card per section, with its name and a ⋮ menu (Move section up, Move section down, Remove section…, asking first when it has steps), and "Add section" below them
+  - each step its own box, numbered, with a ⋮ menu (move up, move down, remove) and "Add step to <section>" below the steps
+  - an optional timer on a step: its Timer button opens a sheet, where the length is typed as "15 min" or "1 h 30 min" and read by `parseDuration()` in `shared/quantity.ts`, beside `parseAmount()`, or chosen from presets (5, 10, 15, 20 and 30 min, 1 h); the sheet also removes a timer. A step with one shows it on the button ("20 min")
+- [ ] Ingredient lines can be put in a section, sent as `sectionIndex`: a line's ⋮ menu gains a Section choice (No section, or one of the recipe's sections). The editor groups the lines under their section's name, lines in no section first
+- [ ] The recipe page groups the ingredients the same way, lines in no section first with no heading, and shows the method by section. A step with a timer has a "Start 20 min timer" button that starts it with one tap, through the existing timers; while it runs the button shows the time left, and its chip in the timer bar is named after the step ("Chilli, step 4"). Printing keeps the sections
 - [ ] The editor checks the new limits before saving, so a change saved offline is rarely refused later. The copy and waiting changes already carry sections (Step 20)
 - [ ] Tests:
   - unit: `parseDuration()` (in the Jest suite, like `parseAmount()`), and the draft's sections and grouping
@@ -805,17 +808,21 @@ And since 3c came first, its criteria still hold with all of this: offline, reci
   - `/api/tags` and `/api/equipment`, with full CRUD. Names are normalised like ingredients' and unique (409); a tag's colour is `#rrggbb` or null
   - deleting a tag removes it from every recipe; deleting equipment a recipe uses is a 409
   - the recipe body takes `tagIds` and `equipment` (`{ equipmentId, quantity, optional }`); responses include both, and the list's lighter rows include the tags
+  - `GET /api/tags` gives each tag's `recipeCount`, for the filter's order and the question before a delete (from the wireframe review)
   - `GET /api/recipes?tag=<id>` filters, with search and paging
   - the snapshot gains `tags` and `equipment`
-- [ ] The editor:
-  - a tag picker that searches and creates on the spot; a new tag's colour comes from a row of presets, or any colour
-  - equipment lines (the item, how many, whether it's optional), with the same kind of picker
-- [ ] Pills: a recipe's first two tags beside its name on the list, and all of them on its page, in the tag's colour, with dark or light text chosen for contrast
-- [ ] The list's tag filter: choose a tag to see its recipes, together with search. Offline, it filters on the device
-- [ ] Options › Advanced gains Tags (rename, recolour, delete, asking first) and Equipment (rename, delete; refused while a recipe uses it), like Ingredients
+- [ ] The editor, as the wireframes have it:
+  - Tags just under the name: the recipe's pills, each with a × to take it off, then "Add tag", which opens a picker that searches and creates on the spot ("Create tag “weeknight”")
+  - a new tag's colour: ten presets, or any colour (the browser's colour picker, with a box for the `#rrggbb` code), with a preview pill
+  - Equipment as its own collapsible section after Ingredients: each line has the item (the same kind of picker), a − / + count, an Optional box, and a ⋮ menu (Move up, Move down, Remove line)
+- [ ] Pills: a recipe's first two tags beside its name on the list, and all of them on its page, in the tag's colour, with dark or light text chosen for contrast. Names are stored in lower case; pills show them with a capital first letter. A pill on the recipe page opens the list filtered by that tag
+- [ ] The list's tag filter, one tag at a time: a row of tag chips under the search box, the most used first, scrolling sideways on a phone and wrapping on a desktop. The tag is kept in the address (`?tag=`), so Back and a refresh keep it, and a line says how many recipes it found, with Clear. It works together with search. Offline, it filters on the device
+- [ ] Options › Advanced gains Tags and Equipment, like Ingredients:
+  - Tags: each tag's pill and how many recipes use it; a ⋮ menu with Rename, Change colour (the same picker as a new tag) and Delete…, which asks first ("It comes off 3 recipes")
+  - Equipment: rename, and delete, refused while a recipe uses it
 - [ ] Offline, as you answered: the pickers suggest from the copy, and a new tag or item is picked by name and created when the change uploads, using the existing one on a 409. Renaming or deleting one needs a connection
 - [ ] Tests:
-  - API: the CRUD, the 409s, the body, and the filter
+  - API: the CRUD, the 409s, `recipeCount`, the body, and the filter
   - client: the pills' contrast on light and dark colours, the pickers, the filter, and a new tag created offline uploading with its recipe
   - Playwright: tag a recipe and filter the list by it; add equipment; rename and recolour a tag in Options
 - [ ] `docs/api.md` and `docs/erd.md`
@@ -834,6 +841,7 @@ And since 3c came first, its criteria still hold with all of this: offline, reci
   - turned upright, then re-encoded to WebP at 2,000 px on the long side, plus a 400 px thumbnail, with all metadata stripped; the upload itself is discarded
   - the files are named after the new row's id; at most 10 per recipe (409)
   - the files are written before the row, and removed if the transaction fails; deleting an image, or its recipe, deletes its files
+  - from the wireframe review: a recipe's first image becomes its main one, and deleting the main image makes the next one (in upload order) the main one, in the same transaction
 - [ ] `primaryImageId` in the recipe body; recipe responses include `images` and `primaryImageId`, and the list's rows `primaryImageId`
 - [ ] `/media/<id>.webp` and `/media/<id>-thumb.webp`, cached as `immutable`, from a folder set by `MEDIA_DIR`
 - [ ] The Pi:
@@ -844,6 +852,7 @@ And since 3c came first, its criteria still hold with all of this: offline, reci
   - a JPEG carrying a GPS position comes back without it
   - SVG, GIF and HEIC refused; a file over 15 MB; a small file that would expand past 50 megapixels; an 11th image
   - the files gone with their image, and with their recipe
+  - the first image becoming the main one, and the next taking over when the main one is deleted
   - `primaryImageId` refused for another recipe's image
 - [ ] `docs/api.md`, `docs/erd.md`, `docs/architecture.md` and `docs/deployment.md`
 
@@ -854,8 +863,13 @@ And since 3c came first, its criteria still hold with all of this: offline, reci
 
 **Why:** the last of 3b's features, now the API is ready (Step 24).
 
-- [ ] Add an image (the phone offers its camera or its photos), see the recipe's images in a gallery, choose the main one, and delete one, asking first; where these sit follows the wireframes. Adding needs a connection, and says so offline
-- [ ] The list shows each recipe's main image as a thumbnail, and its page shows the main image
+- [ ] Images live on the recipe page, not in the editor, as the wireframes settled: the main image heads the page, labelled with how many there are ("3 photos"), and opens the recipe's Photos page:
+  - "Add photo" (the phone offers its camera or its photos), with the rules beside it: JPEG, PNG or WebP, up to 15 MB, location removed
+  - a grid in upload order, the main one marked, an upload in progress shown in its place, and "3 of 10"
+  - each photo's ⋮ menu: Make main photo, View full size, and Delete photo…, asking first
+  - a refused file named in the message ("party.gif wasn't added. Only JPEG, PNG and WebP images are accepted."), and the 10-image limit explained
+  - offline, Add photo is disabled and says it needs a connection; a recipe that hasn't uploaded yet says "Add photos once it's uploaded"
+- [ ] The list shows each recipe's main image as a thumbnail (a plain plate when it has none), and on a desktop the tiles show it larger
 - [ ] Offline (§3.4): the service worker caches every thumbnail ahead of time, after each snapshot refresh, and full images as they're viewed, the most recent 100. A deleted image's files drop out as they expire
 - [ ] Tests:
   - component: the gallery, choosing the main image, and adding one offline saying it needs a connection
@@ -1685,3 +1699,21 @@ And since 3c came first, its criteria still hold with all of this: offline, reci
   - **Docs:** `docs/api.md` (the Section object, the body's rules, `instructions` gone), `docs/erd.md` (a Phase 3b diagram), and the README.
 
   Next: Step 21, the wireframes for 3b's screens.
+- **2026-11-24:** Step 20 merged (PR #25, CI green, Firefox included). Step 21 done: the 3b wireframes, and your review of them.
+  - **The wireframes:** a canvas artifact, not in the repo, like 3a's. Ten artboards in 3a's look (Inter, the green accent, light and dark), in three rows:
+    - the method: the editor with grouped ingredients and the method in sections, setting a step's timer, the recipe page, and a step's timer running in cooking mode
+    - tags and equipment: the tag picker with a new tag's colour, the list with a tag filter, equipment lines, and Options › Advanced › Tags
+    - photos: a recipe's photos, and the list on a desktop as tiles
+  - **Settled, all as recommended:**
+    1. Each step is its own box, numbered, with a timer button beside it, rather than one box of text per section. The timer is set in a sheet: typed ("15 min", "1 h 30 min") or a preset.
+    2. A line's ⋮ menu chooses its section. Lines in no section come first, with no heading, in the editor and on the page.
+    3. Photos live on the recipe page, which opens a Photos page, not in the editor: adding one needs the recipe saved and a connection, while the editor works offline.
+    4. The list filters by one tag at a time, with chips under the search box, kept in the address (`?tag=`).
+    5. Tags sit just under the name in the editor; equipment is its own section, after the ingredients, each line with a − / + count and an Optional box.
+    6. A tag's colour: ten presets, or any colour, with the pill's text turning dark or light to stay readable. A tag keeps the same colour in light and dark themes.
+    7. New: a recipe's first image becomes its main one, and when the main one is deleted the next takes over. The spec didn't say; without it, a recipe with photos would show a plain plate on the list until you chose one. Added to technical spec §3.2 (Image Uploads, rule 8) and to Step 24.
+    8. Tag names are stored in lower case, as the plan already had it, so "Beef" and "beef" are one tag; pills show them with a capital first letter. Added to technical spec §3.4 and the design spec.
+  - **Smaller details from the boards' notes, which you left as they were:** a running step timer shows its time left on the step's button, and its chip is named after the step ("Chilli, step 4"); tag chips are ordered by how many recipes use them, so `GET /api/tags` gains a `recipeCount` (technical spec §3.2), which also lets deleting a tag say how many recipes it comes off; a pill on the recipe page opens the list filtered by it; a refused photo is named in the message.
+  - **Steps adjusted to match:** 22 (the section cards, step boxes, the timer sheet, the line's Section choice, the page's timer button), 23 (where tags and equipment sit, the colour picker, the filter row, `recipeCount`, Options › Tags), 24 (the main-image rule and its test) and 25 (the Photos page, its menu and its messages).
+
+  Next: Step 22, sections and steps in the editor and on the page.

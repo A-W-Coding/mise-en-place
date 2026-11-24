@@ -625,7 +625,7 @@ Routes map the Prisma errors they expect themselves. `P2002` is mapped once, in 
 |----------|--------|----------|-------------|
 | Recipes | POST, PATCH | `/api/recipes`, `/api/recipes/:id` | Also accept `sections`, `tagIds`, `equipment` and `primaryImageId` (below) |
 | Recipes | GET | `/api/recipes?tag=:tagId` | Recipes with a tag; combines with `search` and paging |
-| Tags | GET | `/api/tags` | List tags, paginated, with optional fuzzy search |
+| Tags | GET | `/api/tags` | List tags, paginated, with optional fuzzy search; each with its `recipeCount` |
 | Tags | GET | `/api/tags/:id` | Get a tag |
 | Tags | POST | `/api/tags` | Create a tag (name normalised; 409 if it exists) |
 | Tags | PATCH | `/api/tags/:id` | Rename or recolour a tag |
@@ -670,6 +670,7 @@ Validation:
 5. **Names:** the files are `<imageId>.webp` and `<imageId>-thumb.webp`, after the new row's UUID. Nothing from the upload's own name is used.
 6. **Limit:** 10 images per recipe (409).
 7. **Order of work:** the files are written first, then the row is inserted and the recipe's `updatedAt` set, in one transaction. If the transaction fails, the files are deleted. Deleting an image, or its recipe, deletes its files.
+8. **The main image:** a recipe's first image becomes its main one. Deleting the main image makes the next one, in upload order, the main one, in the same transaction; deleting the last leaves none. `primaryImageId` in the recipe body still chooses any of them (settled in the 3b wireframe review, 24 Nov 2026).
 
 Image files are served with `Cache-Control: public, max-age=31536000, immutable`. A file's contents never change, because a new upload gets a new id.
 
@@ -792,7 +793,7 @@ The web client is a React single-page app, installable as a PWA, and the only us
   - In 3b, a step with a `timerSeconds` gets a small button beside it that starts that timer.
 - **Printing:** a print stylesheet reduces a recipe to its ingredients and method, without navigation, buttons or a footer.
 
-3b adds the section, step, tag, equipment and image editors, tag filtering on the list, and tag pills. A tag's colour can be any colour, chosen from a row of presets or picked freely. A pill uses its tag's colour as the background, with dark or light text chosen for contrast, so any colour reads. Since 3c comes first (D15), 3b also keeps the offline copy and waiting changes whole: the snapshot gains tags and equipment, waiting changes carry sections and steps, and images join the offline copy.
+3b adds the section, step, tag, equipment and image editors, tag filtering on the list, and tag pills. A tag's colour can be any colour, chosen from a row of presets or picked freely. A pill uses its tag's colour as the background, with dark or light text chosen for contrast, so any colour reads. Tag names are stored in lower case, like ingredients', so "Beef" and "beef" are one tag; a pill shows its name with a capital first letter. Since 3c comes first (D15), 3b also keeps the offline copy and waiting changes whole: the snapshot gains tags and equipment, waiting changes carry sections and steps, and images join the offline copy.
 
 **Keeping devices in step:** the app may be open on the laptop and the phone at the same time. From 3a:
 - A device refreshes its data when the app opens, when it comes back to the foreground (switching back to the app or its tab), when its connection returns, and right after it saves a change of its own. Nothing refreshes in the background, and nothing polls on a timer.

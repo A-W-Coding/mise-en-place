@@ -236,8 +236,8 @@ On the Phase 1 schema, with no new tables. It was completed on 23 November 2026,
 **Key Deliverables:**
 - Sections and steps, with an optional timer on each step, and ingredient lines grouped by section
 - Existing text instructions migrated into steps
-- Image upload following D11, with a main image (a `primaryImageId` on Recipe, F7) and thumbnails
-- Tags, with colours and filtering, shown as coloured pills: a recipe's first two beside its name on the list, all of them on the recipe page; and equipment
+- Image upload following D11, with a main image (a `primaryImageId` on Recipe, F7) and thumbnails. The first image added becomes the main one, and the next takes over if it's deleted
+- Tags, with colours and filtering, shown as coloured pills: a recipe's first two beside its name on the list, all of them on the recipe page; and equipment. Tag names are stored in lower case, like ingredients', and pills show them with a capital first letter
 - Create, update and delete for every part of a recipe (F6)
 - Images included in the backups
 - The offline copy and waiting changes kept whole as recipes gain sections, steps, tags, equipment and images, since 3c comes first (D15). Thumbnails are cached ahead of time and full images as they're viewed; adding an image needs a connection
