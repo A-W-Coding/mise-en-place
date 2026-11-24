@@ -16,6 +16,7 @@ import { createHash } from 'crypto';
 import { Router, Request, Response, NextFunction } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../prisma/client.js';
+import { recipeEtag } from '../utils/etag.js';
 import { RECIPE_INCLUDE } from '../utils/recipe-query.js';
 
 const router = Router();
@@ -48,9 +49,12 @@ export function noneMatch(header: string | undefined, etag: string): boolean {
 
 // ── GET /api/sync ───────────────────────────────────────────────────────────
 /**
- * The whole snapshot: `{ recipes, ingredients }`. Each recipe is as
- * `GET /api/recipes/:id` returns it, and `ingredients` holds every
- * ingredient. 3b adds `tags` and `equipment`.
+ * The whole snapshot: `{ recipes, ingredients, etags }`. Each recipe is as
+ * `GET /api/recipes/:id` returns it, `ingredients` holds every ingredient,
+ * and `etags` maps each recipe's id to the ETag its own GET would send, so
+ * a device can edit a recipe from its copy with `If-Match` (Step 17). They
+ * sit beside the recipes rather than in them, so each recipe stays exactly
+ * as its GET returns it. 3b adds `tags` and `equipment`.
  *
  * `Cache-Control: no-cache` makes any cache check with the API before reusing
  * a stored copy, which costs only a 304 when nothing has changed.
@@ -71,7 +75,8 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
             { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
         );
 
-        const body = JSON.stringify({ recipes, ingredients });
+        const etags = Object.fromEntries(recipes.map((recipe) => [recipe.id, recipeEtag(recipe.updatedAt)]));
+        const body = JSON.stringify({ recipes, ingredients, etags });
         const etag = snapshotEtag(body);
         res.set({ ETag: etag, 'Cache-Control': 'no-cache' });
 

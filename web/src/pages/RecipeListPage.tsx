@@ -4,6 +4,10 @@
  *
  * Rows become tiles on a wider screen. Each row leaves room beside the name
  * for 3b's tag pills, and the tile for its thumbnail.
+ *
+ * Changes waiting on the device (3c) show at once: new recipes in a "Waiting
+ * to upload" list above the rest, searched on the device, and an edited
+ * recipe's row with its new name and a tag.
  */
 
 import { useState } from 'react';
@@ -19,7 +23,11 @@ import { recipeMenuItems } from '../components/recipeMenu';
 import { SearchBox } from '../components/SearchBox';
 import { useDocumentTitle } from '../components/useDocumentTitle';
 import { useSearchQuery } from '../components/useSearchQuery';
+import { WaitingTag } from '../components/Waiting';
 import { listMeta } from '../format';
+import { matchesSearch } from '../offline/read';
+import { recipeFromChange } from '../offline/upload';
+import { useWaitingChanges, type WaitingChange } from '../offline/waiting';
 import page from '../components/Page.module.css';
 import styles from './RecipeListPage.module.css';
 
@@ -37,6 +45,35 @@ export function RecipeListPage() {
     const [deleting, setDeleting] = useState<RecipeSummary | null>(null);
     // Where a recipe's back link returns to: this list, with this search
     const listUrl = search ? `/?q=${encodeURIComponent(search)}` : '/';
+
+    const { changes } = useWaitingChanges();
+    const changeFor = new Map(changes.map((change) => [change.recipeId, change]));
+    const listed = new Set(items.map((recipe) => recipe.id));
+    const waitingNew = changes.filter(
+        (change) =>
+            change.kind === 'create' && !listed.has(change.recipeId) && (!search || matchesSearch(change.body.name, search)),
+    );
+
+    const row = (recipe: RecipeSummary, change: WaitingChange | undefined) => {
+        const shown = change ? recipeFromChange(change, recipe) : recipe;
+        return (
+            <li key={recipe.id} className={styles.row}>
+                <Link to={`/recipes/${recipe.id}`} state={{ from: listUrl }} className={styles.rowLink}>
+                    {/* 3b adds the first two tag pills beside the name */}
+                    <span className={styles.nameLine}>
+                        <span className={styles.name}>{shown.name}</span>
+                        {change && <WaitingTag change={change} />}
+                    </span>
+                    <span className={styles.meta}>{listMeta(shown)}</span>
+                </Link>
+                <Menu
+                    label={`More options for ${shown.name}`}
+                    items={recipeMenuItems(recipe.id, () => setDeleting(shown))}
+                    buttonClassName={styles.rowMenu}
+                />
+            </li>
+        );
+    };
 
     const newRecipe = (
         <Link to="/recipes/new" className={page.primaryButton}>
@@ -66,7 +103,18 @@ export function RecipeListPage() {
                 </p>
             )}
 
-            {!isPending && !error && items.length === 0 && !search && (
+            {waitingNew.length > 0 && (
+                <section aria-labelledby="waiting-heading">
+                    <h2 id="waiting-heading" className={page.count}>
+                        Waiting to upload
+                    </h2>
+                    <ul aria-labelledby="waiting-heading" className={styles.list}>
+                        {waitingNew.map((change) => row(recipeFromChange(change), change))}
+                    </ul>
+                </section>
+            )}
+
+            {!isPending && !error && items.length === 0 && waitingNew.length === 0 && !search && (
                 <div className={page.notice}>
                     <p className={page.noticeTitle}>No recipes yet</p>
                     <p className={page.noticeText}>Add your first one and it will show up here.</p>
@@ -74,7 +122,7 @@ export function RecipeListPage() {
                 </div>
             )}
 
-            {!isPending && !error && items.length === 0 && search && (
+            {!isPending && !error && items.length === 0 && waitingNew.length === 0 && search && (
                 <div className={page.notice}>
                     <p className={page.noticeTitle}>No recipes match “{search}”</p>
                     <button type="button" className={page.textButton} onClick={clear}>
@@ -87,22 +135,7 @@ export function RecipeListPage() {
                 <>
                     {total !== null && <p className={page.count}>{countText(total, search !== '')}</p>}
                     <ul aria-label="Recipes" aria-busy={isPlaceholderData} className={styles.list}>
-                        {items.map((recipe) => (
-                            <li key={recipe.id} className={styles.row}>
-                                <Link to={`/recipes/${recipe.id}`} state={{ from: listUrl }} className={styles.rowLink}>
-                                    {/* 3b adds the first two tag pills beside the name */}
-                                    <span className={styles.nameLine}>
-                                        <span className={styles.name}>{recipe.name}</span>
-                                    </span>
-                                    <span className={styles.meta}>{listMeta(recipe)}</span>
-                                </Link>
-                                <Menu
-                                    label={`More options for ${recipe.name}`}
-                                    items={recipeMenuItems(recipe.id, () => setDeleting(recipe))}
-                                    buttonClassName={styles.rowMenu}
-                                />
-                            </li>
-                        ))}
+                        {items.map((recipe) => row(recipe, changeFor.get(recipe.id)))}
                     </ul>
                     <LoadMore
                         hasNextPage={list.hasNextPage}

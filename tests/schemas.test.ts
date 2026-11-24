@@ -31,8 +31,17 @@ describe('createRecipeSchema', () => {
         ['an unknown field', { name: 'Soup', createdAt: '2020-01-01' }],
         ['an id that is not a UUID', { name: 'Soup', id: 'soup-1' }],
         ['a null id', { name: 'Soup', id: null }],
+        ['servings over 1000', { name: 'Soup', servings: 1001 }],
+        ['a prep time over 99999 minutes', { name: 'Soup', prepTime: 100_000 }],
+        ['a cook time beyond the database', { name: 'Soup', cookTime: 3_000_000_000 }],
     ])('rejects %s', (_label, body) => {
         expect(createRecipeSchema.safeParse(body).success).toBe(false);
+    });
+
+    test('accepts the largest servings and times the shared limits allow', () => {
+        expect(createRecipeSchema.safeParse({ name: 'Soup', servings: 1000, prepTime: 99_999, cookTime: 99_999 }).success).toBe(
+            true,
+        );
     });
 
     test('accepts an id chosen by the client (3c, D15), in lowercase', () => {

@@ -16,6 +16,7 @@ import { formatAge } from '../format';
 import { useOfflineCopy } from '../offline/copy';
 import { useStorageProtection, type Protection } from '../offline/protection';
 import { requestSync, useSyncStatus } from '../offline/sync';
+import { useWaitingChanges } from '../offline/waiting';
 import { usePreferences, type TextSize, type Theme } from '../preferences';
 import { playChime, unlockAudio, vibrate } from '../timers/sound';
 import styles from './OptionsPage.module.css';
@@ -223,10 +224,12 @@ const PROTECTION_TEXT: Record<Exclude<Protection, 'checking'>, string> = {
 /**
  * The offline copy: how many recipes it holds, when it was last refreshed,
  * whether the browser will keep it, and Protect and Refresh now (technical
- * spec §3.4, "Visible state"). Step 17 adds the changes waiting to upload.
+ * spec §3.4, "Visible state"), with the changes waiting to upload (3c).
  */
 function OfflineCopyStatus() {
     const { status, copy } = useOfflineCopy();
+    const { changes } = useWaitingChanges();
+    const stuck = changes.filter((change) => change.problem !== null).length;
     const sync = useSyncStatus();
     const { protection, protect } = useStorageProtection();
     const now = useNow();
@@ -249,12 +252,24 @@ function OfflineCopyStatus() {
         <div className={styles.connection}>
             <span className={styles.connectionTitle}>{title}</span>
             {detail && <p className={styles.hint}>{detail}</p>}
+            {changes.length > 0 && (
+                <p className={styles.waitingLine}>
+                    {changes.length === 1 ? '1 change' : `${changes.length} changes`} waiting to upload
+                    {stuck > 0 && `, ${stuck} of them needing your attention`}.
+                </p>
+            )}
             {sync.lastError && (
                 <p className={styles.hint}>
                     The last refresh failed: {sync.lastError} It tries again by itself while the app is open.
                 </p>
             )}
-            {protection !== 'checking' && <p className={styles.hint}>{PROTECTION_TEXT[protection]}</p>}
+            {protection !== 'checking' && (
+                <p className={styles.hint}>
+                    {PROTECTION_TEXT[protection]}
+                    {/* They're the only copy until they upload */}
+                    {changes.length > 0 && protection !== 'protected' && ' Changes waiting to upload would go with it.'}
+                </p>
+            )}
             <div className={styles.buttons}>
                 {(protection === 'unprotected' || protection === 'refused') && (
                     <button type="button" className={styles.smallButton} onClick={protect}>

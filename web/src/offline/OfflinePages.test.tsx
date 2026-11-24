@@ -120,17 +120,16 @@ describe('pages, when the server can\'t be reached', () => {
         await findBanner();
     });
 
-    test("the editor doesn't edit a recipe from the copy: it says it can't reach the server", async () => {
+    test('the editor opens a recipe from the copy, to edit offline (Step 17)', async () => {
         await seedCopy([beefChili]);
         mockApi([['GET', RECIPE_PATH, () => unreachable()]]);
         renderApp(`/recipes/${BEEF_CHILI_ID}/edit`);
 
-        expect(await screen.findByRole('alert')).toHaveTextContent("Can't reach the server.");
-        expect(screen.getByRole('heading', { level: 1, name: 'Edit recipe' })).toBeInTheDocument();
-        expect(screen.queryByRole('textbox', { name: 'Name' })).not.toBeInTheDocument();
+        expect(await screen.findByLabelText('Name')).toHaveValue('Beef Chili');
+        expect(screen.getByRole('combobox', { name: 'Ingredient, line 1' })).toHaveValue('onion');
     });
 
-    test("saving while the browser says it's offline says it can't reach the server, rather than waiting", async () => {
+    test("saving while the browser says it's offline doesn't wait: the recipe is kept on the device", async () => {
         mockApi([['POST', '/api/recipes', () => unreachable()]]);
         const { user } = renderApp('/recipes/new');
         await user.type(await screen.findByLabelText('Name'), 'Toast');
@@ -139,7 +138,8 @@ describe('pages, when the server can\'t be reached', () => {
         act(() => onlineManager.setOnline(false));
         await user.click(screen.getByRole('button', { name: 'Save' }));
 
-        expect(await screen.findByText("Can't reach the server. Check Tailscale is connected, then try again.")).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { level: 1, name: 'Toast' })).toBeInTheDocument();
+        expect(screen.getByText(/Waiting to upload\./)).toBeInTheDocument();
     });
 
     test('once the server answers again, the page fetches from it by itself, and the banner goes', async () => {

@@ -5,6 +5,7 @@ import {
     getOfflineCopyState,
     isSnapshot,
     loadOfflineCopy,
+    putRecipeInCopy,
     replaceOfflineCopy,
     resetOfflineCopy,
 } from './copy';
@@ -127,13 +128,50 @@ describe('the offline copy', () => {
     });
 });
 
+describe('putRecipeInCopy', () => {
+    test('puts a recipe the API sent back into the copy, in name order, with its ETag and any new ingredient', async () => {
+        await seedCopy([beefChili], DAY_MS, '"snapshot-1"');
+        const sourdough = { id: 'ing-sourdough', name: 'sourdough', createdAt: beefChili.createdAt, updatedAt: beefChili.updatedAt };
+        const toast = {
+            ...lemonDrizzle,
+            id: 'aaaaaaaa-0000-4000-8000-000000000009',
+            name: 'Avocado Toast',
+            recipeIngredients: [{ ...beefChili.recipeIngredients[0]!, ingredientId: sourdough.id, ingredient: sourdough }],
+        };
+
+        await putRecipeInCopy(toast, '"77"');
+        const copy = await reloadFromStorage();
+
+        expect(copy?.data.recipes.map((recipe) => recipe.name)).toEqual(['Avocado Toast', 'Beef Chili']);
+        expect(copy?.data.etags[toast.id]).toBe('"77"');
+        expect(copy?.data.ingredients.map((ingredient) => ingredient.name)).toContain('sourdough');
+        // Still the old snapshot's ETag, so the next refresh fetches it all
+        expect(copy?.etag).toBe('"snapshot-1"');
+    });
+
+    test('replaces a recipe already there', async () => {
+        await seedCopy([beefChili, lemonDrizzle]);
+
+        await putRecipeInCopy({ ...beefChili, description: 'Hotter.' }, '"78"');
+
+        const copy = await reloadFromStorage();
+        expect(copy?.data.recipes.map((recipe) => [recipe.name, recipe.description])).toEqual([
+            ['Beef Chili', 'Hotter.'],
+            ['Lemon Drizzle Cake', null],
+        ]);
+    });
+});
+
 describe('isSnapshot', () => {
     test("accepts the API's shape, and nothing else", () => {
         expect(isSnapshot(snapshotOf([beefChili]))).toBe(true);
-        expect(isSnapshot({ recipes: [], ingredients: [] })).toBe(true);
+        expect(isSnapshot({ recipes: [], ingredients: [], etags: {} })).toBe(true);
         expect(isSnapshot(null)).toBe(false);
-        expect(isSnapshot({ recipes: [] })).toBe(false);
-        expect(isSnapshot({ recipes: [{ id: 'a', name: 'A' }], ingredients: [] })).toBe(false);
-        expect(isSnapshot({ recipes: [], ingredients: [{ id: 1, name: 'salt' }] })).toBe(false);
+        expect(isSnapshot({ recipes: [], etags: {} })).toBe(false);
+        // A copy from before Step 17, with no ETags, is fetched again whole
+        expect(isSnapshot({ recipes: [], ingredients: [] })).toBe(false);
+        expect(isSnapshot({ recipes: [], ingredients: [], etags: { a: 1 } })).toBe(false);
+        expect(isSnapshot({ recipes: [{ id: 'a', name: 'A' }], ingredients: [], etags: {} })).toBe(false);
+        expect(isSnapshot({ recipes: [], ingredients: [{ id: 1, name: 'salt' }], etags: {} })).toBe(false);
     });
 });

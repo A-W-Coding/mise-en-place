@@ -87,12 +87,18 @@ export const lemonDrizzle: Recipe = {
     recipeIngredients: [],
 };
 
+/** A recipe's ETag in the tests: its updatedAt, quoted, as the API happens to make them. */
+export function etagOf(recipe: Recipe): string {
+    return `"${Date.parse(recipe.updatedAt)}"`;
+}
+
 /** What `GET /api/sync` would return for these recipes: their ingredients, each once, sorted by name. */
 export function snapshotOf(recipes: Recipe[]): Snapshot {
     const ingredients = new Map(recipes.flatMap((recipe) => recipe.recipeIngredients.map((line) => [line.ingredient.id, line.ingredient])));
     return {
         recipes: [...recipes].sort((a, b) => a.name.localeCompare(b.name)),
         ingredients: [...ingredients.values()].sort((a, b) => a.name.localeCompare(b.name)),
+        etags: Object.fromEntries(recipes.map((recipe) => [recipe.id, etagOf(recipe)])),
     };
 }
 

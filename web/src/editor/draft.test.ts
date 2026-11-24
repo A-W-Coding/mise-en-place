@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import { beefChili } from '../test/fixtures';
 import {
+    apiBody,
     buildRecipeBody,
+    draftFromBody,
     draftFromRecipe,
     draftReducer,
     isDirty,
@@ -15,7 +17,7 @@ import {
 const garlic = { id: '11111111-1111-4111-8111-111111111111', name: 'garlic' };
 const onion = { id: '22222222-2222-4222-8222-222222222222', name: 'onion' };
 
-function line(key: string, amount: string, ingredient: typeof garlic | null, extra: Partial<LineDraft> = {}): LineDraft {
+function line(key: string, amount: string, ingredient: LineDraft['ingredient'], extra: Partial<LineDraft> = {}): LineDraft {
     return {
         key,
         amount,
@@ -32,7 +34,7 @@ function draft(overrides: Partial<RecipeDraft> = {}): RecipeDraft {
 }
 
 describe('buildRecipeBody', () => {
-    test('turns what was typed into the API body', () => {
+    test('turns what was typed into what is saved, each line naming its ingredient', () => {
         const result = buildRecipeBody(
             draft({
                 name: '  Garlic Soup ',
@@ -57,8 +59,15 @@ describe('buildRecipeBody', () => {
                 cookTime: null,
                 instructions: 'Chop.\nSimmer.',
                 ingredients: [
-                    { ingredientId: garlic.id, quantity: 2, quantityMax: null, unit: 'clove', note: 'crushed' },
-                    { ingredientId: onion.id, quantity: null, quantityMax: null, unit: null, note: null },
+                    {
+                        ingredientId: garlic.id,
+                        ingredientName: 'garlic',
+                        quantity: 2,
+                        quantityMax: null,
+                        unit: 'clove',
+                        note: 'crushed',
+                    },
+                    { ingredientId: onion.id, ingredientName: 'onion', quantity: null, quantityMax: null, unit: null, note: null },
                 ],
             },
             lineKeys: ['a', 'b'],
@@ -100,9 +109,9 @@ describe('buildRecipeBody', () => {
         expect(result).toEqual({
             errors: {
                 name: 'Give the recipe a name.',
-                servings: 'A whole number, 1 or more.',
-                prepTime: 'Whole minutes, or leave it empty.',
-                cookTime: 'Whole minutes, or leave it empty.',
+                servings: 'A whole number from 1 to 1000.',
+                prepTime: 'Whole minutes, up to 99999, or leave it empty.',
+                cookTime: 'Whole minutes, up to 99999, or leave it empty.',
                 [lineErrorKey('a', 'amount')]: '“eggs” isn\'t a unit. For a count, type just the number.',
                 [lineErrorKey('a', 'ingredient')]: 'Choose “egg” from the list, or create it.',
                 [lineErrorKey('b', 'ingredient')]: 'Choose an ingredient.',
@@ -137,6 +146,68 @@ describe('mapServerErrors', () => {
             [lineErrorKey('second', 'note')]: 'Too long.',
             form: 'mystery: Odd.',
         });
+    });
+});
+
+describe('buildRecipeBody: the limits the API shares (3c)', () => {
+    test('refuses servings and times beyond what the API accepts, so an offline save is rarely refused later', () => {
+        const result = buildRecipeBody(draft({ servings: '1001', prepTime: '100000', cookTime: '99999' }));
+
+        expect(result).toEqual({
+            errors: {
+                servings: 'A whole number from 1 to 1000.',
+                prepTime: 'Whole minutes, up to 99999, or leave it empty.',
+            },
+        });
+        expect(buildRecipeBody(draft({ servings: '1000', prepTime: '0' }))).not.toHaveProperty('errors');
+    });
+
+    test("holds a new ingredient's name to the API's length", () => {
+        const long = 'x'.repeat(101);
+        const result = buildRecipeBody(draft({ lines: [line('a', '1', { id: null, name: long })] }));
+
+        expect(result).toEqual({
+            errors: { [lineErrorKey('a', 'ingredient')]: "Keep the ingredient's name to 100 characters or fewer." },
+        });
+    });
+});
+
+describe('a new ingredient picked offline', () => {
+    test('is saved by name with no id, and apiBody fills in its id once it exists', () => {
+        const result = buildRecipeBody(
+            draft({ lines: [line('a', '200 g', { id: null, name: 'sourdough' }), line('b', '1', garlic)] }),
+        );
+        if ('errors' in result) throw new Error('Expected a body.');
+
+        expect(result.body.ingredients[0]).toEqual({
+            ingredientId: null,
+            ingredientName: 'sourdough',
+            quantity: 200,
+            quantityMax: null,
+            unit: 'g',
+            note: null,
+        });
+        expect(apiBody(result.body, (name) => (name === 'sourdough' ? 'new-id' : '')).ingredients).toEqual([
+            { ingredientId: 'new-id', quantity: 200, quantityMax: null, unit: 'g', note: null },
+            { ingredientId: garlic.id, quantity: 1, quantityMax: null, unit: null, note: null },
+        ]);
+    });
+});
+
+describe('draftFromBody', () => {
+    test('reopens a version saved on the device exactly as it was saved', () => {
+        const first = buildRecipeBody(
+            draft({ lines: [line('a', '1–2 tsp', garlic), line('b', '3', { id: null, name: 'sourdough' })] }),
+        );
+        if ('errors' in first) throw new Error('Expected a body.');
+
+        const reopened = draftFromBody(first.body);
+
+        expect(reopened.lines.map((l) => [l.amount, l.ingredient, l.ingredientText])).toEqual([
+            ['1–2 tsp', garlic, 'garlic'],
+            ['3', { id: null, name: 'sourdough' }, 'sourdough'],
+        ]);
+        expect(buildRecipeBody(reopened)).toMatchObject({ body: first.body });
     });
 });
 

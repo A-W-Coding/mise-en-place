@@ -7,7 +7,8 @@
  * copy (3c). Its icon spins while any request is in flight, including the
  * automatic refreshes.
  *
- * When a page is reading the offline copy, a banner above it says so.
+ * When a page is reading the offline copy, a banner above it says so, and
+ * another shows while a change waiting on the device needs your attention.
  *
  * Running timers show along the bottom of every page, and the page makes room
  * for them so they never cover the recipe.
@@ -21,6 +22,7 @@ import { TimerDialog } from '../timers/TimerDialog';
 import { useTimerState } from '../timers/timerStore';
 import { OptionsIcon, RefreshIcon } from './Icons';
 import { OfflineBanner } from './OfflineBanner';
+import { AttentionBanner } from './Waiting';
 import styles from './Layout.module.css';
 
 export function Layout() {
@@ -55,6 +57,7 @@ export function Layout() {
                 </div>
             </header>
             <main className={styles.main}>
+                <AttentionBanner />
                 <OfflineBanner onRetry={refresh} />
                 <Outlet />
             </main>

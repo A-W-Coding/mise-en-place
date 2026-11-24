@@ -3,11 +3,10 @@
  * Answering the pages' reads from the offline copy, in the shapes the API
  * uses, for when the API can't be reached (technical spec §3.4, "Offline").
  *
- * Each answer is marked `fromCopy`. That's how the banner knows to show, how
- * a page reading the copy knows to fetch again once the API answers, and how
- * the editor knows not to edit it: the copy has no ETag for each recipe (the
- * API's ETags are opaque), so a save from it couldn't be checked against a
- * change made elsewhere.
+ * Each answer is marked `fromCopy`. That's how the banner knows to show, and
+ * how a page reading the copy knows to fetch again once the API answers. A
+ * recipe carries the ETag the snapshot gave it, so it can be edited offline
+ * with `If-Match` like one from the API (Step 17).
  */
 
 import type { ApiResult } from '../api/client';
@@ -17,10 +16,10 @@ import type { OfflineCopy } from './copy';
 /** An answer from the API, or from the copy. */
 export type ReadResult<T> = ApiResult<T> & { fromCopy?: true };
 
-/** One whole recipe, or null if the copy doesn't have it (it may be newer than the copy, or deleted). */
+/** One whole recipe with its ETag, or null if the copy doesn't have it (it may be newer than the copy, or deleted). */
 export function recipeFromCopy(copy: OfflineCopy, id: string): ReadResult<Recipe> | null {
     const recipe = copy.data.recipes.find((candidate) => candidate.id === id);
-    return recipe ? { data: recipe, etag: null, totalCount: null, fromCopy: true } : null;
+    return recipe ? { data: recipe, etag: copy.data.etags[id] ?? null, totalCount: null, fromCopy: true } : null;
 }
 
 /**

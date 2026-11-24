@@ -7,6 +7,7 @@ import { afterEach, beforeEach, vi } from 'vitest';
 import { resetOfflineCopy } from '../offline/copy';
 import { memoryStorage, setOfflineStorage } from '../offline/storage';
 import { stopSync } from '../offline/sync';
+import { resetWaitingChanges } from '../offline/waiting';
 import { resetPreferencesCache } from '../preferences';
 import { resetTimers } from '../timers/timerStore';
 import { MockIntersectionObserver } from './intersectionObserver';
@@ -43,6 +44,7 @@ afterEach(() => {
     // The offline copy and its refreshes live outside React too
     stopSync();
     resetOfflineCopy();
+    resetWaitingChanges();
     focusManager.setFocused(undefined);
     onlineManager.setOnline(true);
     MockIntersectionObserver.reset();
@@ -52,4 +54,5 @@ afterEach(() => {
     resetPreferencesCache();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+    vi.restoreAllMocks();
 });

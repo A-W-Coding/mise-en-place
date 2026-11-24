@@ -232,6 +232,18 @@ describe('Recipe API', () => {
         });
     });
 
+    describe('numbers beyond the shared limits', () => {
+        test('should return 400, not 500, for servings or a time the database could not hold', async () => {
+            const response = await request
+                .post('/api/recipes')
+                .send({ name: 'Toast', servings: 3_000_000_000, cookTime: 100_000 });
+
+            expect(response.status).toBe(400);
+            expect(response.body.fields).toEqual({ servings: 'Must be at most 1000.', cookTime: 'Must be at most 99999.' });
+            expect(await prisma.recipe.count({ where: { name: 'Toast' } })).toBe(0);
+        });
+    });
+
     // ── POST validation ─────────────────────────────────────────────────────
 
     describe('POST /api/recipes validation', () => {

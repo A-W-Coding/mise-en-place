@@ -225,3 +225,9 @@
     flex-wrap: wrap;
     gap: 8px;
 }
+
+.waitingLine {
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+}

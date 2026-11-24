@@ -7,11 +7,19 @@
  * move through the suggestions, Enter picks one, Escape closes them. Leaving
  * the box with exactly an existing name typed picks that ingredient, since
  * names are unique; anything else stays unpicked until chosen or created.
+ *
+ * Offline (3c), the suggestions come from the offline copy, and a created
+ * ingredient is picked by name alone: it's created when the recipe reaches
+ * the server, or the existing one is used if it was created elsewhere
+ * meanwhile.
  */
 
 import { useEffect, useId, useState, type KeyboardEvent } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { apiRequest } from '../api/client';
+import { LIMITS } from '../../../shared/limits';
+import { ApiError, apiRequest } from '../api/client';
+import { loadOfflineCopy } from '../offline/copy';
+import { listFromCopy } from '../offline/read';
 import { errorMessage } from '../api/errorMessage';
 import { useCreateIngredient } from '../api/mutations';
 import type { Ingredient } from '../api/types';
@@ -68,11 +76,17 @@ export function IngredientPicker({
 
     const results = useQuery({
         queryKey: ['ingredients', 'pick', search],
-        queryFn: ({ signal }) =>
-            apiRequest<Ingredient[]>(
-                `/api/ingredients?${new URLSearchParams({ search, limit: String(SUGGESTIONS) })}`,
-                { signal },
-            ),
+        queryFn: async ({ signal }) => {
+            const path = `/api/ingredients?${new URLSearchParams({ search, limit: String(SUGGESTIONS) })}`;
+            try {
+                return await apiRequest<Ingredient[]>(path, { signal });
+            } catch (error) {
+                if (!(error instanceof ApiError) || !error.isNetworkError) throw error;
+                // Offline: suggest from the copy, or nothing, so a new one can still be created
+                const copy = await loadOfflineCopy();
+                return listFromCopy(copy?.data.ingredients ?? [], search, 0, SUGGESTIONS);
+            }
+        },
         enabled: open && search !== '',
         placeholderData: keepPreviousData,
         staleTime: 30_000,
@@ -98,9 +112,18 @@ export function IngredientPicker({
 
     const createAndPick = (name: string) => {
         setCreateError(null);
+        if (name.length > LIMITS.ingredientName) {
+            setCreateError(`Keep the name to ${LIMITS.ingredientName} characters or fewer.`);
+            return;
+        }
         create.mutate(name, {
             onSuccess: (result) => pick(result.data),
             onError: async (failure) => {
+                // Offline: it's created when the recipe reaches the server
+                if (failure.isNetworkError) {
+                    pick({ id: null, name });
+                    return;
+                }
                 // Created elsewhere a moment ago: pick the one that exists
                 if (failure.status === 409) {
                     const found = await apiRequest<Ingredient[]>(`/api/ingredients?${new URLSearchParams({ search: name })}`).catch(
@@ -211,6 +234,9 @@ export function IngredientPicker({
                 <p id={`${errorId}-create`} className={styles.error}>
                     {createError}
                 </p>
+            )}
+            {picked?.id === null && picked.name === typed && (
+                <p className={styles.hint}>New: it's added to the ingredient list when this recipe reaches the server.</p>
             )}
         </div>
     );

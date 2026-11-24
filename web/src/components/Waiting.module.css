@@ -1,0 +1,58 @@
+/* Changes waiting on the device (3c): the recipe page's notice, the attention banner, and the list's tags */
+
+.notice {
+    margin: 0 0 16px;
+    padding: 12px 16px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface);
+    font-size: 0.875rem;
+    line-height: 1.45;
+}
+
+.attention {
+    border-color: var(--danger);
+    background: var(--danger-soft);
+}
+
+.banner {
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    border-radius: 14px;
+    background: var(--danger-soft);
+    color: var(--danger);
+    font-size: 0.875rem;
+    line-height: 1.45;
+}
+
+.banner p {
+    margin: 0;
+}
+
+.banner a {
+    color: inherit;
+    font-weight: 600;
+}
+
+.tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-2);
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.attentionTag {
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
+@media print {
+    .notice,
+    .banner {
+        display: none;
+    }
+}

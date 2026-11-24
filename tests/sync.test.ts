@@ -37,7 +37,7 @@ describe('GET /api/sync', () => {
 
             expect(response.status).toBe(200);
             expect(response.headers['content-type']).toMatch(/^application\/json/);
-            expect(Object.keys(response.body)).toEqual(['recipes', 'ingredients']);
+            expect(Object.keys(response.body)).toEqual(['recipes', 'ingredients', 'etags']);
             expect(response.body.recipes.map((recipe: { name: string }) => recipe.name)).toEqual([
                 'Apple Crumble',
                 'Beef Chili',
@@ -47,6 +47,25 @@ describe('GET /api/sync', () => {
                 const single = await request.get(`/api/recipes/${recipe.id}`);
                 expect(recipe).toEqual(single.body);
             }
+        });
+
+        test("gives each recipe's ETag, as its own GET sends it, so a copy can be edited with If-Match", async () => {
+            const created = await request.post('/api/recipes').send({ name: 'Apple Crumble' });
+
+            const response = await request.get('/api/sync');
+
+            const ids = response.body.recipes.map((recipe: { id: string }) => recipe.id);
+            expect(Object.keys(response.body.etags).sort()).toEqual([...ids].sort());
+            for (const id of ids) {
+                const single = await request.get(`/api/recipes/${id}`);
+                expect(response.body.etags[id]).toBe(single.headers.etag);
+            }
+            // And an edit made with it goes through
+            const edit = await request
+                .patch(`/api/recipes/${created.body.id}`)
+                .set('If-Match', response.body.etags[created.body.id])
+                .send({ description: 'With custard.' });
+            expect(edit.status).toBe(200);
         });
 
         test('keeps each recipe\'s lines in recipe order', async () => {

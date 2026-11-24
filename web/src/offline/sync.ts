@@ -4,8 +4,8 @@
  *
  * - **When:** at the moments every page already refreshes: the app starts,
  *   comes back to the front, or gets its connection back, this device saves
- *   a change, or Refresh is tapped. It follows TanStack Query's own focus
- *   and online signals, so the moments are exactly the same ones.
+ *   a change, or Refresh is tapped. It follows TanStack Query's focus signal,
+ *   and the browser's own "online" event.
  * - **Retrying:** a refresh that fails is tried again while the app is on
  *   screen, after 15 seconds, then at doubling intervals up to every 5
  *   minutes, until one gets through. It doesn't wait for the browser's
@@ -13,10 +13,14 @@
  *   still be out of reach, with Tailscale off, say. Nothing retries while
  *   the app is hidden; coming back to it is a refresh moment of its own,
  *   and each moment starts the schedule afresh.
- * - **Afterwards:** once a refresh succeeds, any page showing the copy
- *   fetches again from the API.
- *
- * Step 17 uploads changes waiting on the device at the start of each round.
+ * - **Reconnecting:** the "online" event can come a moment before requests
+ *   get through (Tailscale reconnecting, say), so a refresh that fails right
+ *   after it is tried again after 3 seconds, before the usual schedule.
+ * - **Uploads first:** each round uploads the changes waiting on the device
+ *   (Step 17, `upload.ts`), then fetches the snapshot, so the snapshot
+ *   already holds them. If the Pi can't be reached, the round stops there.
+ * - **Afterwards:** once a round succeeds, any page showing the copy fetches
+ *   again from the API.
  */
 
 import { focusManager, onlineManager, type QueryClient } from '@tanstack/react-query';
@@ -24,9 +28,12 @@ import { useSyncExternalStore } from 'react';
 import { ApiError, NETWORK_ERROR_MESSAGE, apiRequestIfChanged } from '../api/client';
 import { confirmOfflineCopy, isSnapshot, loadOfflineCopy, replaceOfflineCopy } from './copy';
 import { servedFromCopy } from './read';
+import { uploadWaitingChanges } from './upload';
 
 export const FIRST_RETRY_MS = 15_000;
 export const MAX_RETRY_MS = 5 * 60_000;
+/** The retry after a refresh that failed just as the connection came back. */
+export const RECONNECT_RETRY_MS = 3_000;
 
 /** How long to wait after the nth failure in a row: 15 s, 30 s, 1, 2 and 4 min, then 5 min each time. */
 export function retryDelay(failures: number): number {
@@ -74,6 +81,8 @@ let inFlight: Promise<void> | null = null;
 let again = false;
 let retryTimer: ReturnType<typeof setTimeout> | undefined;
 let failures = 0;
+// The connection has just come back, and no refresh has failed since
+let reconnected = false;
 let status: SyncStatus = { refreshing: false, lastError: null };
 const listeners = new Set<() => void>();
 
@@ -90,10 +99,17 @@ function cancelRetry(): void {
 function scheduleRetry(): void {
     cancelRetry();
     if (!focusManager.isFocused()) return;
+    let delay = retryDelay(failures);
+    if (reconnected) {
+        // A quick retry, not counted, so the usual schedule follows it from the start
+        reconnected = false;
+        failures = 0;
+        delay = RECONNECT_RETRY_MS;
+    }
     retryTimer = setTimeout(() => {
         retryTimer = undefined;
         if (!inFlight) void attempt();
-    }, retryDelay(failures));
+    }, delay);
 }
 
 function attempt(): Promise<void> {
@@ -102,9 +118,11 @@ function attempt(): Promise<void> {
     setStatus({ refreshing: true });
     const run = (async () => {
         try {
+            await uploadWaitingChanges(owner);
             await refreshOfflineCopy();
             if (client !== owner) return;
             failures = 0;
+            reconnected = false;
             setStatus({ lastError: null });
             void owner.invalidateQueries({ predicate: (query) => servedFromCopy(query.state.data) });
         } catch (error) {
@@ -160,11 +178,20 @@ export function noteUnreachable(): void {
 export function startSync(queryClient: QueryClient): () => void {
     stopSync();
     client = queryClient;
+    // TanStack Query assumes it starts online, and only hears of a change. An app
+    // started with no network would then never refetch its pages when the
+    // network came back
+    onlineManager.setOnline(navigator.onLine);
+    // The browser's own event, heard directly: it doesn't depend on what
+    // TanStack Query believed before it
+    const online = () => {
+        reconnected = true;
+        requestSync();
+    };
+    window.addEventListener('online', online);
     unsubscribe = [
         focusManager.subscribe((focused) => (focused ? requestSync() : cancelRetry())),
-        onlineManager.subscribe((online) => {
-            if (online) requestSync();
-        }),
+        () => window.removeEventListener('online', online),
     ];
     requestSync();
     return stopSync;
@@ -179,6 +206,7 @@ export function stopSync(): void {
     inFlight = null;
     again = false;
     failures = 0;
+    reconnected = false;
     status = { refreshing: false, lastError: null };
 }
 
