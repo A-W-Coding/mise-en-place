@@ -21,8 +21,14 @@ main() {
     #    the histories have diverged
     git pull --ff-only origin main
 
-    # 3. Build while the current version keeps serving (builds on ARM are slow)
-    compose build api
+    # 3. Download the newest postgres:17, then build while the current version
+    #    keeps serving (builds on ARM are slow). Without these, the Pi would
+    #    keep the images it first downloaded, and never get their security
+    #    fixes. The 17 tag only moves through 17.x releases, which keep the
+    #    same data format; `up -d` below restarts the database only if its
+    #    image changed. --pull does the same for the build's node:22-slim
+    compose pull db
+    compose build --pull api
 
     # 4. Run migrations with the new image before the new API starts.
     #    --no makes npx fail rather than download a different Prisma (D3)

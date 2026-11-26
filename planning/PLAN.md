@@ -3,8 +3,8 @@
 # Mise en place: hardening plan (Phase 1 to Phase 4)
 
 > **Status**
-> - Current step: **Phase 4's plan** (Steps 27–32), written 2026-11-26 after D16–D19 were settled; no step started yet. Next: Step 27, security fixes and fresh images on every deploy. **Phase 3 is complete (2026-11-26):** 3a (2026-11-23), 3c (2026-11-24) and 3b (Steps 20–26, PRs #24–#32, CI green), all deployed on the Pi and checked on your phone. Step 8 waits only on the SSD (8.1, about a month away)
-> - Last updated: 2026-11-26 (Phase 4's plan: D16–D19, Steps 27–32)
+> - Current step: **Step 27: security fixes, and fresh images on every deploy**, built (2026-11-26); its deploy is next (you), with CI to be confirmed when its PR opens. Then Step 28, Dependabot. Phase 4's plan (Steps 27–32, D16–D19) merged as PR #35. **Phase 3 is complete (2026-11-26):** 3a (2026-11-23), 3c (2026-11-24) and 3b (Steps 20–26, PRs #24–#32, CI green), all deployed on the Pi and checked on your phone. Step 8 waits only on the SSD (8.1, about a month away)
+> - Last updated: 2026-11-26 (Step 27: security fixes, and fresh images on every deploy)
 > - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
@@ -919,11 +919,11 @@ And: no known advisory in the API's production dependencies, and the Pi runs Pri
 
 **Why:** `npm audit --omit=dev` reports four advisories in packages Express uses, one of them critical (`proxy-addr`). And `deploy.sh` builds on whichever Node image the Pi first downloaded and never downloads `postgres:17` again, so the fixes in those images never arrive.
 
-- [ ] `npm audit fix` in the API: `body-parser`, `path-to-regexp`, `proxy-addr` and `qs`, each within its current major version, so only the lockfile changes. `npm audit --omit=dev` then reports nothing
-- [ ] The client's two moderate advisories (`glob` and `minimatch`, inside ESLint and Workbox's build tools) never reach the browser, and fixing them needs breaking updates: they're left to Dependabot (Step 28)
-- [ ] `deploy.sh` downloads before it builds: `compose pull db`, then `compose build --pull api`, so each deploy starts from the newest `node:22-slim` and `postgres:17`. The `17` tag only moves through 17.x releases, which keep the same data format. `up -d` then recreates the database container only when its image changed: a restart of a few seconds, after the deploy's backup
-- [ ] The runbook says so, and that a new Postgres major version (18) is a task of its own, since it needs a dump and restore
-- [ ] Tests: Jest, the client's Vitest, lint and type-check, and the end-to-end tests in Chromium here; CI runs Firefox
+- [x] `npm audit fix` in the API: `body-parser`, `path-to-regexp`, `proxy-addr` and `qs`, each within its current major version, so only the lockfile changes. `npm audit --omit=dev` then reports nothing. (As built: `body-parser` 2.4.0, `path-to-regexp` 8.4.2, `proxy-addr` 2.0.8, `qs` 6.17.1. The fix also moved ESLint and typescript-eslint up a minor version. A dev-only advisory under Jest, `brace-expansion` 1.1.12, went to 1.1.22 within its range with `npm update brace-expansion`, so `npm audit` reports nothing at all. sharp's packages for other platforms are all still in the lockfile)
+- [x] The client's two moderate advisories (`glob` and `minimatch`, inside ESLint and Workbox's build tools) never reach the browser, and fixing them needs breaking updates: they're left to Dependabot (Step 28)
+- [x] `deploy.sh` downloads before it builds: `compose pull db`, then `compose build --pull api`, so each deploy starts from the newest `node:22-slim` and `postgres:17`. The `17` tag only moves through 17.x releases, which keep the same data format. `up -d` then recreates the database container only when its image changed: a restart of a few seconds, after the deploy's backup
+- [x] The runbook says so, and that a new Postgres major version (18) is a task of its own, since it needs a dump and restore. (The README's deploy line too)
+- [x] Tests: Jest, the client's Vitest, lint and type-check, and the end-to-end tests in Chromium here; CI runs Firefox. (575 Jest, 311 Vitest, 70 end-to-end in Chromium, all passing. Both new Compose commands checked with `--dry-run` against the production file)
 - [ ] Deploy (you): the health check passes, and `docker compose exec db postgres --version` shows the newest 17.x
 
 **Done when:** CI is green, `npm audit --omit=dev` reports nothing, and the Pi runs it.
@@ -1950,3 +1950,11 @@ And: no known advisory in the API's production dependencies, and the Pi runs Pri
   - **Specs:** the design spec's Phase 4 and technical spec §6.3 now name the choices.
 
   Next: Step 27, security fixes and fresh images on every deploy.
+- **2026-11-26:** Phase 4's plan merged (PR #35). Step 27 built: security fixes, and fresh images on every deploy.
+  - **The advisories:** `npm audit fix` moved `body-parser` to 2.4.0, `path-to-regexp` to 8.4.2, `proxy-addr` to 2.0.8 (the critical one) and `qs` to 6.17.1, all inside Express's version ranges, so only `package-lock.json` changed; it also moved ESLint and typescript-eslint up a minor version. One dev-only advisory was left, `brace-expansion` 1.1.12 under Jest 29's `glob`, and `npm update brace-expansion` took it to 1.1.22 within its range. `npm audit` now reports nothing, for production or development. The client's two (`glob` and `minimatch`, in ESLint and Workbox's build tools) need breaking updates and never reach the browser: Dependabot's.
+  - **Checked first:** npm on Windows can drop other platforms' optional packages from a lockfile, which would break `npm ci` in CI and on the Pi. sharp's 29 platform packages, `linux-arm64` and `linux-x64` among them, are all still there.
+  - **Fresh images:** `deploy.sh` now runs `compose pull db` and `compose build --pull api` before building, so each deploy starts from the newest `postgres:17` and `node:22-slim`. Before, the Pi kept the images it first downloaded. `up -d` restarts the database only when its image changed. Both commands were checked with Compose's `--dry-run` against the production file.
+  - **Docs:** the runbook (what a deploy downloads, a command for the running PostgreSQL version, and why PostgreSQL 18 is a task of its own) and the README's deploy line.
+  - **Tests:** 575 Jest, 311 Vitest, and 70 end-to-end in Chromium, all passing; lint and type-check clean.
+
+  Next: your deploy, then Step 28, Dependabot.

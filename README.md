@@ -166,7 +166,7 @@ curl -X POST http://localhost:3000/api/ingredients \
 
 ## Deployment
 
-From Phase 2 the app runs on a Raspberry Pi, in Docker, on `127.0.0.1:3000` only. `tailscale serve` publishes it over HTTPS to your own devices, and the database has no published port. The API serves the web client too, so the app and its data share one address: open it in Firefox on your phone and choose Install from the menu. `scripts/deploy.sh` backs up, pulls `main`, builds, migrates and waits for the health check; `scripts/backup.sh` runs daily from cron, and `scripts/offsite.sh` then keeps an encrypted copy in Backblaze B2. [`docs/deployment.md`](docs/deployment.md) covers the setup, from the operating system to the restore test.
+From Phase 2 the app runs on a Raspberry Pi, in Docker, on `127.0.0.1:3000` only. `tailscale serve` publishes it over HTTPS to your own devices, and the database has no published port. The API serves the web client too, so the app and its data share one address: open it in Firefox on your phone and choose Install from the menu. `scripts/deploy.sh` backs up, pulls `main`, downloads the newest PostgreSQL 17 and Node 22 images, builds, migrates and waits for the health check; `scripts/backup.sh` runs daily from cron, and `scripts/offsite.sh` then keeps an encrypted copy in Backblaze B2. [`docs/deployment.md`](docs/deployment.md) covers the setup, from the operating system to the restore test.
 
 ## Project structure
 
