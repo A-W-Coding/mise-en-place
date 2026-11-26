@@ -8,7 +8,7 @@ Sections 1–7 are a one-time setup, and section 8 installs the app on your phon
 |---|---|
 | `docker-compose.prod.yml` | The API and PostgreSQL 17, with restart policies and healthchecks. Project name `miseenplace-prod` |
 | `Dockerfile` | The app's image: built on the Pi, in three stages (the API, the web client, then the image itself, which keeps only the client's built files). Runs as the non-root `node` user, and includes the Prisma CLI for migrations |
-| `scripts/deploy.sh` | Backs up, pulls `main`, builds, migrates, restarts, and waits for the health check |
+| `scripts/deploy.sh` | Backs up, pulls `main`, downloads the newest `postgres:17` and `node:22-slim` images, builds, migrates, restarts, and waits for the health check |
 | `scripts/backup.sh` | Dumps the database into the backups folder, checks the dump, and removes dumps older than 7 days |
 | `scripts/restore-check.sh` | Restores a dump into a scratch database and compares row counts with the live one |
 | `scripts/offsite.sh` | Keeps an encrypted copy of the backups folder in Backblaze B2, with restic |
@@ -231,6 +231,7 @@ All of these run in `~/mise-en-place` on the Pi:
 | API logs | `docker compose logs -f api` |
 | Back up now | `scripts/backup.sh` |
 | Check the newest backup restores | `scripts/restore-check.sh` |
+| Which PostgreSQL the database runs | `docker compose exec db postgres --version` |
 | Copy the backups to B2 now | `scripts/offsite.sh` |
 | List the copies in B2 | `scripts/offsite.sh snapshots` |
 | How much room the images take | `docker compose run --rm --no-deps --entrypoint du api -sh /app/media` |
@@ -238,6 +239,8 @@ All of these run in `~/mise-en-place` on the Pi:
 Backups go to `/srv/miseenplace/backups`. Set `BACKUP_DIR` to use another folder, and `KEEP_DAYS` to keep backups for longer than 7 days.
 
 Never run `docker compose down -v`: `-v` deletes the database volume and the images volume.
+
+Each deploy downloads the newest `postgres:17` image and builds from the newest `node:22-slim`, so their security fixes arrive with it. The `17` tag only moves through 17.x releases, which keep the same data format, and the database restarts for a few seconds only when its image has changed, after the deploy's backup. A new major version of PostgreSQL (18) is a task of its own: its data format differs, so it needs a dump and a restore, never just a new tag in the Compose file.
 
 ### Restoring for real
 
