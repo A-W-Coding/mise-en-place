@@ -64,6 +64,21 @@ export interface RecipeEquipment {
     equipment: Equipment;
 }
 
+/**
+ * One of a recipe's photos, as the API stored it: re-encoded to WebP (3b).
+ * Its files are `/media/<id>.webp` and `/media/<id>-thumb.webp`.
+ */
+export interface RecipeImage {
+    id: string;
+    recipeId: string;
+    /** Upload order. */
+    orderIndex: number;
+    width: number;
+    height: number;
+    fileSize: number;
+    createdAt: string;
+}
+
 /** One step of a section's method (3b). */
 export interface Step {
     id: string;
@@ -97,6 +112,8 @@ export interface RecipeSummary {
     updatedAt: string;
     /** In the recipe's order: the list shows the first two (3b). */
     tags: RecipeTag[];
+    /** The main photo, for the list's thumbnail and the page's header, or none (3b). */
+    primaryImageId: string | null;
 }
 
 /** A whole recipe, from `GET /api/recipes/:id`. From 3b, its method is `sections`, and it has equipment lines. */
@@ -104,4 +121,6 @@ export interface Recipe extends RecipeSummary {
     sections: RecipeSection[];
     recipeIngredients: RecipeIngredient[];
     equipment: RecipeEquipment[];
+    /** Its photos, in upload order (3b). */
+    images: RecipeImage[];
 }

@@ -18,7 +18,7 @@ import { recordSaved, sendRecipeChange } from '../offline/upload';
 import { discardWaitingChange, keepWaitingChange, waitingChangeFor, type ChangeToKeep } from '../offline/waiting';
 import { ApiError, apiRequest, type ApiResult } from './client';
 import { queryKeys } from './queries';
-import type { Recipe } from './types';
+import type { Recipe, RecipeImage } from './types';
 
 const RECIPE_LISTS = ['recipes', 'list'] as const;
 
@@ -145,4 +145,53 @@ export function useRenameIngredient() {
 /** Delete a shared ingredient. The API refuses with 409 while a recipe uses it. */
 export function useDeleteIngredient() {
     return useDeleteShared('ingredients');
+}
+
+// ── Photos (3b) ─────────────────────────────────────────────────────────────
+// Each needs the Pi: an upload is checked and re-encoded there, so there's no
+// offline version. Afterwards the recipe and the lists refresh, and so does
+// the offline copy, which caches the new thumbnail.
+
+/** The things a photo change makes stale: the recipe, the lists' thumbnails, and the copy. */
+function photosChanged(queryClient: ReturnType<typeof useQueryClient>, recipeId: string) {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.recipe(recipeId) });
+    void queryClient.invalidateQueries({ queryKey: RECIPE_LISTS });
+    requestSync();
+}
+
+/** Add one photo to a recipe: the file as it was chosen, in the form field the API reads. */
+export function useUploadPhoto(recipeId: string) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (file: File) => {
+            const form = new FormData();
+            form.append('image', file, file.name);
+            return apiRequest<RecipeImage>(`/api/recipes/${encodeURIComponent(recipeId)}/images`, { method: 'POST', body: form });
+        },
+        onSettled: () => photosChanged(queryClient, recipeId),
+    });
+}
+
+/** Delete a photo and its files. If it was the main one, the API makes the next one main. */
+export function useDeletePhoto(recipeId: string) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (imageId: string) => apiRequest<unknown>(`/api/images/${encodeURIComponent(imageId)}`, { method: 'DELETE' }),
+        onSettled: () => photosChanged(queryClient, recipeId),
+    });
+}
+
+/**
+ * Make a photo the recipe's main one. It sends that one field and no
+ * `If-Match`: it changes nothing else, so it can't overwrite an edit made
+ * elsewhere.
+ */
+export function useSetMainPhoto(recipeId: string) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (imageId: string) =>
+            apiRequest<Recipe>(`/api/recipes/${encodeURIComponent(recipeId)}`, { method: 'PATCH', body: { primaryImageId: imageId } }),
+        onSuccess: (result) => queryClient.setQueryData(queryKeys.recipe(recipeId), result),
+        onSettled: () => photosChanged(queryClient, recipeId),
+    });
 }

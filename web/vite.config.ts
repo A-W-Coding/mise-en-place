@@ -11,7 +11,8 @@ export default defineConfig({
     plugins: [
         react(),
         // The app installs from the browser (Step 13). The service worker caches the
-        // app's own files, so it opens with no connection; offline data comes in 3c.
+        // app's own files, so it opens with no connection; the offline copy (3c) has the
+        // recipes, and from 3b the worker keeps their photos too.
         // It's built only for production: `npm run dev` has none, so nothing is stale.
         VitePWA({
             // A new deploy takes over as soon as it's downloaded, and the page reloads
@@ -45,6 +46,30 @@ export default defineConfig({
                 // offline without a second start, and an update can reload into itself
                 clientsClaim: true,
                 skipWaiting: true,
+                // Recipe photos (3b): a file never changes, since a new upload gets a new id,
+                // so a cached one is always right. The cache names match src/images/media.ts,
+                // which fills the thumbnails ahead of time and drops deleted photos' files
+                runtimeCaching: [
+                    {
+                        // Every thumbnail, kept until its photo is deleted
+                        urlPattern: /\/media\/[0-9a-f-]+-thumb\.webp$/,
+                        handler: 'CacheFirst',
+                        options: {
+                            cacheName: 'mise-en-place-thumbnails',
+                            cacheableResponse: { statuses: [200] },
+                        },
+                    },
+                    {
+                        // Full photos as they're viewed, the most recent 100
+                        urlPattern: /\/media\/[0-9a-f-]+\.webp$/,
+                        handler: 'CacheFirst',
+                        options: {
+                            cacheName: 'mise-en-place-images',
+                            cacheableResponse: { statuses: [200] },
+                            expiration: { maxEntries: 100 },
+                        },
+                    },
+                ],
             },
         }),
     ],

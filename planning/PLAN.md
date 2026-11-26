@@ -3,8 +3,8 @@
 # Mise en place: hardening plan (Phase 1 to Phase 3b)
 
 > **Status**
-> - Current step: **Step 24: images in the API and on the Pi**, done (2026-11-26), with CI to be confirmed when its PR opens; not deployed (3b deploys in Step 26). Next: Step 25, images in the app. Step 23 merged as PR #28 (CI green). Step 22 merged as PR #27 (CI green). Step 21 (the 3b wireframes) merged as PR #26. Step 20 merged as PR #25 (CI green); it isn't deployed (3b deploys in Step 26). Phase 3b's steps merged as PR #24. Phase 3c is complete (2026-11-24): Steps 15–19 merged (PRs #18–#22), deployed on the Pi, and every success criterion met on your phone. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
-> - Last updated: 2026-11-26 (Step 24: images in the API and on the Pi)
+> - Current step: **Step 25: images in the app**, done (2026-11-26), with CI to be confirmed when its PR opens. Next: Step 26, deploy, check on the phone and drop `instructions` (Phase 3b done). Step 24 merged as PR #29 (CI green); none of 3b is deployed yet. Step 23 merged as PR #28 (CI green). Step 22 merged as PR #27 (CI green). Step 21 (the 3b wireframes) merged as PR #26. Step 20 merged as PR #25 (CI green); it isn't deployed (3b deploys in Step 26). Phase 3b's steps merged as PR #24. Phase 3c is complete (2026-11-24): Steps 15–19 merged (PRs #18–#22), deployed on the Pi, and every success criterion met on your phone. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
+> - Last updated: 2026-11-26 (Step 25: images in the app)
 > - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
@@ -863,15 +863,15 @@ And since 3c came first, its criteria still hold with all of this: offline, reci
 
 **Why:** the last of 3b's features, now the API is ready (Step 24).
 
-- [ ] Images live on the recipe page, not in the editor, as the wireframes settled: the main image heads the page, labelled with how many there are ("3 photos"), and opens the recipe's Photos page:
+- [x] Images live on the recipe page, not in the editor, as the wireframes settled: the main image heads the page, labelled with how many there are ("3 photos"), and opens the recipe's Photos page:
   - "Add photo" (the phone offers its camera or its photos), with the rules beside it: JPEG, PNG or WebP, up to 15 MB, location removed
-  - a grid in upload order, the main one marked, an upload in progress shown in its place, and "3 of 10"
+  - a grid in upload order, the main one marked, an upload in progress shown in its place, and "3 of 10". (As built: the upload shows a moving bar, not a percentage: `fetch` can't report how much has been sent, and the one API client stays on it)
   - each photo's ⋮ menu: Make main photo, View full size, and Delete photo…, asking first
   - a refused file named in the message ("party.gif wasn't added. Only JPEG, PNG and WebP images are accepted."), and the 10-image limit explained
   - offline, Add photo is disabled and says it needs a connection; a recipe that hasn't uploaded yet says "Add photos once it's uploaded"
-- [ ] The list shows each recipe's main image as a thumbnail (a plain plate when it has none), and on a desktop the tiles show it larger
-- [ ] Offline (§3.4): the service worker caches every thumbnail ahead of time, after each snapshot refresh, and full images as they're viewed, the most recent 100. A deleted image's files drop out as they expire
-- [ ] Tests:
+- [x] The list shows each recipe's main image as a thumbnail (a plain plate when it has none), and on a desktop the tiles show it larger
+- [x] Offline (§3.4): the service worker caches every thumbnail ahead of time, after each snapshot refresh, and full images as they're viewed, the most recent 100. A deleted image's files drop out as they expire. (As built: rather than waiting for them to expire, the same pass after each refresh drops the cached files of photos the snapshot no longer has)
+- [x] Tests:
   - component: the gallery, choosing the main image, and adding one offline saying it needs a connection
   - Playwright: upload an image and make it the main one, see its thumbnail in the list, then go offline and still see it
 
@@ -1777,3 +1777,20 @@ And since 3c came first, its criteria still hold with all of this: offline, reci
   - **Docs:** `docs/api.md` (the Image object, the endpoints, `/media`, `primaryImageId`, 413 and 415), `docs/architecture.md`, `docs/deployment.md` and the README.
 
   Next: Step 25, images in the app.
+- **2026-11-26:** Step 24 merged (PR #29, CI green). Step 25 done: images in the app.
+  - **The recipe page:** the main photo across the top (rounded and inside the page on a desktop), with "3 photos", opening the Photos page. A recipe with none has "Add photos" under its times; a new one still waiting on the device says "Add photos once it's uploaded". Printing leaves the photo out.
+  - **The Photos page** (`/recipes/:id/photos`):
+    - Add photo: a file input for JPEG, PNG and WebP, so a phone offers its camera or its photos (and an iPhone sends JPEG, not HEIC); several at once, uploaded one after another to spare the Pi, each shown as a tile with a moving bar
+    - the rules beside it; a file over 15 MB refused before it's sent; more than fit cut off with "Only 1 more photo fits, so b.jpg wasn't added."; a refused file named in its message, as the API words it
+    - the grid in upload order, the main one marked; a photo's ⋮ menu has Make main photo (a PATCH of that one field, so no If-Match: it can't overwrite anything else), View full size (over the page, in a `<dialog>`, so the installed app doesn't open a tab) and Delete photo…, asking first and saying when the next photo becomes the main one
+    - offline, Add photo, Make main and Delete are off, and the page says it needs a connection; 10 photos says so, and Add photo is off
+  - **The list:** each row's thumbnail, or a plain plate; a desktop tile shows it across its top. A photo that can't load (offline, not cached) shows the plate rather than a broken image.
+  - **Offline:** the service worker caches `/media` files: thumbnails in one cache, kept, and full photos as they're viewed in another, the latest 100 (Workbox, `CacheFirst`, since a file never changes). After every successful refresh, `cacheThumbnails()` drops the cached files of photos the snapshot no longer has, and fetches the thumbnails not cached yet, four at a time. A copy from before this, without `images`, is fetched again whole.
+  - **The API client** sends a `FormData` body as it is, for uploads. A waiting change shows the recipe's photos as they were, since a change doesn't carry photos.
+  - **Found in the browser pane:** a photo in the first column opened its ⋮ menu off the left edge of a phone. Those now open rightwards (column 1 of 3 on a phone, of 4 on a desktop).
+  - **Tests:**
+    - The client: 311, 17 of them new: the Photos page (order and the main mark, uploading two in the field `image`, a refused file named, one over 15 MB never sent, only as many as fit, the limit of 10, making one main with no If-Match, deleting with its question, viewing full size, offline, and a recipe not uploaded yet), the recipe page's main photo and "Add photos", the list's thumbnails and plate, and `cacheThumbnails()` against a stand-in Cache Storage (fetching only what's missing, dropping deleted photos' files, leaving out what doesn't arrive).
+    - Playwright: `photos.spec.ts` uploads two photos (`e2e/fixtures/`, made with sharp), makes the second main, checks the recipe page and the list's thumbnail, waits for both thumbnails in the service worker's cache, then goes offline and still sees it, with Add photo off; and a refused file, then deleting the only photo. The end-to-end API writes photos to a temporary folder, emptied before each run. All 70 pass in Chromium; Firefox runs in CI.
+  - **Docs:** no API change, so none.
+
+  Next: Step 26, deploy, check on the phone, and drop `instructions` (Phase 3b done).

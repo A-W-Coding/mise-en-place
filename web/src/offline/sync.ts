@@ -26,7 +26,8 @@
 import { focusManager, onlineManager, type QueryClient } from '@tanstack/react-query';
 import { useSyncExternalStore } from 'react';
 import { ApiError, NETWORK_ERROR_MESSAGE, apiRequestIfChanged } from '../api/client';
-import { confirmOfflineCopy, isSnapshot, loadOfflineCopy, replaceOfflineCopy } from './copy';
+import { cacheThumbnails } from '../images/media';
+import { confirmOfflineCopy, getOfflineCopyState, isSnapshot, loadOfflineCopy, replaceOfflineCopy } from './copy';
 import { servedFromCopy } from './read';
 import { uploadWaitingChanges } from './upload';
 
@@ -120,6 +121,9 @@ function attempt(): Promise<void> {
         try {
             await uploadWaitingChanges(owner);
             await refreshOfflineCopy();
+            // Thumbnails for offline (3b), in the background: the refresh has succeeded either way
+            const copy = getOfflineCopyState().copy;
+            if (copy) void cacheThumbnails(copy.data).catch((error: unknown) => console.warn("Thumbnails couldn't be cached.", error));
             if (client !== owner) return;
             failures = 0;
             reconnected = false;

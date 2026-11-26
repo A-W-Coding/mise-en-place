@@ -124,6 +124,9 @@ export function fakeServer(seed: { recipes?: Recipe[] } = {}) {
                 ingredient: ingredients.get(line.ingredientId)!,
             })),
             tags: (input.tagIds ?? []).map((tagId, orderIndex) => ({ recipeId: id, tagId, orderIndex, tag: tags.get(tagId)! })),
+            // Images are added through their own endpoint, which this stand-in hasn't: a recipe keeps what it had
+            images: recipes.get(id)?.images ?? [],
+            primaryImageId: recipes.get(id)?.primaryImageId ?? null,
             equipment: (input.equipment ?? []).map((line, orderIndex) => ({
                 id: `${id}-equipment-${orderIndex}`,
                 recipeId: id,

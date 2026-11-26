@@ -19,6 +19,9 @@
  *   answer as if it were current, rather than the offline copy and its
  *   banner.
  *
+ * A `FormData` body is sent as it is, for an image upload (3b); anything
+ * else as JSON.
+ *
  * Paths are relative ("/api/recipes"): the client is served from the same
  * origin as the API, in production and in development (F1).
  */
@@ -58,7 +61,7 @@ export interface ApiResult<T> {
 
 export interface RequestOptions {
     method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
-    /** Sent as JSON. */
+    /** Sent as JSON, or as it is when it's `FormData` (an upload). */
     body?: unknown;
     /** Sent as `If-Match`, so the write fails with 412 if the recipe changed elsewhere. */
     ifMatch?: string | null;
@@ -95,7 +98,9 @@ interface SendOptions extends RequestOptions {
 /** Send a request, turning no answer at all into a network error. */
 async function send(path: string, options: SendOptions): Promise<Response> {
     const headers: Record<string, string> = { Accept: 'application/json' };
-    if (options.body !== undefined) headers['Content-Type'] = 'application/json';
+    // The browser writes a form's Content-Type itself, with its boundary
+    const form = options.body instanceof FormData;
+    if (options.body !== undefined && !form) headers['Content-Type'] = 'application/json';
     if (options.ifMatch) headers['If-Match'] = options.ifMatch;
     if (options.ifNoneMatch) headers['If-None-Match'] = options.ifNoneMatch;
 
@@ -103,7 +108,7 @@ async function send(path: string, options: SendOptions): Promise<Response> {
         return await fetch(path, {
             method: options.method ?? 'GET',
             headers,
-            body: options.body === undefined ? undefined : JSON.stringify(options.body),
+            body: options.body === undefined ? undefined : form ? (options.body as FormData) : JSON.stringify(options.body),
             signal: options.signal,
             cache: 'no-store',
         });

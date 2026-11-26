@@ -21,7 +21,9 @@
  * with no heading, and the method is shown by section. A step with a timer
  * has a button that starts it with one tap. All of the recipe's tags show
  * under its name, each opening the list filtered by it, and its equipment
- * follows the ingredients.
+ * follows the ingredients. The main photo heads the page, labelled with how
+ * many there are, and opens the recipe's Photos page; a recipe with none
+ * offers to add one, unless it hasn't reached the server yet.
  *
  * The cooking mode switch keeps the screen on, and changes nothing else: the
  * whole recipe stays readable. It's off for each recipe you open, and leaving
@@ -40,6 +42,9 @@ import { SettleChange, WaitingNotice } from '../components/Waiting';
 import { CookingMode } from '../cooking/CookingMode';
 import { StepTimerButton } from '../timers/StepTimerButton';
 import { pillColours, tagLabel } from '../tags/colour';
+import { imageUrl } from '../images/media';
+import { Photo } from '../images/Photo';
+import { CameraIcon, PhotoIcon } from '../components/Icons';
 import { BackLink } from '../components/BackLink';
 import { DeleteRecipeDialog } from '../components/DeleteRecipeDialog';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -112,6 +117,8 @@ export function RecipePage() {
             {recipe && (
                 <RecipeContent
                     recipe={recipe}
+                    // A new recipe still on this device has no photos until it reaches the server
+                    uploaded={!(change?.kind === 'create' && data === undefined)}
                     onDelete={() => setDeleting(true)}
                     cooking={cooking}
                     onCookingChange={(on) => setCookingFor(on ? id : null)}
@@ -129,20 +136,37 @@ export function RecipePage() {
 
 interface RecipeContentProps {
     recipe: Recipe;
+    uploaded: boolean;
     onDelete: () => void;
     cooking: boolean;
     onCookingChange: (on: boolean) => void;
 }
 
-function RecipeContent({ recipe, onDelete, cooking, onCookingChange }: RecipeContentProps) {
+function RecipeContent({ recipe, uploaded, onDelete, cooking, onCookingChange }: RecipeContentProps) {
     // A section with no steps only groups ingredient lines; the method leaves it out
     const method = recipe.sections.filter((section) => section.steps.length > 0);
     // One section called "Method" needs no heading of its own: it's what a migrated recipe has
     const named = method.length > 1 || (method.length === 1 && method[0]?.name !== 'Method');
     const groups = ingredientGroups(recipe);
 
+    const photos = recipe.images.length;
+    const mainPhoto = recipe.primaryImageId ?? recipe.images[0]?.id ?? null;
+
     return (
         <>
+            {photos > 0 && (
+                <Link
+                    to={`/recipes/${recipe.id}/photos`}
+                    className={styles.mainPhoto}
+                    aria-label={`${recipe.name}'s photos: ${photos === 1 ? '1 photo' : `${photos} photos`}`}
+                >
+                    <Photo src={mainPhoto && imageUrl(mainPhoto)} alt="" className={styles.mainPhotoImage} plateSize={48} />
+                    <span className={styles.photoCount}>
+                        <PhotoIcon size={16} />
+                        {photos === 1 ? '1 photo' : `${photos} photos`}
+                    </span>
+                </Link>
+            )}
             <header className={styles.intro}>
                 <div className={styles.titleRow}>
                     <h1 className={styles.title}>{recipe.name}</h1>
@@ -175,6 +199,15 @@ function RecipeContent({ recipe, onDelete, cooking, onCookingChange }: RecipeCon
                 )}
                 {recipe.description && <p className={styles.description}>{recipe.description}</p>}
                 <p className={styles.meta}>{recipeMeta(recipe)}</p>
+                {photos === 0 &&
+                    (uploaded ? (
+                        <Link to={`/recipes/${recipe.id}/photos`} className={styles.addPhotos}>
+                            <CameraIcon size={18} />
+                            Add photos
+                        </Link>
+                    ) : (
+                        <p className={styles.addPhotosLater}>Add photos once it's uploaded.</p>
+                    ))}
                 <div className={styles.cooking}>
                     <CookingMode on={cooking} onChange={onCookingChange} />
                 </div>

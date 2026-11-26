@@ -4,7 +4,7 @@
  * offline copies made from them.
  */
 
-import type { Equipment, Recipe, RecipeEquipment, RecipeIngredient, RecipeSection, RecipeSummary, RecipeTag, Tag } from '../api/types';
+import type { Equipment, Recipe, RecipeEquipment, RecipeImage, RecipeIngredient, RecipeSection, RecipeSummary, RecipeTag, Tag } from '../api/types';
 import { replaceOfflineCopy, type Snapshot } from '../offline/copy';
 
 const STAMP = '2026-11-23T10:00:00.000Z';
@@ -24,6 +24,7 @@ export function summary(name: string, overrides: Partial<RecipeSummary> = {}): R
         createdAt: STAMP,
         updatedAt: STAMP,
         tags: [],
+        primaryImageId: null,
         ...overrides,
     };
 }
@@ -115,11 +116,13 @@ export const beefChiliSummary: RecipeSummary = {
     createdAt: STAMP,
     updatedAt: STAMP,
     tags: [],
+    primaryImageId: null,
 };
 
 export const beefChili: Recipe = {
     ...beefChiliSummary,
     equipment: [],
+    images: [],
     sections: [
         section(BEEF_CHILI_ID, 0, 'Method', [
             'Heat some oil and cook the onions.',
@@ -152,6 +155,8 @@ export const lemonDrizzle: Recipe = {
     recipeIngredients: [],
     tags: [],
     equipment: [],
+    images: [],
+    primaryImageId: null,
 };
 
 /** A recipe's ETag in the tests: its updatedAt, quoted, as the API happens to make them. */
@@ -182,4 +187,16 @@ export const DAY_MS = 24 * 60 * 60 * 1000;
 /** Store an offline copy of these recipes, made `ageMs` ago. */
 export function seedCopy(recipes: Recipe[], ageMs = 0, etag = '"snapshot-1"'): Promise<void> {
     return replaceOfflineCopy(snapshotOf(recipes), etag, Date.now() - ageMs);
+}
+
+/** A photo of a recipe, as the API returns it (3b). */
+export function photo(recipeId: string, orderIndex: number, width = 2000, height = 1500): RecipeImage {
+    const id = `60000000-0000-4000-8000-${recipeId.slice(-6)}${String(orderIndex).padStart(6, '0')}`;
+    return { id, recipeId, orderIndex, width, height, fileSize: 250_000, createdAt: STAMP };
+}
+
+/** A recipe with these photos, the first of them its main one unless said otherwise. */
+export function withPhotos(recipe: Recipe, count: number, main = 0): Recipe {
+    const images = Array.from({ length: count }, (_, index) => photo(recipe.id, index));
+    return { ...recipe, images, primaryImageId: images[main]?.id ?? null };
 }

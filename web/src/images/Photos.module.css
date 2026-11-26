@@ -1,0 +1,289 @@
+/* The Photos page (3b) */
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 48rem;
+}
+
+.headingRow {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+}
+
+.heading {
+    flex-grow: 1;
+    margin: 0;
+    font-size: 1.75rem;
+    font-weight: 700;
+}
+
+.count {
+    font-size: 0.9375rem;
+    color: var(--muted);
+}
+
+.add {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* The real file input, out of sight: its label is the button */
+.fileInput {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+}
+
+.addButton {
+    min-height: 52px;
+    border-radius: var(--radius-pill);
+    background: var(--accent);
+    color: var(--accent-text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.fileInput:focus-visible + .addButton {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+}
+
+.addButton[aria-disabled='true'] {
+    background: var(--surface2);
+    color: var(--muted);
+    cursor: default;
+}
+
+.hint {
+    margin: 0;
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    color: var(--muted);
+}
+
+.messages {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: var(--danger-soft);
+    color: var(--text);
+}
+
+.message {
+    margin: 0;
+    font-size: 0.9375rem;
+    line-height: 1.45;
+}
+
+.dismiss {
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--text);
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.tile {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    border-radius: 12px;
+    background: var(--surface);
+}
+
+.tileButton {
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: none;
+    border-radius: 12px;
+    overflow: hidden;
+    background: none;
+    cursor: zoom-in;
+}
+
+.tileImage {
+    width: 100%;
+    height: 100%;
+}
+
+.mainBadge {
+    position: absolute;
+    left: 6px;
+    top: 6px;
+    min-height: 24px;
+    padding: 0 8px;
+    border-radius: var(--radius-pill);
+    background: var(--accent);
+    color: var(--accent-text);
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    pointer-events: none;
+}
+
+.tileMenu {
+    position: absolute;
+    right: 4px;
+    top: 4px;
+}
+
+/* The menu opens leftwards from its button; in the first column that would leave the screen, so it opens rightwards */
+.tile:nth-child(3n + 1) .tileMenu [role='menu'] {
+    left: 0;
+    right: auto;
+}
+
+.tileMenuButton {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgb(16 24 40 / 0.6);
+    color: #ffffff;
+}
+
+.tileMenuButton:hover,
+.tileMenuButton[aria-expanded='true'] {
+    background: rgb(16 24 40 / 0.8);
+    color: #ffffff;
+}
+
+.uploading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.uploadingText {
+    width: 85%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-align: center;
+    overflow-wrap: anywhere;
+}
+
+/* No percentage to show (fetch doesn't report upload progress), so a bar that keeps moving */
+.progress {
+    position: relative;
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--border);
+    overflow: hidden;
+}
+
+.progress::after {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 40%;
+    border-radius: 3px;
+    background: var(--accent);
+    animation: travel 1.2s ease-in-out infinite;
+}
+
+@keyframes travel {
+    from {
+        transform: translateX(-100%);
+    }
+    to {
+        transform: translateX(250%);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .progress::after {
+        animation: none;
+        width: 100%;
+        opacity: 0.6;
+    }
+}
+
+/* Full size, over the page */
+.viewer {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100vh;
+    max-height: 100vh;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: rgb(0 0 0 / 0.92);
+}
+
+.viewer::backdrop {
+    background: rgb(0 0 0 / 0.6);
+}
+
+.viewerImage {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.viewerClose {
+    position: absolute;
+    right: 12px;
+    top: 12px;
+    width: var(--tap);
+    height: var(--tap);
+    border: none;
+    border-radius: 50%;
+    background: rgb(255 255 255 / 0.15);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+@media (min-width: 768px) {
+    .grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+    }
+
+    /* Four columns here: undo the phone's rule, then open the first column's rightwards */
+    .tile:nth-child(3n + 1) .tileMenu [role='menu'] {
+        left: auto;
+        right: 0;
+    }
+
+    .tile:nth-child(4n + 1) .tileMenu [role='menu'] {
+        left: 0;
+        right: auto;
+    }
+
+    .addButton {
+        align-self: flex-start;
+        padding: 0 24px;
+    }
+}
