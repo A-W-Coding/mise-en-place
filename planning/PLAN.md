@@ -1,10 +1,10 @@
 > Created on 27 September 2026. This is the live copy: progress is ticked off here as each step is done.
 
-# Mise en place: hardening plan (Phase 1 to Phase 3b)
+# Mise en place: hardening plan (Phase 1 to Phase 4)
 
 > **Status**
-> - Current step: **Step 26: deploy, check on the phone, and drop `instructions`**, done (2026-11-26). **Phase 3b, and with it Phase 3, is complete:** Phase 3b's plan and Steps 20–26 merged (PRs #24–#32, CI green), deployed on the Pi, and every 3b success criterion met on your phone. Phase 3c is complete (2026-11-24), and Phase 3a (2026-11-23). This plan ends here: Phase 4 (hardening and monitoring, in the Backlog) needs a plan of its own. Step 8 waits only on the SSD (8.1, about a month away)
-> - Last updated: 2026-11-26 (Step 26: Phase 3b, and with it Phase 3, complete)
+> - Current step: **Phase 4's plan** (Steps 27–32), written 2026-11-26 after D16–D19 were settled; no step started yet. Next: Step 27, security fixes and fresh images on every deploy. **Phase 3 is complete (2026-11-26):** 3a (2026-11-23), 3c (2026-11-24) and 3b (Steps 20–26, PRs #24–#32, CI green), all deployed on the Pi and checked on your phone. Step 8 waits only on the SSD (8.1, about a month away)
+> - Last updated: 2026-11-26 (Phase 4's plan: D16–D19, Steps 27–32)
 > - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
@@ -61,6 +61,10 @@ The rule that reconciles them: **settle the spec first, then bring the code in l
 | D13 | Styling | **Plain CSS with CSS Modules**, built into Vite. Nothing new to learn or upgrade, styles are scoped to each component, and CSS custom properties hold the sizes and colours cooking mode and printing override. Alternatives: Tailwind (utility classes in the markup, quick once learned) or a component library such as Mantine (ready-made forms and dialogs, but heavier and opinionated) | Step 10 | **Decided 2026-11-23: CSS Modules.** Plain CSS, one `*.module.css` file per component with its class names scoped to it, and the theme's colours and sizes as CSS custom properties. No Tailwind or component library. Settled after the UI wireframes |
 | D14 | Timer alerts when the app isn't on screen | **Web Push from the Pi.** On Android, Firefox pauses a page soon after you switch away, so the page alone can't ring at zero. Instead, the app tells the Pi when a timer starts, and at zero the Pi sends a push, which the phone shows as a notification with sound and vibration, whatever app is open. It needs notification permission (asked once, at the first timer), VAPID keys in the Pi's `.env`, a small table of running timers so a restart can't lose one (3a's only schema change), and a connection at that moment. The push travels encrypted through Mozilla's push service. Firefox for Android has had push bugs with installed apps, so the first task would be a quick test on your phone. Alternative: timers ring only while the app is on screen, which cooking mode keeps it, and background alerts wait for Phase 5, which already lists push | Step 13 | **Decided 2026-11-22: on screen only, for now.** Timers ring while the app is on screen, and a note by them says so. Alerts while another app is open wait for Phase 5's push work |
 | D15 | Offline edits (revisits D9) | **Offline drafts, as part of 3c, with 3c built before 3b.** Four levels: (0) keep D9, read-only; (1) offline drafts, where a recipe created or edited offline is kept on the phone and uploads by itself when the Pi answers, with the 412 check for changes made elsewhere; (2) a full offline queue that also takes deletes and ingredient changes, with conflicts shown side by side, about twice the work of 1; (3) automatic merging (CRDTs), far more than one person with two devices needs. 1 covers what the phone is used for offline, jotting down a recipe or tweaking one while cooking, and leaves out the changes that are rare and riskiest to replay | Before 3c | **Decided 2026-11-24: offline drafts, in 3c, with 3c before 3b, as recommended.** Called *waiting changes* in the specs. Creating and editing recipes work offline; deleting recipes and renaming or deleting ingredients still need a connection. New recipes get their id on the device, so a retried upload can't create one twice (3c's one API change). Raised 2026-11-23: in Step 14's phone check, Android ran only one VPN at a time, so Tailscale and Proton VPN take turns and the phone is often off the tailnet |
+| D16 | How alerts reach you (Phase 4) | **Healthchecks.io, with alerts through ntfy.** Every 5 minutes the Pi checks the API (locally and over its `ts.net` address) and its disk, then pings a Healthchecks check, adding `/fail` when something's wrong; each nightly backup and off-site copy pings a second check. A failure, or no ping in time, pushes an alert to the ntfy app. Only a watcher outside the Pi can notice the Pi itself going silent. The traffic is outbound only: one small HTTPS request every 5 minutes to one fixed host, carrying only "ok" or "fail" and the disk use; nothing connects in. The ping addresses and the ntfy topic are secrets kept on the Pi, never in the repo. Alternatives: email instead of ntfy (no new app or service on the phone, but easier to miss); ntfy alone (it can't notice the Pi going down); hosting Healthchecks yourself, which needs a second always-on machine | Step 29 | **Decided 2026-11-26: Healthchecks.io + ntfy.** You asked that the setup talk to the wider internet as little as possible, with every opening managed: so outbound only, plain check names, and nothing but the status and the disk use in a ping |
+| D17 | How dependency updates arrive | **Dependabot, weekly.** Built into GitHub, with one config file. Minor and patch updates come grouped, one pull request each for the API, the client, GitHub Actions and the Docker images; each new major version on its own. Nothing merges itself. Alternative: Renovate, a GitHub app with more control (a dashboard issue, finer grouping, automerge rules), but another app with access to the repo and a bigger config | Step 28 | **Decided 2026-11-26: Dependabot, weekly** |
+| D18 | The Prisma upgrade (V5; revisits D3) | **6.19.3, then 7.10.1, each a step of its own.** Catching up within 6 needs no code changes; Prisma 7 then changes only what its upgrade guide says (the generator and its output path, `prisma.config.ts`, a Postgres driver adapter). npm's `latest` tag points at `8.0.0-rc.36`, a release candidate. Alternatives: straight to 7.10.1 (one step, but a failure is harder to place); 6.19.3 now and 8 once it's stable | Steps 30–31 | **Decided 2026-11-26: 6.19.3, then 7.10.1**, pinned exactly each time |
+| D19 | Phase 4's extras | **Node 22 → a newer LTS**, since Node 22's support ends on 30 April 2027. Optional: M6 (a JSON export of all data) and S1 (the API refusing requests not from your Tailscale login, answered "not now" in Step 8.5) | Step 32 | **Decided 2026-11-26: Node only, to Node 26** (the newest LTS, supported until April 2029, and supported by Prisma 7.10.1 and sharp). M6 and S1 stay in the backlog |
 
 ## Revised phase map
 | Phase | Original | Proposed |
@@ -897,13 +901,144 @@ And since 3c came first, its criteria still hold with all of this: offline, reci
 
 **Done when:** every 3b success criterion above is met, and CI is green. **Phase 3b, and with it Phase 3, is then complete.**
 
+## Phase 4: hardening and monitoring
+Phase 4 keeps the running system healthy without you watching it: security fixes reach the Pi, dependency updates arrive as pull requests that CI tests, an alert reaches your phone when something breaks, and Prisma and Node move to current versions. There are no schema changes (technical spec §2.4). The specs are the reference: the design spec's Phase 4 and technical spec §6.3.
+
+Answered before these steps were written (2026-11-26): D16–D19. Log rotation, one of the design spec's deliverables, is mostly done already: Docker's logs rotate since Step 8 (the `local` driver), and Step 29 adds the cron logs. The optional S1 check stays answered "not now" (Step 8.5), and M6 stays in the backlog.
+
+Each step that changes what runs on the Pi deploys it at its end, so only one change at a time meets the Pi, with `deploy.sh`'s backup as the way back.
+
+**Phase 4 is done when** the design spec's success criteria are met:
+- An alert fires when the API is down or the disk is nearly full
+- Dependency updates arrive as pull requests that CI tests
+
+And: no known advisory in the API's production dependencies, and the Pi runs Prisma 7.10.1 and Node 26, with the backups and the restore check passing.
+
+## Step 27: Security fixes, and fresh images on every deploy
+**Goal:** the API's four advisories are fixed, and every deploy brings the Node and Postgres images' own security fixes.
+
+**Why:** `npm audit --omit=dev` reports four advisories in packages Express uses, one of them critical (`proxy-addr`). And `deploy.sh` builds on whichever Node image the Pi first downloaded and never downloads `postgres:17` again, so the fixes in those images never arrive.
+
+- [ ] `npm audit fix` in the API: `body-parser`, `path-to-regexp`, `proxy-addr` and `qs`, each within its current major version, so only the lockfile changes. `npm audit --omit=dev` then reports nothing
+- [ ] The client's two moderate advisories (`glob` and `minimatch`, inside ESLint and Workbox's build tools) never reach the browser, and fixing them needs breaking updates: they're left to Dependabot (Step 28)
+- [ ] `deploy.sh` downloads before it builds: `compose pull db`, then `compose build --pull api`, so each deploy starts from the newest `node:22-slim` and `postgres:17`. The `17` tag only moves through 17.x releases, which keep the same data format. `up -d` then recreates the database container only when its image changed: a restart of a few seconds, after the deploy's backup
+- [ ] The runbook says so, and that a new Postgres major version (18) is a task of its own, since it needs a dump and restore
+- [ ] Tests: Jest, the client's Vitest, lint and type-check, and the end-to-end tests in Chromium here; CI runs Firefox
+- [ ] Deploy (you): the health check passes, and `docker compose exec db postgres --version` shows the newest 17.x
+
+**Done when:** CI is green, `npm audit --omit=dev` reports nothing, and the Pi runs it.
+
+## Step 28: Dependency updates as pull requests (D17)
+**Goal:** every week, Dependabot opens pull requests for the API, the client, GitHub Actions and the Docker images, and CI tests each one.
+
+**Why:** dependencies fall behind silently: 17 of the API's packages are behind today. This is the design spec's second success criterion.
+
+- [ ] `.github/dependabot.yml`, every Monday:
+  - `npm` for `/` and for `/web`; `github-actions` for the workflow's actions (`checkout`, `setup-node` and `upload-artifact`, all on v4); `docker` for the Dockerfile's `node` image; `docker-compose` for the Compose files' `postgres` image
+  - minor and patch updates grouped, one pull request per ecosystem and folder; each new major version on its own
+  - ignored: `prisma` and `@prisma/client` until Step 31 has upgraded them (D18); new major versions of the `node` image and of `@types/node`, since Node moves only to an LTS, on purpose (Step 32); new major versions of `postgres`, since one needs a dump and restore
+  - nothing merges itself: you review and merge, as now
+- [ ] Dependabot security updates turned on in the repository's settings (you), so a fix for a new advisory arrives when it's published rather than on the weekly round
+- [ ] CI runs on Dependabot's pull requests as it is: they're pull requests into `main`, and the workflow needs no secrets. Checked on the first ones
+- [ ] The first round: the grouped minor and patch updates merged once green. Each major version (among them TypeScript 7, Jest 30, `dotenv` 18 and the actions' new majors) is merged if CI is green with nothing to change; one that needs code changes is closed with `@dependabot ignore this major version` and a backlog line saying what it needs
+- [ ] The local working notes' rule "don't upgrade dependencies unless a step says so" becomes: updates arrive as Dependabot's pull requests, each reviewed on its own
+- [ ] Docs: the README says how updates arrive
+
+**Done when:** Dependabot's first pull requests have opened, CI has tested them, and each is merged or closed with its reason.
+
+## Step 29: Alerts (D16)
+**Goal:** your phone gets an alert when the API is down, the disk is nearly full, a backup fails or the Pi goes silent, and another when it's fixed.
+
+**Why:** the design spec's first success criterion. Today a failure is found only when you next open the app, and a failed backup only when you need it.
+
+- [ ] Accounts and the phone (you):
+  - a Healthchecks.io account
+  - the ntfy app: from F-Droid, which doesn't use Google's push service, or from the Play Store, which does
+  - a topic on `ntfy.sh` with a long random name, which acts as its password
+  - Healthchecks' ntfy integration sending to that topic, at high priority when something is down; a test notification reaches the phone
+- [ ] Two checks, with plain names that say nothing about the home:
+  - `health`: a ping every 5 minutes, an alert after 10 minutes without one
+  - `backup`: daily at 03:30 (Healthchecks takes the cron expression and the Pi's time zone), an alert after 2 hours without one
+- [ ] `scripts/monitor.sh`, run by cron every 5 minutes:
+  - asks `http://127.0.0.1:3000/api/health` (the API and its database), then the `ts.net` address's `/api/health`, so `tailscale serve` is checked as well
+  - reads how full the filesystems holding Docker's data and the backups are (`df`)
+  - a failed check is retried for 30 seconds first, so a deploy's restart doesn't raise an alert
+  - pings `health` with "ok, disk 41%", or `health/fail` with what failed ("api: 503", "disk 91%, limit 85%")
+- [ ] `scripts/nightly.sh` replaces the cron line's `(backup.sh && offsite.sh)`: it runs both, pings `backup`, or `backup/fail` with which part failed, and exits with their status. No log lines go in the ping, only which part failed
+- [ ] Both scripts:
+  - read their settings from `~/.config/miseenplace/alerts.env`, readable only by you (`chmod 600`), like `restic.env`: the two ping addresses, the `ts.net` address and the disk limit (85%). None of it goes in the repo
+  - send each request over HTTPS with a 10-second limit and 3 tries (`curl -fsS -m 10 --retry 3`); if the internet is down, the ping just fails, and Healthchecks alerts on the silence
+  - LF line endings and the executable bit, like the other scripts
+- [ ] Cron (you): `monitor.sh` every 5 minutes, and the nightly line running `nightly.sh`, each logging to a file in your home folder. `monitor.sh` logs only failures, so its log stays small
+- [ ] Log rotation for those logs: a `logrotate` rule (`/etc/logrotate.d/miseenplace`: weekly, 8 kept, compressed). Docker's own logs already rotate (Step 8)
+- [ ] Checked here first, against a stand-in ping server that records each request: all well, an API error, a full disk (a low limit), a backup that fails, and no request carrying more than the status and the disk use
+- [ ] On the Pi (you), each alert reaches the phone, then its recovery notice:
+  - the API stopped (`docker compose stop api`), then started again
+  - a disk limit below the current use for one run, then put back
+  - a backup that fails: `nightly.sh` run with `restic.env` renamed for a moment
+  - the Pi silent: cron stopped for 15 minutes (`sudo systemctl stop cron`), then started again
+- [ ] Docs: a new Alerts section in the runbook (setting up, what each alert means and what to do first, and pausing a check in Healthchecks during maintenance), the new cron lines, and `docs/architecture.md`'s Pi diagram showing Healthchecks and ntfy, outbound only
+
+**Done when:** every alert above has reached your phone, and its recovery notice too.
+
+## Step 30: Prisma 6.19.3 (V5, D18)
+**Goal:** Prisma catches up within version 6, still pinned exactly.
+
+**Why:** 6.6.0 is 13 minor versions behind. Catching up within 6 first means Step 31's changes are only Prisma 7's own.
+
+- [ ] Read the release notes from 6.7 to 6.19 for anything this project uses, and note it here
+- [ ] `prisma` and `@prisma/client` pinned to exactly 6.19.3 (D3's exact pin stays)
+- [ ] `prisma generate`, and `prisma migrate status` on the dev and test databases: nothing to apply, and no drift
+- [ ] Tests: Jest, the client's Vitest, lint and type-check, and the end-to-end tests
+- [ ] Deploy (you): migrations report nothing to apply, and the app reads and saves
+
+**Done when:** CI is green and the Pi runs Prisma 6.19.3.
+
+## Step 31: Prisma 7.10.1 (V5, D18)
+**Goal:** Prisma 7, after reading its upgrade guide.
+
+**Why:** Prisma 7 changes how the client is generated, configured and connected (design review V5). It gets a step of its own, so nothing else changes with it.
+
+- [ ] Read Prisma 7's upgrade guide, and list here what applies before changing anything. Expected, from V5:
+  - the `prisma-client` generator replaces `prisma-client-js` and needs an `output` path. The client becomes project code, imported from there instead of `@prisma/client`: in `prisma/client.ts`, the routes' `Prisma` error checks, the seed and the tests
+  - `prisma.config.ts` replaces `package.json`'s `prisma` block (the seed command) and the datasource's `url`, and loads `.env` itself, keeping the rule that values already set win
+  - a driver adapter: `@prisma/adapter-pg`, with `pg`, given `DATABASE_URL`
+- [ ] The Dockerfile copies the generated client into the production image in place of `node_modules/.prisma`, with `prisma.config.ts`, so `deploy.sh`'s `npx --no prisma migrate deploy` still works with the image
+- [ ] What must not change:
+  - `assertSafeDatabase()` still refuses anything but `_test` and `_dev`
+  - the tests' `globalSetup` still migrates once per run
+  - the raw queries (`fuzzySearchByName()`, the snapshot's REPEATABLE READ transaction) give the same results
+  - P2002, P2003 and P2025 still map to the same answers
+- [ ] Pinned exactly to 7.10.1, and Step 28's ignore for Prisma removed: later 7.x releases arrive as pull requests. Prisma 8 waits until it's stable, as a task of its own
+- [ ] Tests: everything, including the end-to-end tests; the dev database migrated and seeded with the new client
+- [ ] Deploy (you): migrations report nothing to apply, the app reads and saves on the phone, and `restore-check.sh` passes
+- [ ] Docs: the Prisma commands in the README and the runbook, `docs/architecture.md` if it names the client's path, and the local working notes' code map and gotchas
+
+**Done when:** CI is green and the Pi runs Prisma 7.10.1.
+
+## Step 32: Node 26 (D19), and Phase 4 done
+**Goal:** the API, the client's build, CI and the Pi run on Node 26.
+
+**Why:** Node 22's support ends on 30 April 2027. Node 26 is the newest LTS ("Lithium", supported until April 2029), and Prisma 7.10.1 (`^20.19 || ^22.12 || >=24.0`) and sharp (`>=20.9`) both support it.
+
+- [ ] `.nvmrc` → 26 (CI reads it), the Dockerfile's three stages → `node:26-slim`, and `@types/node` → 26 in both projects
+- [ ] This PC's Node (22.13.1 today) → 26 (you)
+- [ ] Anything this project uses that Node 24 or 26 changed or removed, from their release notes, noted here
+- [ ] sharp's prebuilt files cover Node 26 on 64-bit ARM: the image builds on the Pi, and a photo uploads
+- [ ] Tests: everything, including the end-to-end tests
+- [ ] Deploy (you): the health check, a photo upload from the phone, `backup.sh` and `restore-check.sh`
+- [ ] Phase 4's success criteria, checked together: a test alert reaches the phone, Dependabot's pull requests are arriving every week with CI testing them, and `npm audit --omit=dev` reports nothing
+- [ ] Tick the boxes, then update the Status block and the Progress log
+
+**Done when:** CI is green, the Pi runs Node 26, and every Phase 4 criterion is met. **Phase 4 is then complete.**
+
 ## Backlog (later phases)
 | When | Items |
 |---|---|
 | Any time after Step 6 | M6: a JSON export of all data (small, and cheap insurance) |
 | Phase 3 | 3a: Steps 9–14 (done). 3c: Steps 15–19 (done), before 3b (D15). 3b: Steps 20–26 (done) |
 | Later, unscheduled | Ingredient usage, from your wireframe review: see which recipes use an ingredient, then either replace it in all of them at once (a merge) so it can be deleted, or delete those recipes with it. Phone VPNs: Android runs one VPN at a time, so Tailscale and Proton VPN take turns, and Proton doesn't reconnect by itself (Android's Always-on VPN blocks Tailscale outright). Ways to automate or avoid the switch: an automation app (MacroDroid: start Proton when Tailscale disconnects), the Pi as a Tailscale exit node sending its traffic through Proton, or Tailscale's Mullvad add-on. Recipe import beyond URLs (your question, 2026-11-26), building on M5's URL import in Phase 6: first a saved HTML file, read for the same schema.org Recipe data (nothing is fetched, so the home network isn't at risk, and it could run on the device, offline); then PDFs, cookbook photos and pasted text, which carry no such data: text from the PDF, or by OCR from a photo, then an AI model to sort it into ingredient lines and steps, as an option, since it costs a little per recipe, needs a key and the internet, and can be wrong. Every import opens the editor filled in, for you to check and save, and never saves by itself. Which phase it goes in is decided when the next plan is written |
-| Phase 4 | Uptime and disk-space alerts, log rotation, and automated dependency updates (Dependabot or Renovate). V5: the Prisma upgrade, as its own task |
+| Phase 4 | Steps 27–32 (D16–D19): security fixes and fresh images, Dependabot, alerts, Prisma 6.19.3 then 7.10.1 (V5), Node 26. Log rotation: Docker's logs since Step 8, the cron logs in Step 29 |
 | Phase 5 | F7: the shopping-list tables must exist before Phase 5 can deliver shopping lists. D14: timer alerts while another app is open, through Web Push from the Pi (test it on the phone first, because Firefox for Android has had push bugs) |
 | Phase 6 | V1/D12: USDA FoodData Central. F5: unit conversion using ingredient densities. F7: fixes to the meal-plan and shopping-list schema, and ingredient categories. M5: safe URL import. M1: RecipeLink and timers each appear in two phases |
 
@@ -1807,3 +1942,11 @@ And since 3c came first, its criteria still hold with all of this: offline, reci
 
   Next: this plan ends with Phase 3. Phase 4 (hardening and monitoring, in the Backlog) needs a plan of its own. Still open: the SSD (8.1).
 - **2026-11-26:** Recipe import beyond URLs added to the Backlog, from your question: a saved HTML file first, then PDFs, photos and pasted text with an AI model as an option, each opening the editor filled in. Its phase is decided with the next plan.
+- **2026-11-26:** Phase 4's plan written: Steps 27–32, after you settled D16–D19.
+  - **Found first:** log rotation already done for Docker's logs (Step 8); no alerts of any kind; four advisories in the API's production dependencies, one critical (`proxy-addr`), all fixed within their major versions; `deploy.sh` never downloads newer Node or Postgres images; Node 22's support ends on 30 April 2027; Prisma pinned at 6.6.0, with 7.10.1 the newest stable and npm's `latest` tag on an 8.0 release candidate.
+  - **D16:** Healthchecks.io with ntfy. You asked first how it works for your internet traffic, since you want the setup to talk to the wider internet as little as possible: it's outbound only, one small request every 5 minutes to one fixed host, carrying only the status and the disk use, with the ping addresses and the ntfy topic kept on the Pi.
+  - **D17:** Dependabot, weekly. **D18:** Prisma 6.19.3, then 7.10.1. **D19:** Node only, to Node 26; M6 and S1 stay in the backlog.
+  - **The order:** the security fixes first, then Dependabot (whose first round brings the rest up to date), alerts, the two Prisma steps, and Node last. Each step that changes the Pi deploys at its end.
+  - **Specs:** the design spec's Phase 4 and technical spec §6.3 now name the choices.
+
+  Next: Step 27, security fixes and fresh images on every deploy.

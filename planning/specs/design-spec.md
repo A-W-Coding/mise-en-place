@@ -277,11 +277,12 @@ Built before 3b (D15), on the Phase 1 schema. It was completed on 24 November 20
 Remote access moved into Phase 2, so this phase makes the running system easier to keep healthy.
 
 **Key Deliverables:**
-- Uptime and disk-space alerts
-- Log rotation
-- Automated dependency updates (Dependabot or Renovate), including GitHub Actions versions
-- The Prisma upgrade, as its own task after reading that version's upgrade guide (V5)
-- Optionally, an API check that requests come from the expected Tailscale user (S1)
+- Uptime, disk-space and backup alerts: Healthchecks.io watches for the Pi's pings, and alerts reach the phone through ntfy (D16)
+- Log rotation: Docker's logs rotate since Phase 2; the cron logs join them
+- Automated dependency updates with Dependabot (D17), including GitHub Actions versions and the Docker images
+- The Prisma upgrade, as its own task after reading that version's upgrade guide (V5): 6.19.3, then 7.10.1 (D18)
+- Node 26, the newest LTS, before Node 22's support ends in April 2027 (D19)
+- Optionally, an API check that requests come from the expected Tailscale user (S1); not planned, since only your devices reach the Pi
 
 **Technical Focus:**
 - Noticing problems before they lose data
