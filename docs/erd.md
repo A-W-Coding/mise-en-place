@@ -1,6 +1,6 @@
 # Database schema (ERD)
 
-The schema in `prisma/schema.prisma`: Phase 1's tables, and Phase 3b's. GitHub draws the diagrams below; in an editor, they need a Mermaid preview. The reasons behind each field are in the technical spec, §2.1 and §2.3.
+The schema in `prisma/schema.prisma`: Phase 1's tables, and Phase 3b's. Phase 1's `Recipe.instructions`, the method as text, became each recipe's "Method" section in 3b, and was then dropped. GitHub draws the diagrams below; in an editor, they need a Mermaid preview. The reasons behind each field are in the technical spec, §2.1 and §2.3.
 
 ## Phase 1: recipes, ingredients and lines
 
@@ -16,7 +16,6 @@ erDiagram
         Int servings "1-1000, default 1"
         Int prepTime "minutes, nullable"
         Int cookTime "minutes, nullable"
-        String instructions "Phase 1's method; read by nothing, dropped in Step 26"
         String primaryImageId FK "nullable, unique (3b)"
         DateTime createdAt
         DateTime updatedAt "set on every PATCH"

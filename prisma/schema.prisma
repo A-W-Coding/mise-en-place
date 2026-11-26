@@ -34,9 +34,6 @@ model Recipe {
   servings       Int      @default(1)
   prepTime       Int? // minutes
   cookTime       Int? // minutes
-  /// Phase 1's method as text. Moved into sections by a migration (3b); nothing reads it now,
-  /// and a later migration drops it once the move has been checked (spec §7.2).
-  instructions   String?
   /// The main image: one of this recipe's own images, or none (F7).
   primaryImageId String?  @unique
   createdAt      DateTime @default(now())
