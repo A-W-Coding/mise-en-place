@@ -135,11 +135,14 @@ GitHub Actions runs on every pull request into `main` and every push to `main`, 
 | Method | Endpoint | Description |
 |---|---|---|
 | GET | `/api/health` | 200 `{"status":"ok"}` if the database answers, otherwise 503 |
-| GET | `/api/recipes` | List recipes, with their tags. `?search=`, `?tag=`, `?limit=`, `?offset=` |
-| GET | `/api/recipes/:id` | Get a recipe with its ingredient lines, method, tags and equipment |
+| GET | `/api/recipes` | List recipes, with their tags and main image's id. `?search=`, `?tag=`, `?limit=`, `?offset=` |
+| GET | `/api/recipes/:id` | Get a recipe with its ingredient lines, method, tags, equipment and images |
 | POST | `/api/recipes` | Create a recipe, optionally with its lines, its method's sections and steps, its `tagIds` and `equipment`, and an `id` chosen by the client. 409 if that id is taken |
-| PATCH | `/api/recipes/:id` | Update a recipe. An `ingredients`, `sections`, `tagIds` or `equipment` array replaces what was there |
-| DELETE | `/api/recipes/:id` | Delete a recipe and everything in it; the shared lists stay |
+| PATCH | `/api/recipes/:id` | Update a recipe. An `ingredients`, `sections`, `tagIds` or `equipment` array replaces what was there; `primaryImageId` picks the main image |
+| DELETE | `/api/recipes/:id` | Delete a recipe and everything in it, its image files included; the shared lists stay |
+| POST | `/api/recipes/:id/images` | Add a photo (`multipart/form-data`, field `image`): JPEG, PNG or WebP up to 15 MB and 50 megapixels, re-encoded to WebP with its metadata (GPS included) removed. At most 10 per recipe |
+| DELETE | `/api/images/:id` | Delete a photo and its files |
+| GET | `/media/:id.webp`, `/media/:id-thumb.webp` | A photo and its thumbnail, cached for good |
 | GET | `/api/ingredients` | List ingredients. `?search=`, `?limit=`, `?offset=` |
 | GET | `/api/ingredients/:id` | Get an ingredient |
 | POST | `/api/ingredients` | Create an ingredient. 409 if the name exists |

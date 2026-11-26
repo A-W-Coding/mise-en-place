@@ -14,6 +14,9 @@ prisma/dev.db-journal
 # PostgreSQL data
 *postgres-data
 
+# Image files saved by the API in development (MEDIA_DIR's default)
+/media/
+
 # Logs
 npm-debug.log*
 yarn-debug.log*

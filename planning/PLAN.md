@@ -3,8 +3,8 @@
 # Mise en place: hardening plan (Phase 1 to Phase 3b)
 
 > **Status**
-> - Current step: **Step 23: tags and equipment**, done (2026-11-24), with CI to be confirmed when its PR opens. Next: Step 24, images in the API and on the Pi. Step 22 merged as PR #27 (CI green). Step 21 (the 3b wireframes) merged as PR #26. Step 20 merged as PR #25 (CI green); it isn't deployed (3b deploys in Step 26). Phase 3b's steps merged as PR #24. Phase 3c is complete (2026-11-24): Steps 15–19 merged (PRs #18–#22), deployed on the Pi, and every success criterion met on your phone. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
-> - Last updated: 2026-11-24 (Step 23: tags and equipment)
+> - Current step: **Step 24: images in the API and on the Pi**, done (2026-11-26), with CI to be confirmed when its PR opens; not deployed (3b deploys in Step 26). Next: Step 25, images in the app. Step 23 merged as PR #28 (CI green). Step 22 merged as PR #27 (CI green). Step 21 (the 3b wireframes) merged as PR #26. Step 20 merged as PR #25 (CI green); it isn't deployed (3b deploys in Step 26). Phase 3b's steps merged as PR #24. Phase 3c is complete (2026-11-24): Steps 15–19 merged (PRs #18–#22), deployed on the Pi, and every success criterion met on your phone. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
+> - Last updated: 2026-11-26 (Step 24: images in the API and on the Pi)
 > - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
@@ -435,7 +435,7 @@ exit 1
 ### 8.7 Backups (V4)
 - [x] Add a daily cron job that runs `pg_dump -Fc` through `docker compose exec -T`, saves the dump to the SSD and keeps 7 days of dumps (spec §6.2). Put the commands in a script, `scripts/backup.sh`, rather than in the crontab line itself. The script is written and tested locally; the cron line is in `docs/deployment.md`. The line was added to the Pi's crontab on 2026-11-22 (03:30 daily); its first run is on 2026-11-23
 - [x] Keep an encrypted copy off the Pi, for example with restic or rclone's crypt backend, on another machine or in cloud storage. **Answered 2026-11-22: Backblaze B2, with restic.** `scripts/offsite.sh` and section 7 of `docs/deployment.md`. The first copy went up on 2026-11-22, and a restore from it passed the restore check
-- [ ] Back up the images directory as well, once Phase 3 adds images (Step 24)
+- [x] Back up the images directory as well, once Phase 3 adds images (Step 24). `scripts/backup.sh` writes a `.media.tar` beside each dump, and `offsite.sh` copies both; `restore-check.sh` checks the pair. Written in Step 24; its first run on the Pi follows Step 26's deploy
 - [x] **Test a restore:** restore a dump into a scratch database, for example with `pg_restore -d miseenplace_restore_check`, and compare row counts with the live database. `scripts/restore-check.sh` does this. It passed locally, and on the Pi on 2026-11-22
 
 **Done when:**
@@ -834,27 +834,27 @@ And since 3c came first, its criteria still hold with all of this: offline, reci
 
 **Why:** this is where untrusted files reach the Pi, so it's built and tested on its own, before any screen uses it.
 
-- [ ] New dependencies, named here as the working rules ask: `sharp` (re-encoding, prebuilt for 64-bit ARM Linux, so nothing extra on the Pi) and `multer` (multipart uploads, held in memory)
-- [ ] `POST /api/recipes/:id/images` and `DELETE /api/images/:id` (§3.2, D11):
+- [x] New dependencies, named here as the working rules ask: `sharp` (re-encoding, prebuilt for 64-bit ARM Linux, so nothing extra on the Pi) and `multer` (multipart uploads, held in memory). (As built: sharp 0.35.5 and multer 2.5.0, with `@types/multer` for development. The lockfile holds sharp's builds for both 64-bit ARM and x64 Linux, and the audit's four advisories are the same Express ones as before)
+- [x] `POST /api/recipes/:id/images` and `DELETE /api/images/:id` (§3.2, D11):
   - the type is recognised from the contents: JPEG, PNG or WebP, anything else a 415
   - at most 15 MB (413), and 50 megapixels, read from the header before decoding (400)
   - turned upright, then re-encoded to WebP at 2,000 px on the long side, plus a 400 px thumbnail, with all metadata stripped; the upload itself is discarded
   - the files are named after the new row's id; at most 10 per recipe (409)
   - the files are written before the row, and removed if the transaction fails; deleting an image, or its recipe, deletes its files
   - from the wireframe review: a recipe's first image becomes its main one, and deleting the main image makes the next one (in upload order) the main one, in the same transaction
-- [ ] `primaryImageId` in the recipe body; recipe responses include `images` and `primaryImageId`, and the list's rows `primaryImageId`
-- [ ] `/media/<id>.webp` and `/media/<id>-thumb.webp`, cached as `immutable`, from a folder set by `MEDIA_DIR`
-- [ ] The Pi:
+- [x] `primaryImageId` in the recipe body; recipe responses include `images` and `primaryImageId`, and the list's rows `primaryImageId`
+- [x] `/media/<id>.webp` and `/media/<id>-thumb.webp`, cached as `immutable`, from a folder set by `MEDIA_DIR`
+- [x] The Pi:
   - a named volume for the images, mounted into `api` and owned by its `node` user
   - `backup.sh` saves the images beside each dump, and `offsite.sh` sends both to B2, which closes Step 8.7's last box
   - "Moving to an SSD" in `docs/deployment.md` moves the images too
-- [ ] Tests, with images made by sharp inside the test:
+- [x] Tests, with images made by sharp inside the test:
   - a JPEG carrying a GPS position comes back without it
   - SVG, GIF and HEIC refused; a file over 15 MB; a small file that would expand past 50 megapixels; an 11th image
   - the files gone with their image, and with their recipe
   - the first image becoming the main one, and the next taking over when the main one is deleted
   - `primaryImageId` refused for another recipe's image
-- [ ] `docs/api.md`, `docs/erd.md`, `docs/architecture.md` and `docs/deployment.md`
+- [x] `docs/api.md`, `docs/erd.md`, `docs/architecture.md` and `docs/deployment.md`. (As built: the ERD already had the Image table from Step 20)
 
 **Done when:** the tests pass in CI.
 
@@ -1756,3 +1756,24 @@ And since 3c came first, its criteria still hold with all of this: offline, reci
   - **Docs:** `docs/api.md` (Tag, Equipment, tag and equipment lines, the endpoints, `?tag=`, the body, the snapshot) and the README's endpoint table.
 
   Next: Step 24, images in the API and on the Pi.
+- **2026-11-26:** Step 23 merged (PR #28, CI green, Firefox included). Step 24 done: images in the API, and on the Pi.
+  - **New dependencies:** sharp 0.35.5 (re-encoding, with libvips prebuilt for 64-bit ARM Linux) and multer 2.5.0 (the upload, held in memory), plus `@types/multer`. Nothing else in the lockfile moved, and `npm audit` shows the same four Express advisories as before. The production image builds here (x64), sharp loads in it, and `/app/media` in it belongs to `node`; the backup's archive, streamed out of a container, and the restore's unpacking into one, both worked against it.
+  - **Uploading** (`POST /api/recipes/:id/images`, field `image`), in `src/utils/images.ts` and `src/routes/images.ts`:
+    - the type from the first bytes: JPEG, PNG or WebP, anything else a 415 (an SVG, a GIF, a HEIC, or text called `.jpg`)
+    - at most 15 MB (413, from multer); at most 50 megapixels, read from the header before decoding (400), with sharp given the same limit in case a header lies; an unreadable file is a 400
+    - turned upright (`autoOrient()`), re-encoded to WebP at most 2,000 px with a 400 px thumbnail, never enlarged; sharp writes no metadata unless asked, so the GPS position goes with everything else
+    - the files (named after a new UUID, never the upload's name) are written first, then the row in a transaction that moves the recipe's `updatedAt`, and removed if it fails
+    - at most 10 per recipe: checked before reading the upload, and again in the transaction after locking the recipe's row, so two uploads at once can't make 11
+    - the first image becomes the main one
+  - **Deleting** (`DELETE /api/images/:id`): the row, then its files. If it was the main image, the next one in upload order takes over, or the one before it if it was the last. Deleting a recipe removes its images' files once the rows have gone.
+  - **The recipe:** `primaryImageId` in the body, checked to be one of the recipe's own images (a new recipe's can only be null), before the foreign key could answer as if an ingredient were wrong. Responses carry `images` in upload order, list rows `primaryImageId`, and so does the snapshot.
+  - **`/media`:** only `<uuid>.webp` and `<uuid>-thumb.webp`, from `MEDIA_DIR` (default `media/`, git-ignored), as `image/webp`, `immutable` for a year, with `nosniff`. Anything else there is a 404. The tests write to a temporary folder of their own (`tests/helpers/media-dir.ts`).
+  - **The Pi** (in place for Step 26's deploy):
+    - a `media` volume mounted at `/app/media`; the Dockerfile makes that folder, owned by `node`, so a new volume takes that owner. The runbook says how to fix one that doesn't
+    - `backup.sh` writes `<label>-<stamp>.media.tar` beside each dump, made by a throwaway container of the API's image, so it works with the API stopped; checked with `tar -tf`, pruned with the dumps. `offsite.sh` already copies the whole folder, so B2 gets both. This closes Step 8.7's last box
+    - `restore-check.sh` also checks the archive holds two files for each image in the dump, and copes with a dump from before 3b
+    - the runbook: the images volume, restoring images for real, and the SSD move carrying them
+  - **Tests:** Jest: 574, 24 of them new (`images.test.ts`), with every image made by sharp in the test: a JPEG on its side carrying a GPS position comes back upright with no EXIF at all; scaling and thumbnails; PNG and WebP; SVG, GIF, HEIC and plain text refused; a broken JPEG; a 150-byte PNG claiming 100 megapixels; over 15 MB; an 11th image; the main image's rules; `primaryImageId` refused for another recipe's image; files gone with their image and with their recipe; `/media` and its 404s. On Windows sharp keeps a file it opened by name locked, so the tests read files into memory first.
+  - **Docs:** `docs/api.md` (the Image object, the endpoints, `/media`, `primaryImageId`, 413 and 415), `docs/architecture.md`, `docs/deployment.md` and the README.
+
+  Next: Step 25, images in the app.

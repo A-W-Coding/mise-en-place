@@ -12,8 +12,10 @@
  * lines, tags and equipment lines arrive in its POST or PATCH body and
  * replace what's there, in one transaction, which also sets its `updatedAt`.
  *
- * Deleting a recipe cascades to everything that belongs to it, but leaves
- * the shared Ingredient, Tag and Equipment records intact.
+ * Deleting a recipe cascades to everything that belongs to it, its images'
+ * files included, but leaves the shared Ingredient, Tag and Equipment
+ * records intact. `primaryImageId` in a body must name one of the recipe's
+ * own images (Step 24); they're added through `routes/images.ts`.
  *
  * The list can be filtered by a tag (`?tag=<id>`, 3b), with or without a
  * search.
@@ -31,6 +33,7 @@ import { fuzzySearchByName, recipesTagged } from '../utils/fuzzy-search.js';
 import { parseOr400 } from '../utils/validation.js';
 import { recipeEtag, ifMatchDates } from '../utils/etag.js';
 import { RECIPE_INCLUDE, RECIPE_SUMMARY_SELECT } from '../utils/recipe-query.js';
+import { removeImageFiles } from '../utils/media.js';
 import {
     createRecipeSchema,
     updateRecipeSchema,
@@ -43,10 +46,19 @@ import { recipeListQuerySchema } from '../schemas/list-query.js';
 const router = Router();
 
 /**
- * Thrown inside a write's transaction when the body names a tag or an item
- * that doesn't exist, so nothing is written; answered with 400 and its message.
+ * Thrown inside a write's transaction when the body names a tag, an item or
+ * a main image that isn't there, so nothing is written; answered with 400
+ * and its message.
  */
 class UnknownReference extends Error {}
+
+/** Check that a main image is one of this recipe's own (null always is). */
+async function checkPrimaryImage(tx: Prisma.TransactionClient, recipeId: string, imageId: string | null | undefined): Promise<void> {
+    if (imageId === null || imageId === undefined) return;
+    if ((await tx.image.count({ where: { id: imageId, recipeId } })) === 0) {
+        throw new UnknownReference("primaryImageId must be one of this recipe's images.");
+    }
+}
 
 const BAD_INGREDIENTS = { error: 'One or more ingredient IDs are invalid.' };
 
@@ -246,6 +258,7 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
  *  - `ingredients` (array of `{ ingredientId, quantity, quantityMax, unit, note, sectionIndex }`, optional)
  *  - `tagIds` (array of tag ids, in order, optional, 3b)
  *  - `equipment` (array of `{ equipmentId, quantity, optional }`, optional, 3b)
+ *  - `primaryImageId` (null, since a new recipe has no images yet, optional, 3b)
  *
  * @returns 201 with the created Recipe and its `ETag`, 400 on validation
  *          failure or an unknown ingredient, tag or item, or 409 if a recipe
@@ -258,11 +271,14 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
 
         // Spreading is safe here: the strict schema has already rejected
         // any field that isn't on its allowlist.
-        const { ingredients = [], sections = [], tagIds = [], equipment = [], ...fields } = body;
+        const { ingredients = [], sections = [], tagIds = [], equipment = [], primaryImageId, ...fields } = body;
 
         // One transaction: a taken id or a bad ingredient, tag or item id leaves nothing behind
         const recipe = await prisma.$transaction(async (tx) => {
             const created = await tx.recipe.create({ data: fields });
+            // A new recipe has no images, so only null passes: checked here rather than by the foreign key,
+            // which would answer as if an ingredient were wrong
+            await checkPrimaryImage(tx, created.id, primaryImageId);
             const sectionIds = await writeSections(tx, created.id, sections);
             await writeLines(tx, created.id, ingredients, sectionIds);
             await writeTags(tx, created.id, tagIds);
@@ -321,6 +337,7 @@ router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => 
             // First, and in one statement: the version check and the recipe's own
             // fields. It locks the row, so a write racing this one waits, then
             // finds the version has moved on (F3)
+            await checkPrimaryImage(tx, id, fields.primaryImageId);
             await tx.recipe.update({ where: recipeWhere(id, expected), data: { ...fields, updatedAt: new Date() } });
             let sectionIds: string[] = [];
             if (sections) {
@@ -359,7 +376,8 @@ router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => 
 
 // ── DELETE /api/recipes/:id ─────────────────────────────────────────────────
 /**
- * Delete a recipe by UUID. Cascades to RecipeIngredient rows.
+ * Delete a recipe by UUID. Cascades to everything in it; its images' files
+ * are removed once the rows have gone.
  * With `If-Match`, only the version it names is deleted (F3).
  *
  * @returns 200 on success, 404 if not found, or 412 if `If-Match` is out of date.
@@ -367,7 +385,11 @@ router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => 
 router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
     const expected = ifMatchDates(req.get('If-Match'));
     try {
-        await prisma.recipe.delete({ where: recipeWhere(req.params.id, expected) });
+        const deleted = await prisma.recipe.delete({
+            where: recipeWhere(req.params.id, expected),
+            select: { images: { select: { id: true } } },
+        });
+        await removeImageFiles(deleted.images.map((image) => image.id));
         res.status(200).json({ message: 'Recipe deleted successfully.' });
     } catch (error) {
         if (isPrismaError(error, 'P2025')) {
