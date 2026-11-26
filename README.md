@@ -4,7 +4,7 @@
 
 A personal recipe app: an API built with Express 5, TypeScript, Prisma 6.6 and PostgreSQL 17, and a React web client that installs on your phone and keeps the screen on while you cook.
 
-Phase 1 (the API) and Phase 2 (a Raspberry Pi, reachable over Tailscale HTTPS) are complete. Phase 3a adds the web client: finding, reading and editing recipes, cooking mode with timers, printing, and installing as an app. The plan, decisions and progress are in [`planning/PLAN.md`](planning/PLAN.md).
+Phase 1 (the API), Phase 2 (a Raspberry Pi, reachable over Tailscale HTTPS) and Phase 3 (the web client) are complete. The web client finds, reads and edits recipes, with sections and steps, a timer on any step, tags, equipment and photos. It has cooking mode with timers, prints, installs as an app, and works offline: changes made on the device upload once the Pi is in reach again. The plan, decisions and progress are in [`planning/PLAN.md`](planning/PLAN.md).
 
 ## Prerequisites
 
