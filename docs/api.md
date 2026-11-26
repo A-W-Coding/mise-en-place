@@ -128,7 +128,7 @@ The mise-en-place API as of Phase 1, plus Phase 3a's JSON 404s and recipe ETags,
 
 In a list, each recipe is a **summary**: every field above except `recipeIngredients`, `sections`, `equipment` and `images`. Its `tags` are there, so a list can show the first two as pills, and its `primaryImageId`, for a thumbnail. The recipe page fetches the rest with `GET /api/recipes/:id`, so each page of a list stays small.
 
-Phase 1's `instructions` (the method as one block of text) is gone from requests and responses. A migration turned each recipe's text into one section, "Method", with a step for each line (technical spec §7.2).
+Phase 1's `instructions` (the method as one block of text) is gone from requests, responses and the database. A migration turned each recipe's text into one section, "Method", with a step for each line, and a later one dropped the column (technical spec §7.2).
 
 ### Ingredient line
 
