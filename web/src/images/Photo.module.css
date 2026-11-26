@@ -1,0 +1,13 @@
+.photo {
+    display: block;
+    object-fit: cover;
+    background: var(--surface2);
+}
+
+.plate {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface);
+    color: var(--muted);
+}

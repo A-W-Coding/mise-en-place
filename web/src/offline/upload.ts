@@ -228,9 +228,13 @@ export async function uploadWaitingChanges(queryClient: QueryClient): Promise<vo
  * A waiting change as a whole recipe, for the pages to show. New
  * ingredients, tags and items get a stand-in id until they're created.
  *
- * @param base - The recipe as it was, for the date it was created.
+ * @param base - The recipe as it was, for the date it was created and its
+ *               photos, which a change doesn't carry: they're added online.
  */
-export function recipeFromChange(change: WaitingChange, base?: { createdAt: string }): Recipe {
+export function recipeFromChange(
+    change: WaitingChange,
+    base?: { createdAt: string; images?: Recipe['images']; primaryImageId?: string | null },
+): Recipe {
     const saved = new Date(change.savedAt).toISOString();
     const { ingredients, sections, tags, equipment, ...fields } = change.body;
     const sectionId = (index: number) => `${change.recipeId}:section-${index}`;
@@ -239,6 +243,8 @@ export function recipeFromChange(change: WaitingChange, base?: { createdAt: stri
         ...fields,
         createdAt: base?.createdAt ?? new Date(change.createdAt).toISOString(),
         updatedAt: saved,
+        images: base?.images ?? [],
+        primaryImageId: base?.primaryImageId ?? null,
         sections: sections.map((section, index) => ({
             id: sectionId(index),
             recipeId: change.recipeId,

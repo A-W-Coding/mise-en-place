@@ -9,6 +9,7 @@ import type { RouteObject } from 'react-router';
 import { Layout } from './components/Layout';
 import { EquipmentPage, IngredientsPage } from './pages/IngredientsPage';
 import { NotFoundPage } from './pages/NotFoundPage';
+import { PhotosPage } from './pages/PhotosPage';
 import { OptionsPage } from './pages/OptionsPage';
 import { RecipeEditorPage } from './pages/RecipeEditorPage';
 import { RecipeListPage } from './pages/RecipeListPage';
@@ -24,6 +25,7 @@ export const routes: RouteObject[] = [
             { path: 'recipes/new', element: <RecipeEditorPage /> },
             { path: 'recipes/:id', element: <RecipePage /> },
             { path: 'recipes/:id/edit', element: <RecipeEditorPage /> },
+            { path: 'recipes/:id/photos', element: <PhotosPage /> },
             { path: 'options', element: <OptionsPage /> },
             { path: 'options/ingredients', element: <IngredientsPage /> },
             { path: 'options/tags', element: <TagsPage /> },

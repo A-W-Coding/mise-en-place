@@ -8,6 +8,8 @@
 // a phone size and a desktop size (technical spec §5.6).
 
 import { readFileSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { parseEnv } from 'node:util';
 import { defineConfig, devices } from '@playwright/test';
 
@@ -28,6 +30,8 @@ if (!database.endsWith('_test')) {
 
 // A port of its own, so a dev server on 3000 doesn't get in the way
 const PORT = 3100;
+// Photos uploaded by the tests (3b) go to a folder of their own, emptied by the global setup
+process.env.MEDIA_DIR = join(tmpdir(), 'miseenplace-e2e-media');
 const phone = { width: 390, height: 844 };
 const desktop = { width: 1280, height: 900 };
 

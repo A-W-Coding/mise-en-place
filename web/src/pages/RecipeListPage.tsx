@@ -2,9 +2,10 @@
  * @module web/src/pages/RecipeListPage
  * `/`: every recipe, searchable, loading more as you scroll (technical spec §3.4).
  *
- * Rows become tiles on a wider screen. Each row shows the recipe's first two
- * tags as pills beside its name (3b), and the tile leaves room for its
- * thumbnail.
+ * Rows become tiles on a wider screen. Each row shows the recipe's main
+ * photo as a thumbnail, or a plain plate when it has none, and its first two
+ * tags as pills beside its name (3b); a tile shows the photo larger, across
+ * its top.
  *
  * The list filters by one tag at a time (3b): a row of the tags, most used
  * first, under the search box, scrolling sideways on a phone and wrapping on
@@ -23,6 +24,8 @@ import { useAllTags, useRecipeList } from '../api/queries';
 import type { RecipeSummary, Tag } from '../api/types';
 import { CheckIcon } from '../components/Icons';
 import { TagPill } from '../components/TagPill';
+import { thumbUrl } from '../images/media';
+import { Photo } from '../images/Photo';
 import { DeleteRecipeDialog } from '../components/DeleteRecipeDialog';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PlusIcon } from '../components/Icons';
@@ -80,15 +83,18 @@ export function RecipeListPage() {
         return (
             <li key={recipe.id} className={styles.row}>
                 <Link to={`/recipes/${recipe.id}`} state={{ from: listUrl }} className={styles.rowLink}>
-                    <span className={styles.nameLine}>
-                        <span className={styles.name}>{shown.name}</span>
-                        {/* The first two, in the recipe's own order */}
-                        {shown.tags.slice(0, 2).map((line) => (
-                            <TagPill key={line.tagId} name={line.tag.name} color={line.tag.color} size="small" />
-                        ))}
-                        {change && <WaitingTag change={change} />}
+                    <Photo src={shown.primaryImageId && thumbUrl(shown.primaryImageId)} alt="" className={styles.thumb} />
+                    <span className={styles.rowText}>
+                        <span className={styles.nameLine}>
+                            <span className={styles.name}>{shown.name}</span>
+                            {/* The first two, in the recipe's own order */}
+                            {shown.tags.slice(0, 2).map((line) => (
+                                <TagPill key={line.tagId} name={line.tag.name} color={line.tag.color} size="small" />
+                            ))}
+                            {change && <WaitingTag change={change} />}
+                        </span>
+                        <span className={styles.meta}>{listMeta(shown)}</span>
                     </span>
-                    <span className={styles.meta}>{listMeta(shown)}</span>
                 </Link>
                 <Menu
                     label={`More options for ${shown.name}`}

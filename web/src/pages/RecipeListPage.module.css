@@ -58,12 +58,28 @@
 .rowLink {
     flex-grow: 1;
     min-width: 0;
-    padding: 11px 0;
+    padding: 10px 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--text);
+    text-decoration: none;
+}
+
+/* The main photo's thumbnail (3b), or a plate */
+.thumb {
+    width: 64px;
+    height: 64px;
+    flex-shrink: 0;
+    border-radius: 12px;
+}
+
+.rowText {
+    flex-grow: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 4px;
-    color: var(--text);
-    text-decoration: none;
 }
 
 .rowLink:focus-visible {
@@ -176,10 +192,24 @@
         border-color: var(--muted);
     }
 
+    /* A tile: the photo across its top, then the name and times */
     .rowLink {
+        padding: 0;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0;
+        border-radius: 14px;
+    }
+
+    .thumb {
+        width: 100%;
+        height: 160px;
+        border-radius: 13px 13px 0 0;
+    }
+
+    .rowText {
         padding: 14px 52px 16px 16px;
         gap: 6px;
-        border-radius: 14px;
     }
 
     .name {
