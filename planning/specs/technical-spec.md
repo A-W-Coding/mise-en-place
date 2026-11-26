@@ -1093,10 +1093,11 @@ Nothing pulls from GitHub on its own, so every migration runs while someone is w
 ### 6.3 Phase 4: Hardening and Monitoring
 
 Remote access arrived with the Pi in Phase 2 (§6.2): Tailscale only, with no port forwarding and nothing exposed to the internet. Phase 4 makes the running system easier to keep healthy:
-- Uptime and disk-space alerts
-- Dependency updates as pull requests that CI tests (Dependabot or Renovate), including GitHub Actions versions
-- The Prisma upgrade, as its own task after reading that version's upgrade guide (V5)
-- Optionally, an API check that requests come from the expected Tailscale user (S1)
+- Uptime, disk-space and backup alerts (D16): every 5 minutes a script on the Pi checks the API and the disk and pings Healthchecks.io, and the nightly backup pings it too; a failure, or a missing ping, reaches the phone through ntfy. This adds one outbound destination and nothing inbound: each ping carries only the status and the disk use, and the ping addresses and the ntfy topic stay in a settings file on the Pi
+- Dependency updates as pull requests that CI tests, from Dependabot every week (D17), including GitHub Actions versions and the Docker images; `deploy.sh` also downloads the newest `node:22-slim` and `postgres:17` images on each deploy
+- The Prisma upgrade, as its own task after reading that version's upgrade guide (V5): 6.19.3, then 7.10.1 (D18)
+- Node 26, the newest LTS, in the Dockerfile, CI and on the Pi (D19)
+- Optionally, an API check that requests come from the expected Tailscale user (S1); not planned
 
 ### 6.4 Continuous Integration
 
