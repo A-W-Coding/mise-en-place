@@ -1,8 +1,8 @@
 import { describe, expect, test, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import type { Ingredient } from '../api/types';
-import { BEEF_CHILI_ID, beefChili, beefChiliSummary, section } from '../test/fixtures';
-import { json, mockApi, page, renderApp, sent } from '../test/renderApp';
+import { BEEF_CHILI_ID, beefChili, beefChiliSummary, item, section, tag } from '../test/fixtures';
+import { json, mockApi, page, renderApp, sent, unreachable } from '../test/renderApp';
 
 const RECIPE_PATH = `/api/recipes/${BEEF_CHILI_ID}`;
 const NEW_ID = 'aaaaaaaa-0000-4000-8000-000000000001';
@@ -12,6 +12,9 @@ function ingredient(name: string, id = `id-${name}`): Ingredient {
 }
 
 const lardons = ingredient('lardons', '33333333-3333-4333-8333-333333333333');
+
+/** As `unreachable()`, typed as a responder. */
+const unreachableResponse = (): Response => unreachable();
 
 /** The ingredient search the picker makes, answering from a fixed list. */
 function ingredientSearch(all: Ingredient[]) {
@@ -63,6 +66,8 @@ describe('RecipeEditorPage: a new recipe', () => {
                 },
             ],
             ingredients: [{ ingredientId: lardons.id, quantity: 100, quantityMax: null, unit: 'g', note: null, sectionIndex: null }],
+            tagIds: [],
+            equipment: [],
         });
     });
 
@@ -474,5 +479,129 @@ describe('RecipeEditorPage: editing', () => {
         expect(await screen.findByText('No recipes yet')).toBeInTheDocument();
         expect(router.state.location.pathname).toBe('/');
         expect(sent(fetchMock, 'DELETE')[0]?.headers['If-Match']).toBe('"111"');
+    });
+});
+
+describe('RecipeEditorPage: tags and equipment (3b)', () => {
+    const beef = tag('beef', '#f6c7bd', 2);
+    const weekend = tag('weekend', '#c8ddf4', 4);
+    const pan = item('large pan');
+
+    /** A shared list's search, and its create, which echoes the name (and a tag's colour). */
+    function sharedList<T extends { name: string }>(all: T[], make: (body: { name: string; color?: string | null }) => T) {
+        return [
+            (url: URL) => page(all.filter((entry) => entry.name.includes(url.searchParams.get('search') ?? ''))),
+            (_url: URL, init: RequestInit) => json(make(JSON.parse(String(init.body))), { status: 201 }),
+        ] as const;
+    }
+
+    test('picks a tag, creates one with a colour, takes one off, and saves them in order', async () => {
+        const [searchTags, createTag] = sharedList([beef, weekend], (body) => ({ ...tag(body.name, body.color ?? null), recipeCount: 0 }));
+        const fetchMock = mockApi([
+            ['GET', RECIPE_PATH, json(beefChili, { headers: { ETag: '"1"' } })],
+            ['GET', '/api/tags', searchTags],
+            ['POST', '/api/tags', createTag],
+            ['PATCH', RECIPE_PATH, json(beefChili, { headers: { ETag: '"2"' } })],
+        ]);
+        const { user } = renderApp(`/recipes/${BEEF_CHILI_ID}/edit`);
+
+        const box = await screen.findByRole('combobox', { name: 'Add a tag' });
+        await user.type(box, 'wee');
+        await user.click(await screen.findByRole('option', { name: 'Weekend' }));
+        expect(within(screen.getByRole('list', { name: 'Tags' })).getByText('Weekend')).toBeInTheDocument();
+        expect(box).toHaveValue('');
+
+        // A new tag asks for its colour first
+        await user.type(box, 'Weeknight');
+        await user.click(await screen.findByRole('option', { name: 'Create tag “weeknight”' }));
+        const panel = screen.getByRole('region', { name: 'Colour for the new tag Weeknight' });
+        await user.click(within(panel).getByRole('radio', { name: 'Sky' }));
+        expect(within(panel).getByRole('radio', { name: 'Sky' })).toHaveAttribute('aria-checked', 'true');
+        await user.click(within(panel).getByRole('button', { name: 'Add tag' }));
+
+        await waitFor(() => expect(screen.queryByRole('region', { name: /Colour for the new tag/ })).not.toBeInTheDocument());
+        expect(sent(fetchMock, 'POST')).toEqual([expect.objectContaining({ path: '/api/tags', body: { name: 'weeknight', color: '#c8ddf4' } })]);
+        // Weekend no longer offered: the recipe has it already
+        await user.type(box, 'week');
+        await screen.findByRole('option', { name: 'Create tag “week”' });
+        expect(screen.queryByRole('option', { name: 'Weekend' })).not.toBeInTheDocument();
+        await user.clear(box);
+
+        await user.click(screen.getByRole('button', { name: 'Remove tag Weekend' }));
+        await user.click(screen.getByRole('button', { name: 'Save' }));
+
+        await waitFor(() => expect(sent(fetchMock, 'PATCH')).toHaveLength(1));
+        expect(sent(fetchMock, 'PATCH')[0]?.body).toMatchObject({ tagIds: [tag('weeknight').id] });
+    });
+
+    test('a new tag made offline is kept by name and colour, to be created when the recipe uploads', async () => {
+        mockApi([
+            ['GET', RECIPE_PATH, json(beefChili, { headers: { ETag: '"1"' } })],
+            ['GET', '/api/tags', page([])],
+            ['POST', '/api/tags', unreachableResponse],
+        ]);
+        const { user } = renderApp(`/recipes/${BEEF_CHILI_ID}/edit`);
+
+        const box = await screen.findByRole('combobox', { name: 'Add a tag' });
+        await user.type(box, 'freezes well');
+        await user.click(await screen.findByRole('option', { name: 'Create tag “freezes well”' }));
+        await user.click(screen.getByRole('button', { name: 'Add tag' }));
+
+        expect(await within(screen.getByRole('list', { name: 'Tags' })).findByText('Freezes well')).toBeInTheDocument();
+    });
+
+    test('adds equipment lines: picks or creates the item, sets how many and optional, and saves them', async () => {
+        const [searchItems, createItem] = sharedList([pan], (body) => item(body.name));
+        const fetchMock = mockApi([
+            ['GET', RECIPE_PATH, json(beefChili, { headers: { ETag: '"1"' } })],
+            ['GET', '/api/equipment', searchItems],
+            ['POST', '/api/equipment', createItem],
+            ['PATCH', RECIPE_PATH, json(beefChili, { headers: { ETag: '"2"' } })],
+        ]);
+        const { user } = renderApp(`/recipes/${BEEF_CHILI_ID}/edit`);
+
+        await user.click(await screen.findByRole('button', { name: 'Add equipment' }));
+        const first = screen.getByRole('combobox', { name: 'Item, equipment line 1' });
+        expect(first).toHaveFocus();
+        await user.type(first, 'pan');
+        await user.click(await screen.findByRole('option', { name: 'large pan' }));
+        const count = screen.getByRole('group', { name: 'How many, equipment line 1' });
+        expect(within(count).getByRole('button', { name: 'One fewer' })).toBeDisabled();
+        await user.click(within(count).getByRole('button', { name: 'One more' }));
+        expect(count).toHaveTextContent('2');
+        await user.click(screen.getByRole('checkbox', { name: 'Optional, equipment line 1' }));
+
+        await user.click(screen.getByRole('button', { name: 'Add equipment' }));
+        await user.type(screen.getByRole('combobox', { name: 'Item, equipment line 2' }), 'Wok');
+        await user.click(await screen.findByRole('option', { name: 'Create item “wok”' }));
+        await waitFor(() => expect(screen.getByRole('combobox', { name: 'Item, equipment line 2' })).toHaveValue('wok'));
+        expect(screen.getByRole('button', { name: /Equipment \(2\)/ })).toBeInTheDocument();
+
+        await user.click(screen.getByRole('button', { name: 'Save' }));
+
+        await waitFor(() => expect(sent(fetchMock, 'PATCH')).toHaveLength(1));
+        expect(sent(fetchMock, 'PATCH')[0]?.body).toMatchObject({
+            equipment: [
+                { equipmentId: pan.id, quantity: 2, optional: true },
+                { equipmentId: item('wok').id, quantity: 1, optional: false },
+            ],
+        });
+    });
+
+    test('an item typed but not chosen is pointed out before saving, and an empty line is left out', async () => {
+        const fetchMock = mockApi([
+            ['GET', RECIPE_PATH, json(beefChili)],
+            ['GET', '/api/equipment', page([])],
+        ]);
+        const { user } = renderApp(`/recipes/${BEEF_CHILI_ID}/edit`);
+
+        await user.click(await screen.findByRole('button', { name: 'Add equipment' }));
+        await user.type(screen.getByRole('combobox', { name: 'Item, equipment line 1' }), 'skillet');
+        await user.click(screen.getByRole('button', { name: 'Add equipment' }));
+        await user.click(screen.getByRole('button', { name: 'Save' }));
+
+        expect(await screen.findByText('Choose “skillet” from the list, or create it.')).toBeInTheDocument();
+        expect(screen.getByRole('alert')).toHaveTextContent('One thing needs a look before saving.');
+        expect(sent(fetchMock, 'PATCH')).toEqual([]);
     });
 });

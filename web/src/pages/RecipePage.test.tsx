@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
-import { BEEF_CHILI_ID, beefChili, section } from '../test/fixtures';
+import { BEEF_CHILI_ID, beefChili, equipmentOn, item, section, tag, tagsOn } from '../test/fixtures';
 import { json, mockApi, page, renderApp, sent, unreachable } from '../test/renderApp';
 
 const RECIPE_PATH = `/api/recipes/${BEEF_CHILI_ID}`;
@@ -82,6 +82,41 @@ describe('RecipePage', () => {
             4, 2, 1,
         ]);
         expect(within(ingredients).getAllByRole('listitem')[4]?.textContent).toBe('1onion, diced');
+    });
+
+    test('shows every tag under the name, each opening the list filtered by it, and the equipment (3b)', async () => {
+        const weeknight = tag('weeknight', '#1f4e79');
+        const recipe = {
+            ...beefChili,
+            tags: tagsOn(BEEF_CHILI_ID, [tag('beef', '#f6c7bd'), tag('mexican'), tag('spicy'), weeknight]),
+            equipment: equipmentOn(BEEF_CHILI_ID, [[item('large pan')], [item('garlic press'), 1, true], [item('ramekin'), 4]]),
+        };
+        mockApi([['GET', RECIPE_PATH, json(recipe)]]);
+        renderApp(`/recipes/${BEEF_CHILI_ID}`);
+
+        const tags = await screen.findByRole('list', { name: 'Tags' });
+        expect(within(tags).getAllByRole('link').map((link) => link.textContent)).toEqual(['Beef', 'Mexican', 'Spicy', 'Weeknight']);
+        expect(within(tags).getByRole('link', { name: 'Weeknight' })).toHaveAttribute('href', `/?tag=${weeknight.id}`);
+        // White text on a dark tag, so it reads
+        expect(within(tags).getByRole('link', { name: 'Weeknight' })).toHaveStyle({ color: '#ffffff' });
+
+        const equipment = screen.getByRole('region', { name: 'Equipment' });
+        expect(within(equipment).getAllByRole('listitem').map((line) => line.textContent)).toEqual([
+            '1large pan',
+            '1garlic pressoptional',
+            '4ramekin',
+        ]);
+        // The ingredients keep their own list
+        expect(within(screen.getByRole('region', { name: 'Ingredients' })).getAllByRole('listitem')).toHaveLength(7);
+    });
+
+    test('a recipe with no tags or equipment shows neither', async () => {
+        mockApi([['GET', RECIPE_PATH, json(beefChili)]]);
+        renderApp(`/recipes/${BEEF_CHILI_ID}`);
+
+        await screen.findByRole('heading', { level: 1, name: 'Beef Chili' });
+        expect(screen.queryByRole('list', { name: 'Tags' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('region', { name: 'Equipment' })).not.toBeInTheDocument();
     });
 
     test('one section called "Method" needs no heading of its own', async () => {

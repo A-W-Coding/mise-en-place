@@ -92,6 +92,49 @@
     margin-right: -10px;
 }
 
+/* The tag filter (3b): one row that scrolls sideways on a phone, and wraps on a wider screen */
+.tagFilter {
+    display: flex;
+    gap: 8px;
+    margin: 0 calc(-1 * var(--gutter));
+    padding: 2px var(--gutter);
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.tagChip {
+    flex-shrink: 0;
+    min-height: 36px;
+    padding: 0 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: var(--bg);
+    color: var(--text);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.tagChip[aria-pressed='true'] {
+    border: 2px solid var(--accent);
+    background: var(--accent-soft);
+}
+
+.clearTag {
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    font-weight: 600;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
 /* Wider screens: one line of heading, search and New recipe; the list becomes tiles */
 @media (min-width: 768px) {
     .page {
@@ -106,6 +149,13 @@
 
     .search {
         min-height: 44px;
+    }
+
+    .tagFilter {
+        flex-wrap: wrap;
+        margin: 0;
+        padding: 0;
+        overflow-x: visible;
     }
 
     .list {

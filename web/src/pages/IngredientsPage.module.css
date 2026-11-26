@@ -34,6 +34,13 @@
     font-size: 1rem;
 }
 
+/* How many recipes use a tag (Options › Tags, 3b) */
+.count {
+    padding: 0 8px;
+    font-size: 0.875rem;
+    color: var(--muted);
+}
+
 .refused {
     display: flex;
     align-items: center;

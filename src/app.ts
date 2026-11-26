@@ -12,8 +12,10 @@ import express from 'express';
 import compression from 'compression';
 import healthRouter from './routes/health.js';
 import ingredientsRouter from './routes/ingredients.js';
+import equipmentRouter from './routes/equipment.js';
 import recipesRouter from './routes/recipes.js';
 import syncRouter from './routes/sync.js';
+import tagsRouter from './routes/tags.js';
 import { globalErrorHandler } from './middleware/error-handler.js';
 import { corsPolicy } from './middleware/cors.js';
 import { webClient, webDistDir } from './middleware/web-client.js';
@@ -37,6 +39,8 @@ app.use('/api/health', healthRouter);
 app.use('/api/ingredients', ingredientsRouter);
 app.use('/api/recipes', recipesRouter);
 app.use('/api/sync', syncRouter);
+app.use('/api/tags', tagsRouter);
+app.use('/api/equipment', equipmentRouter);
 
 // ── Unknown API paths: JSON, not Express's HTML page ────────────────────────
 app.use('/api', (_req, res) => {

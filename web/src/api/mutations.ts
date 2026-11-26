@@ -18,10 +18,9 @@ import { recordSaved, sendRecipeChange } from '../offline/upload';
 import { discardWaitingChange, keepWaitingChange, waitingChangeFor, type ChangeToKeep } from '../offline/waiting';
 import { ApiError, apiRequest, type ApiResult } from './client';
 import { queryKeys } from './queries';
-import type { Ingredient, Recipe } from './types';
+import type { Recipe } from './types';
 
 const RECIPE_LISTS = ['recipes', 'list'] as const;
-const INGREDIENTS = ['ingredients'] as const;
 
 /** A save's outcome: on the server now, or waiting on the device to upload. */
 export type SaveOutcome = { kind: 'uploaded'; result: ApiResult<Recipe> } | { kind: 'waiting' };
@@ -82,40 +81,68 @@ export function useDeleteRecipe() {
     });
 }
 
-/** Add a shared ingredient. The API trims and lowercases the name. */
-export function useCreateIngredient() {
+/** A shared list a recipe names things from (3b adds tags and equipment). */
+export type SharedList = 'ingredients' | 'tags' | 'equipment';
+
+function sharedPath(list: SharedList, id?: string): string {
+    return id === undefined ? `/api/${list}` : `/api/${list}/${encodeURIComponent(id)}`;
+}
+
+/**
+ * Add to a shared list: `{ name }`, and for a tag its `color`. The API trims
+ * and lowercases the name.
+ */
+export function useCreateShared<T = { id: string; name: string }>(list: SharedList) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: (name: string) => apiRequest<Ingredient>('/api/ingredients', { method: 'POST', body: { name } }),
+        mutationFn: (body: { name: string; color?: string | null }) => apiRequest<T>(sharedPath(list), { method: 'POST', body }),
         onSuccess: () => {
-            void queryClient.invalidateQueries({ queryKey: INGREDIENTS });
+            void queryClient.invalidateQueries({ queryKey: [list] });
             requestSync();
         },
     });
 }
 
-/** Rename a shared ingredient. Every recipe using it shows the new name, so recipes refresh too. */
-export function useRenameIngredient() {
+/**
+ * Rename an ingredient, tag or item, or recolour a tag. Every recipe using
+ * it shows the change, so recipes refresh too.
+ */
+export function useUpdateShared(list: SharedList) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: ({ id, name }: { id: string; name: string }) =>
-            apiRequest<Ingredient>(`/api/ingredients/${encodeURIComponent(id)}`, { method: 'PATCH', body: { name } }),
+        mutationFn: ({ id, ...body }: { id: string; name?: string; color?: string | null }) =>
+            apiRequest<unknown>(sharedPath(list, id), { method: 'PATCH', body }),
         onSuccess: () => {
-            void queryClient.invalidateQueries({ queryKey: INGREDIENTS });
+            void queryClient.invalidateQueries({ queryKey: [list] });
             void queryClient.invalidateQueries({ queryKey: queryKeys.recipes });
             requestSync();
         },
     });
 }
 
-/** Delete a shared ingredient. The API refuses with 409 while a recipe uses it. */
-export function useDeleteIngredient() {
+/**
+ * Delete from a shared list. The API refuses with 409 an ingredient or item
+ * a recipe uses; a tag comes off every recipe that has it, so recipes
+ * refresh too.
+ */
+export function useDeleteShared(list: SharedList) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: (id: string) => apiRequest<unknown>(`/api/ingredients/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+        mutationFn: (id: string) => apiRequest<unknown>(sharedPath(list, id), { method: 'DELETE' }),
         onSuccess: () => {
-            void queryClient.invalidateQueries({ queryKey: INGREDIENTS });
+            void queryClient.invalidateQueries({ queryKey: [list] });
+            if (list === 'tags') void queryClient.invalidateQueries({ queryKey: queryKeys.recipes });
             requestSync();
         },
     });
+}
+
+/** Rename a shared ingredient. */
+export function useRenameIngredient() {
+    return useUpdateShared('ingredients');
+}
+
+/** Delete a shared ingredient. The API refuses with 409 while a recipe uses it. */
+export function useDeleteIngredient() {
+    return useDeleteShared('ingredients');
 }

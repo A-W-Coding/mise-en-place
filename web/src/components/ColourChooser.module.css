@@ -1,0 +1,113 @@
+.chooser {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.previewRow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.previewLabel {
+    font-size: 0.8125rem;
+    color: var(--muted);
+}
+
+.presets {
+    display: grid;
+    grid-template-columns: repeat(5, 44px);
+    justify-content: space-between;
+    row-gap: 10px;
+}
+
+.swatch {
+    width: 44px;
+    height: 44px;
+    border: 1px solid rgb(0 0 0 / 0.12);
+    border-radius: 50%;
+    font-size: 0.875rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.swatch[aria-checked='true'] {
+    outline: 3px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.any {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg);
+}
+
+.anyChosen {
+    border: 2px solid var(--accent);
+}
+
+/* The phone's own colour picker, behind a circle showing the colour */
+.picker {
+    position: relative;
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.native {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.anyText {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    font-size: 0.9375rem;
+    font-weight: 600;
+}
+
+.anyHint {
+    font-size: 0.8125rem;
+    font-weight: 400;
+    color: var(--muted);
+}
+
+.code {
+    width: 6.5rem;
+    min-height: 40px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 0.9375rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.code[aria-invalid='true'] {
+    border: 2px solid var(--danger);
+}
+
+.hint {
+    margin: 0;
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    color: var(--muted);
+}

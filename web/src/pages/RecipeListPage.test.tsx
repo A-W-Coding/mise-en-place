@@ -1,11 +1,15 @@
 import { describe, expect, test } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import { PAGE_SIZE } from '../api/queries';
-import { beefChiliSummary, summary } from '../test/fixtures';
+import { beefChili, beefChiliSummary, seedCopy, summary, tag, tagsOn } from '../test/fixtures';
 import { scrollNearEnd } from '../test/intersectionObserver';
 import { json, mockApi, page, renderApp, requestedUrls, sent, unreachable } from '../test/renderApp';
 
 const bananaBread = summary('Banana Bread', { servings: 8, prepTime: 15, cookTime: 60 });
+
+/** The recipe list's requests, leaving out the tag filter's. */
+const recipeRequests = (fetchMock: ReturnType<typeof mockApi>) =>
+    requestedUrls(fetchMock).filter((url) => url.pathname === '/api/recipes');
 
 describe('RecipeListPage', () => {
     test('lists each recipe with its summary line, linking to its page', async () => {
@@ -39,7 +43,7 @@ describe('RecipeListPage', () => {
 
         expect(await screen.findByText('No recipes match “lasagne”')).toBeInTheDocument();
         expect(router.state.location.search).toBe('?q=lasagne');
-        expect(requestedUrls(fetchMock).at(-1)?.searchParams.get('search')).toBe('lasagne');
+        expect(recipeRequests(fetchMock).at(-1)?.searchParams.get('search')).toBe('lasagne');
 
         await user.click(screen.getByRole('button', { name: 'Clear search' }));
 
@@ -54,7 +58,7 @@ describe('RecipeListPage', () => {
 
         expect(await screen.findByText('1 match')).toBeInTheDocument();
         expect(screen.getByRole('searchbox', { name: 'Search recipes' })).toHaveValue('chili');
-        expect(requestedUrls(fetchMock)[0]?.searchParams.get('search')).toBe('chili');
+        expect(recipeRequests(fetchMock)[0]?.searchParams.get('search')).toBe('chili');
     });
 
     test("says it can't reach the server, and Retry tries again", async () => {
@@ -93,7 +97,7 @@ describe('RecipeListPage', () => {
         scrollNearEnd();
 
         await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(all.length));
-        expect(requestedUrls(fetchMock).map((url) => url.searchParams.get('offset'))).toEqual(['0', String(PAGE_SIZE)]);
+        expect(recipeRequests(fetchMock).map((url) => url.searchParams.get('offset'))).toEqual(['0', String(PAGE_SIZE)]);
         // Everything is loaded, so there's nothing left to watch for
         expect(screen.queryByTestId('load-more')).not.toBeInTheDocument();
     });
@@ -194,5 +198,98 @@ describe('RecipeListPage', () => {
         expect(screen.getByText('1 recipe')).toBeInTheDocument();
         // From the list there's no ETag to send
         expect(sent(fetchMock, 'DELETE')[0]?.headers['If-Match']).toBeUndefined();
+    });
+});
+
+describe('RecipeListPage: tags (3b)', () => {
+    const beef = tag('beef', '#f6c7bd', 1);
+    const mexican = tag('mexican', '#f7d0e1', 1);
+    const spicy = tag('spicy', null, 1);
+    const weeknight = tag('weeknight', '#1f4e79', 2);
+    const chili = summary('Beef Chili', { tags: [] });
+    chili.tags = tagsOn(chili.id, [beef, mexican, spicy, weeknight]);
+    const pasta = summary('Lemon Pasta', { tags: [] });
+    pasta.tags = tagsOn(pasta.id, [weeknight]);
+
+    test("each row shows its recipe's first two tags, in its order", async () => {
+        mockApi([
+            ['GET', '/api/recipes', page([chili, pasta])],
+            ['GET', '/api/tags', page([beef, mexican, spicy, weeknight])],
+        ]);
+        renderApp('/');
+
+        const row = (await screen.findByRole('link', { name: /Beef Chili/ })).closest('li')!;
+        expect(within(row).getByText('Beef')).toBeInTheDocument();
+        expect(within(row).getByText('Mexican')).toBeInTheDocument();
+        expect(within(row).queryByText('Spicy')).not.toBeInTheDocument();
+    });
+
+    test('filters by one tag at a time, most used first, kept in the address, with search too', async () => {
+        const fetchMock = mockApi([
+            ['GET', '/api/recipes', (url) => page(url.searchParams.get('tag') === weeknight.id ? [chili, pasta] : [chili, pasta, summary('Toast')])],
+            ['GET', '/api/tags', page([beef, mexican, spicy, weeknight])],
+        ]);
+        const { user, router } = renderApp('/');
+
+        const filter = await screen.findByRole('group', { name: 'Filter by tag' });
+        // Weeknight is used most, so it comes first; the rest by name
+        await waitFor(() => expect(within(filter).getAllByRole('button').map((chip) => chip.textContent)).toEqual(['Weeknight', 'Beef', 'Mexican', 'Spicy']));
+        await user.click(within(filter).getByRole('button', { name: 'Weeknight' }));
+
+        expect(within(filter).getByRole('button', { name: 'Weeknight' })).toHaveAttribute('aria-pressed', 'true');
+        expect(await screen.findByText(/^2 recipes tagged Weeknight/)).toBeInTheDocument();
+        expect(router.state.location.search).toBe(`?tag=${weeknight.id}`);
+        expect(recipeRequests(fetchMock).at(-1)?.searchParams.get('tag')).toBe(weeknight.id);
+
+        // Search keeps the tag
+        await user.type(screen.getByRole('searchbox', { name: 'Search recipes' }), 'chili');
+        await waitFor(() => expect(recipeRequests(fetchMock).at(-1)?.searchParams.get('search')).toBe('chili'));
+        expect(recipeRequests(fetchMock).at(-1)?.searchParams.get('tag')).toBe(weeknight.id);
+        expect(router.state.location.search).toContain(`tag=${weeknight.id}`);
+
+        await user.click(screen.getByRole('button', { name: 'Clear' }));
+        await waitFor(() => expect(router.state.location.search).toBe('?q=chili'));
+        expect(within(filter).getByRole('button', { name: 'Weeknight' })).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    test('a recipe opened from a filtered list goes back to it', async () => {
+        mockApi([
+            ['GET', '/api/recipes', page([chili])],
+            ['GET', '/api/tags', page([weeknight])],
+            ['GET', `/api/recipes/${chili.id}`, json({ ...beefChili, ...chili })],
+        ]);
+        const { user } = renderApp(`/?tag=${weeknight.id}`);
+
+        await user.click(await screen.findByRole('link', { name: /Beef Chili/ }));
+
+        expect(await screen.findByRole('link', { name: 'Back to Recipes' })).toHaveAttribute('href', `/?tag=${weeknight.id}`);
+    });
+
+    test('says when no recipe has the tag', async () => {
+        mockApi([
+            ['GET', '/api/recipes', page([])],
+            ['GET', '/api/tags', page([{ ...spicy, recipeCount: 0 }])],
+        ]);
+        const { user, router } = renderApp(`/?tag=${spicy.id}`);
+
+        expect(await screen.findByText('No recipes tagged Spicy')).toBeInTheDocument();
+        await user.click(screen.getByRole('button', { name: 'Show every recipe' }));
+        expect(router.state.location.search).toBe('');
+    });
+
+    test('offline, the copy filters by tag on the device, its tags ordered by use', async () => {
+        const tagged = { ...beefChili, tags: tagsOn(beefChili.id, [beef, weeknight]) };
+        await seedCopy([tagged]);
+        mockApi([
+            ['GET', '/api/recipes', unreachable],
+            ['GET', '/api/tags', unreachable],
+        ]);
+        const { user } = renderApp('/');
+
+        const filter = await screen.findByRole('group', { name: 'Filter by tag' });
+        await user.click(within(filter).getByRole('button', { name: 'Weeknight' }));
+
+        expect(await screen.findByText(/^1 recipe tagged Weeknight/)).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: /Beef Chili/ })).toBeInTheDocument();
     });
 });

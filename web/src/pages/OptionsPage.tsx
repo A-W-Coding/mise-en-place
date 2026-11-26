@@ -1,8 +1,8 @@
 /**
  * @module web/src/pages/OptionsPage
  * `/options`: how the app looks on this device, the timer sound, whether it
- * can reach the server, the offline copy (3c), and Advanced › Ingredients
- * (technical spec §3.4).
+ * can reach the server, the offline copy (3c), and Advanced › Ingredients,
+ * Tags and Equipment (technical spec §3.4; tags and equipment from 3b).
  */
 
 import { useId } from 'react';
@@ -127,6 +127,20 @@ export function OptionsPage() {
                     <span className={styles.linkText}>
                         <span className={styles.linkTitle}>Ingredients</span>
                         <span className={styles.hint}>The shared list every recipe uses</span>
+                    </span>
+                    <ChevronRightIcon />
+                </Link>
+                <Link to="/options/tags" className={styles.linkCard}>
+                    <span className={styles.linkText}>
+                        <span className={styles.linkTitle}>Tags</span>
+                        <span className={styles.hint}>Rename, recolour or delete a tag</span>
+                    </span>
+                    <ChevronRightIcon />
+                </Link>
+                <Link to="/options/equipment" className={styles.linkCard}>
+                    <span className={styles.linkText}>
+                        <span className={styles.linkTitle}>Equipment</span>
+                        <span className={styles.hint}>The pans and tools recipes list</span>
                     </span>
                     <ChevronRightIcon />
                 </Link>

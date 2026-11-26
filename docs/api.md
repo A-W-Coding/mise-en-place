@@ -1,13 +1,14 @@
 # API reference
 
-The mise-en-place API as of Phase 1, plus Phase 3a's JSON 404s and recipe ETags, and Phase 3c's snapshot and recipe ids chosen by the client. The design behind it is in the technical spec, §3 (`planning/specs/technical-spec.md`).
+The mise-en-place API as of Phase 1, plus Phase 3a's JSON 404s and recipe ETags, Phase 3c's snapshot and recipe ids chosen by the client, and so far in Phase 3b a recipe's sections and steps, tags and equipment. The design behind it is in the technical spec, §3 (`planning/specs/technical-spec.md`).
 
 - [Conventions](#conventions)
-- [Objects](#objects): Recipe, ingredient line, Ingredient
+- [Objects](#objects): Recipe, ingredient line, Section, tag line, equipment line, Ingredient, Tag, Equipment
 - [Lists, search and pagination](#lists-search-and-pagination)
 - [Health](#health)
 - [Recipes](#recipes), including [ETags and `If-Match`](#etags-and-if-match)
 - [Ingredients](#ingredients)
+- [Tags](#tags) and [Equipment](#equipment-1)
 - [Sync](#sync): the snapshot a device keeps offline
 - [Units](#units)
 - [Errors](#errors)
@@ -74,6 +75,36 @@ The mise-en-place API as of Phase 1, plus Phase 3a's JSON 404s and recipe ETags,
         }
       ]
     }
+  ],
+  "tags": [
+    {
+      "recipeId": "09b75162-d37f-476c-b87a-30bbba971058",
+      "tagId": "e4b1c7a2-3d5f-4e6a-8b9c-0d1e2f3a4b5c",
+      "orderIndex": 0,
+      "tag": {
+        "id": "e4b1c7a2-3d5f-4e6a-8b9c-0d1e2f3a4b5c",
+        "name": "beef",
+        "color": "#f6c7bd",
+        "createdAt": "2026-11-24T10:00:00.000Z",
+        "updatedAt": "2026-11-24T10:00:00.000Z"
+      }
+    }
+  ],
+  "equipment": [
+    {
+      "id": "7f6e5d4c-3b2a-4190-8f7e-6d5c4b3a2918",
+      "recipeId": "09b75162-d37f-476c-b87a-30bbba971058",
+      "equipmentId": "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d",
+      "orderIndex": 0,
+      "quantity": 1,
+      "optional": false,
+      "equipment": {
+        "id": "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d",
+        "name": "large pan",
+        "createdAt": "2026-11-24T10:00:00.000Z",
+        "updatedAt": "2026-11-24T10:00:00.000Z"
+      }
+    }
   ]
 }
 ```
@@ -90,8 +121,10 @@ The mise-en-place API as of Phase 1, plus Phase 3a's JSON 404s and recipe ETags,
 | `updatedAt` | timestamp | Changes on every PATCH, including one that only changes the lines or the method |
 | `recipeIngredients` | array of lines | Sorted by `orderIndex`. Included in single-recipe responses, not in lists |
 | `sections` | array of [sections](#section) | The method (3b), sorted by `orderIndex`. Included in single-recipe responses, not in lists |
+| `tags` | array of [tag lines](#tag-line) | The recipe's tags (3b), in its own order. In lists too |
+| `equipment` | array of [equipment lines](#equipment-line) | What the recipe needs (3b), sorted by `orderIndex`. Included in single-recipe responses, not in lists |
 
-In a list, each recipe is a **summary**: every field above except `primaryImageId`, `recipeIngredients` and `sections`. The recipe page fetches those with `GET /api/recipes/:id`, so each page of a list stays small.
+In a list, each recipe is a **summary**: every field above except `primaryImageId`, `recipeIngredients`, `sections` and `equipment`. Its `tags` are there, so a list can show the first two as pills. The recipe page fetches the rest with `GET /api/recipes/:id`, so each page of a list stays small.
 
 Phase 1's `instructions` (the method as one block of text) is gone from requests and responses. A migration turned each recipe's text into one section, "Method", with a step for each line (technical spec §7.2).
 
@@ -136,6 +169,33 @@ Each step:
 | `text` | string | 1–2,000 characters, stored trimmed |
 | `timerSeconds` | integer or null | A timer cooking mode can start for this step: 1 to 86,400 seconds (a day) |
 
+### Tag line
+
+One of a recipe's tags (3b), with the [Tag](#tag) itself. The order is the recipe's own: a list shows the first two, so Banana Bread can lead with Dessert and still be tagged Vegetarian.
+
+| Field | Type | Notes |
+|---|---|---|
+| `recipeId` | string (UUID) | |
+| `tagId` | string (UUID) | |
+| `orderIndex` | integer | Position on the recipe, from 0, set by the server from the order of `tagIds` |
+| `tag` | Tag | Without its `recipeCount` |
+
+### Equipment line
+
+One thing a recipe needs (3b), with the [Equipment](#equipment) item itself.
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | string (UUID) | |
+| `recipeId` | string (UUID) | |
+| `equipmentId` | string (UUID) | |
+| `orderIndex` | integer | Position in the recipe, from 0, set by the server |
+| `quantity` | integer | How many: 1 to 99. Default 1 |
+| `optional` | boolean | Whether the recipe works without it. Default false |
+| `equipment` | Equipment | Responses only |
+
+The same item may appear on more than one line.
+
 ### Ingredient
 
 ```json
@@ -153,9 +213,42 @@ Each step:
 | `name` | string | Unique. Stored trimmed and lowercase, 1–100 characters |
 | `createdAt`, `updatedAt` | timestamp | |
 
+### Tag
+
+A shared tag, such as "dessert" (3b).
+
+```json
+{
+  "id": "e4b1c7a2-3d5f-4e6a-8b9c-0d1e2f3a4b5c",
+  "name": "weeknight",
+  "color": "#1f4e79",
+  "createdAt": "2026-11-24T10:00:00.000Z",
+  "updatedAt": "2026-11-24T10:00:00.000Z",
+  "recipeCount": 2
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | string (UUID) | |
+| `name` | string | Unique. Stored trimmed and lowercase, 1–50 characters. Apps show it with a capital first letter |
+| `color` | string or null | `#rrggbb`, stored lowercase. Any colour: apps choose dark or light text to go on it |
+| `createdAt`, `updatedAt` | timestamp | |
+| `recipeCount` | integer | How many recipes have the tag. From the `/api/tags` endpoints only, not inside a recipe or the snapshot |
+
+### Equipment
+
+A shared piece of equipment, such as "dutch oven" (3b).
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | string (UUID) | |
+| `name` | string | Unique. Stored trimmed and lowercase, 1–100 characters |
+| `createdAt`, `updatedAt` | timestamp | |
+
 ## Lists, search and pagination
 
-`GET /api/recipes` and `GET /api/ingredients` take the same query parameters:
+`GET /api/recipes`, `GET /api/ingredients`, `GET /api/tags` and `GET /api/equipment` take the same query parameters:
 
 | Parameter | Default | Rules |
 |---|---|---|
@@ -167,6 +260,7 @@ Each step:
 - **Order:** plain lists by name, then id. Search results by how well they match, then name, then id. The order is stable, so paging with `offset` never repeats or skips an item.
 - **Search** matches names that are similar to the term (PostgreSQL trigram `word_similarity` above 0.3), which tolerates typos ("beff" finds "Beef Chili"), or that contain it, ignoring case. `%`, `_` and `\` match literally.
 - **Each parameter once.** A repeated parameter (`?search=a&search=b`) or an unknown one (`?serach=beef`) is a 400.
+- **`GET /api/recipes` also takes `tag`** (3b): a tag's id, to list only the recipes with it, together with `search` and paging if you like. An unknown tag has no recipes, so the list is empty.
 
 With the sample data loaded:
 
@@ -196,7 +290,11 @@ Runs `SELECT 1` against the database.
 
 ### `GET /api/recipes`
 
-Lists recipes as summaries, without their lines or method (see [Recipe](#recipe)). Takes `search`, `limit` and `offset` (see [Lists](#lists-search-and-pagination)).
+Lists recipes as summaries, with their tags but without their lines, method or equipment (see [Recipe](#recipe)). Takes `search`, `tag`, `limit` and `offset` (see [Lists](#lists-search-and-pagination)).
+
+```http
+GET /api/recipes?tag=e4b1c7a2-3d5f-4e6a-8b9c-0d1e2f3a4b5c&search=chilli
+```
 
 **Responses:** 200 with an array of recipe summaries and `X-Total-Count`; 400 for a bad query.
 
@@ -217,6 +315,8 @@ Creates a recipe and its lines in one write.
 | `prepTime`, `cookTime` | no | Integer, 0 to 99999 (about 69 days), or null |
 | `sections` | no | Array of `{ name, steps: [{ text, timerSeconds }] }`, in order (3b). Only with `ingredients`. Default: none |
 | `ingredients` | no | Array of lines, in recipe order. Default: none |
+| `tagIds` | no | Array of existing tags' ids, in the recipe's order, each once (3b). Default: none |
+| `equipment` | no | Array of `{ equipmentId, quantity, optional }`, in order (3b). `quantity` is a whole number from 1 to 99, default 1; `optional` a boolean, default false. Default: none |
 
 Each line in `ingredients`:
 
@@ -255,14 +355,14 @@ The second line is stored with `"unit": "clove"`, and the lines get `orderIndex`
 **Responses:**
 - 201 with the created [Recipe](#recipe) and its [`ETag`](#etags-and-if-match)
 - 400 `{ "error": "Validation failed.", "fields": { … } }` for a rule above
-- 400 `{ "error": "One or more ingredient IDs are invalid." }` when an `ingredientId` is a valid UUID but no such ingredient exists
+- 400 `{ "error": "One or more ingredient IDs are invalid." }` when an `ingredientId` is a valid UUID but no such ingredient exists; likewise `"One or more tag IDs are invalid."` and `"One or more equipment IDs are invalid."`
 - 409 `{ "error": "A recipe with that id already exists." }` when `id` is taken. Nothing changes
 
 ### `PATCH /api/recipes/:id`
 
 Changes only the fields in the body; the rules are the same as for POST, but every field is optional, and `id` can't be sent. An empty body changes nothing except `updatedAt`.
 
-`ingredients` and `sections` work like this:
+`ingredients`, `sections`, `tagIds` and `equipment` work like this:
 
 | In the body | Effect |
 |---|---|
@@ -278,7 +378,7 @@ Send `If-Match` to make sure you're not overwriting a change made elsewhere (see
 
 ### `DELETE /api/recipes/:id`
 
-Deletes the recipe and its lines. The ingredients themselves are kept. Takes `If-Match`, like PATCH.
+Deletes the recipe with its lines, method, tags and equipment lines. The shared ingredients, tags and equipment are kept. Takes `If-Match`, like PATCH.
 
 **Responses:** 200 `{ "message": "Recipe deleted successfully." }`; 404 `{ "error": "Recipe not found." }`; 412 when `If-Match` is out of date.
 
@@ -343,6 +443,47 @@ Renames an ingredient. Takes the same body as POST; `name` is required.
 - 404 `{ "error": "Ingredient not found." }`
 - 409 `{ "error": "Cannot delete ingredient that is used in recipes." }`. Remove it from those recipes first.
 
+## Tags
+
+A shared list, like ingredients (3b). Every tag these endpoints return carries its `recipeCount`.
+
+### `GET /api/tags`
+
+Lists tags. Takes `search`, `limit` and `offset` (see [Lists](#lists-search-and-pagination)).
+
+**Responses:** 200 with an array of [Tag](#tag) and `X-Total-Count`; 400 for a bad query.
+
+### `GET /api/tags/:id`
+
+**Responses:** 200 with the [Tag](#tag); 404 `{ "error": "Tag not found." }`.
+
+### `POST /api/tags`
+
+| Field | Required | Rules |
+|---|---|---|
+| `name` | yes | String. Trimmed and lowercased, then 1–50 characters |
+| `color` | no | `#rrggbb` (any case, stored lowercase), or null. Default null |
+
+**Responses:** 201 with the [Tag](#tag); 400 for a rule above or an unknown field; 409 `{ "error": "That name already exists." }`, after normalising.
+
+### `PATCH /api/tags/:id`
+
+Renames or recolours a tag: send `name`, `color`, or both. Only what's sent changes; `"color": null` removes the colour. Every recipe with the tag shows the change.
+
+**Responses:** 200 with the [Tag](#tag); 400 as for POST; 404 `{ "error": "Tag not found." }`; 409 `{ "error": "That name already exists." }`.
+
+### `DELETE /api/tags/:id`
+
+Deletes the tag and takes it off every recipe that has it. Unlike an ingredient, a recipe depends on nothing in a tag, so there's no 409.
+
+**Responses:** 200 `{ "message": "Tag deleted successfully." }`; 404 `{ "error": "Tag not found." }`.
+
+## Equipment
+
+A shared list, managed exactly like [ingredients](#ingredients) (3b), at `/api/equipment`: `GET` (list, with `search`, `limit` and `offset`), `GET /:id`, `POST` and `PATCH` with `{ "name": "…" }` (trimmed and lowercased, then 1–100 characters), and `DELETE`.
+
+**Responses:** as for ingredients, with these messages: 404 `{ "error": "Equipment not found." }`; 409 `{ "error": "That name already exists." }`; 409 `{ "error": "Cannot delete equipment that is used in recipes." }`.
+
 ## Sync
 
 ### `GET /api/sync`
@@ -353,7 +494,9 @@ Everything a device needs to work offline, in one response (Phase 3c). The web c
 {
   "recipes": [ … ],
   "ingredients": [ … ],
-  "etags": { "0b9e6a52-…": "\"1763836800123\"", … }
+  "etags": { "0b9e6a52-…": "\"1763836800123\"", … },
+  "tags": [ … ],
+  "equipment": [ … ]
 }
 ```
 
@@ -361,7 +504,9 @@ Everything a device needs to work offline, in one response (Phase 3c). The web c
 - `ingredients`: every [Ingredient](#ingredient), sorted by name, then id.
 - `etags`: each recipe's id, with the [ETag](#etags-and-if-match) its own `GET` sends. A device that edits a recipe from its copy sends that ETag in `If-Match`, so a change made elsewhere meanwhile gets a 412 rather than being overwritten. They're opaque here too.
 
-Phase 3b adds `tags` and `equipment`. A deleted recipe is simply missing from the next snapshot.
+- `tags` and `equipment` (3b): every [Tag](#tag) (without `recipeCount`) and every [Equipment](#equipment) item, sorted by name, then id.
+
+A deleted recipe is simply missing from the next snapshot. Renaming or recolouring a tag changes the snapshot too, so its ETag changes.
 
 The same data always gives the same bytes, and the `ETag` is a hash of them. Send the ETag of the copy you have in `If-None-Match`:
 
@@ -425,9 +570,9 @@ Nested fields use dotted paths: `ingredients.0.unit` is the first line's unit. A
 
 | Status | Meaning |
 |---|---|
-| 400 | Validation failed, the body isn't valid JSON (`"The request body is not valid JSON."`), or a recipe line names an ingredient that doesn't exist |
-| 404 | The recipe or ingredient in the URL doesn't exist, or the path under `/api` is unknown (`{ "error": "Not found." }`). Outside `/api` and `/media`, a GET for a page gets the web client's `index.html` instead, so its own routes work as links; a missing file, or any other request, gets Express's plain HTML 404 |
-| 409 | An ingredient name is already taken, an ingredient is still used by a recipe, or a new recipe's `id` is taken |
+| 400 | Validation failed, the body isn't valid JSON (`"The request body is not valid JSON."`), or a recipe names an ingredient, tag or equipment item that doesn't exist |
+| 404 | The recipe, ingredient, tag or equipment item in the URL doesn't exist, or the path under `/api` is unknown (`{ "error": "Not found." }`). Outside `/api` and `/media`, a GET for a page gets the web client's `index.html` instead, so its own routes work as links; a missing file, or any other request, gets Express's plain HTML 404 |
+| 409 | An ingredient, tag or equipment name is already taken, an ingredient or item is still used by a recipe, or a new recipe's `id` is taken |
 | 412 | `If-Match` doesn't match the recipe's current ETag (`"The recipe has changed since it was loaded."`) |
 | 413 | The body is over 100 kB (`"request entity too large"`) |
 | 500 | Something unexpected. The body is always `{ "error": "Internal server error" }`; details go only to the server log |

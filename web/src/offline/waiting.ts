@@ -75,21 +75,29 @@ function isChange(value: unknown): value is WaitingChange {
     return typeof change.recipeId === 'string' && typeof change.body === 'object' && Array.isArray(change.sent);
 }
 
-/** A body as saved before 3b: the method as text, and lines with no section. */
-type OldBody = Omit<DraftBody, 'sections' | 'ingredients'> & {
+/** A body as saved before 3b: the method as text, lines with no section, and no tags or equipment. */
+type OldBody = Omit<DraftBody, 'sections' | 'ingredients' | 'tags' | 'equipment'> & {
     instructions?: string | null;
     sections?: DraftBody['sections'];
     ingredients: (Omit<DraftBody['ingredients'][number], 'sectionIndex'> & { sectionIndex?: number | null })[];
+    tags?: DraftBody['tags'];
+    equipment?: DraftBody['equipment'];
 };
 
-/** Bring a body saved before 3b up to date: its text becomes a "Method" section, as the migration does. */
+/**
+ * Bring a body saved before 3b up to date: its text becomes a "Method"
+ * section, as the migration does, and it has no tags or equipment. Recipes
+ * had none then, and its If-Match still guards against a change made since.
+ */
 export function upgradeBody(body: OldBody): DraftBody {
-    const { instructions, sections, ingredients, ...fields } = body;
+    const { instructions, sections, ingredients, tags, equipment, ...fields } = body;
     const steps = methodSteps(instructions ?? null).map((text) => ({ text, timerSeconds: null }));
     return {
         ...fields,
         sections: sections ?? (steps.length > 0 ? [{ name: 'Method', steps }] : []),
         ingredients: ingredients.map((line) => ({ ...line, sectionIndex: line.sectionIndex ?? null })),
+        tags: tags ?? [],
+        equipment: equipment ?? [],
     };
 }
 

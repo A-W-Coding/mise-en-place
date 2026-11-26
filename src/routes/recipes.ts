@@ -8,12 +8,15 @@
  * summaries, without the lines or the method, so the client can load page
  * after page quickly (Phase 3a).
  *
- * A recipe is written as a whole (spec §2.3, note 1): its sections, steps
- * and lines arrive in its POST or PATCH body and replace what's there, in
- * one transaction, which also sets its `updatedAt`.
+ * A recipe is written as a whole (spec §2.3, note 1): its sections, steps,
+ * lines, tags and equipment lines arrive in its POST or PATCH body and
+ * replace what's there, in one transaction, which also sets its `updatedAt`.
  *
  * Deleting a recipe cascades to everything that belongs to it, but leaves
- * the shared Ingredient records intact.
+ * the shared Ingredient, Tag and Equipment records intact.
+ *
+ * The list can be filtered by a tag (`?tag=<id>`, 3b), with or without a
+ * search.
  *
  * Single-recipe responses carry an `ETag`, and PATCH and DELETE honour
  * `If-Match`, so an edit can't silently overwrite one made elsewhere (F3).
@@ -24,29 +27,28 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../prisma/client.js';
 import { isPrismaError } from '../utils/prisma-errors.js';
-import { fuzzySearchByName } from '../utils/fuzzy-search.js';
+import { fuzzySearchByName, recipesTagged } from '../utils/fuzzy-search.js';
 import { parseOr400 } from '../utils/validation.js';
 import { recipeEtag, ifMatchDates } from '../utils/etag.js';
-import { RECIPE_INCLUDE } from '../utils/recipe-query.js';
-import { createRecipeSchema, updateRecipeSchema, IngredientLine, Section } from '../schemas/recipes.js';
-import { listQuerySchema } from '../schemas/list-query.js';
+import { RECIPE_INCLUDE, RECIPE_SUMMARY_SELECT } from '../utils/recipe-query.js';
+import {
+    createRecipeSchema,
+    updateRecipeSchema,
+    type EquipmentLine,
+    type IngredientLine,
+    type Section,
+} from '../schemas/recipes.js';
+import { recipeListQuerySchema } from '../schemas/list-query.js';
 
 const router = Router();
 
 /**
- * The fields of a recipe in a list: everything but its ingredient lines and
- * method. Later in 3b, its tags and primary image join these.
+ * Thrown inside a write's transaction when the body names a tag or an item
+ * that doesn't exist, so nothing is written; answered with 400 and its message.
  */
-const RECIPE_SUMMARY_SELECT = {
-    id: true,
-    name: true,
-    description: true,
-    servings: true,
-    prepTime: true,
-    cookTime: true,
-    createdAt: true,
-    updatedAt: true,
-} as const;
+class UnknownReference extends Error {}
+
+const BAD_INGREDIENTS = { error: 'One or more ingredient IDs are invalid.' };
 
 /**
  * Write a recipe's sections and their steps, giving each section its id
@@ -98,6 +100,29 @@ async function writeLines(
     });
 }
 
+/**
+ * Write a recipe's tags, in order (3b). Every id must be a tag that exists:
+ * checked first, so the answer can say which list was wrong, rather than
+ * leaving it to the foreign key, which can't tell a tag from an ingredient.
+ */
+async function writeTags(tx: Prisma.TransactionClient, recipeId: string, tagIds: string[]): Promise<void> {
+    if ((await tx.tag.count({ where: { id: { in: tagIds } } })) !== tagIds.length) {
+        throw new UnknownReference('One or more tag IDs are invalid.');
+    }
+    await tx.recipeTag.createMany({ data: tagIds.map((tagId, orderIndex) => ({ recipeId, tagId, orderIndex })) });
+}
+
+/** Write a recipe's equipment lines, in order (3b), each naming an item that exists. */
+async function writeEquipment(tx: Prisma.TransactionClient, recipeId: string, lines: EquipmentLine[]): Promise<void> {
+    const ids = [...new Set(lines.map((line) => line.equipmentId))];
+    if ((await tx.equipment.count({ where: { id: { in: ids } } })) !== ids.length) {
+        throw new UnknownReference('One or more equipment IDs are invalid.');
+    }
+    await tx.recipeEquipment.createMany({
+        data: lines.map((line, orderIndex) => ({ recipeId, orderIndex, ...line })),
+    });
+}
+
 /** Sent when `If-Match` names a version of the recipe that's no longer current. */
 const STALE_RECIPE = { error: 'The recipe has changed since it was loaded.' };
 
@@ -122,29 +147,37 @@ async function sendMissOrStale(res: Response, id: string, expected: Date[] | und
 
 // ── GET /api/recipes ────────────────────────────────────────────────────────
 /**
- * List recipes one page at a time, optionally filtered by a fuzzy search term.
+ * List recipes one page at a time, optionally filtered by a fuzzy search
+ * term, a tag, or both.
  *
- * Query params (see `listQuerySchema`):
+ * Query params (see `recipeListQuerySchema`):
  *  - `search` (string, optional): fuzzy-match against recipe names.
+ *  - `tag` (UUID, optional, 3b): only recipes with this tag. An unknown tag
+ *    has no recipes, so the list is empty.
  *  - `limit` (0–100, default 50) and `offset` (default 0): which page.
  *
  * Plain lists are ordered by name, then id. Search results are ordered by
  * rank, then name, then id. The `X-Total-Count` header gives the number of
  * recipes (or matches) across all pages (D6).
  *
- * Each recipe is a summary (`RECIPE_SUMMARY_SELECT`): the recipe page fetches
- * the lines and instructions with `GET /api/recipes/:id`.
+ * Each recipe is a summary (`RECIPE_SUMMARY_SELECT`), with its tags: the
+ * recipe page fetches the lines and method with `GET /api/recipes/:id`.
  *
  * @returns 200 with an array of recipe summaries (may be empty), or 400 for a bad query.
  */
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const query = parseOr400(listQuerySchema, req.query, res);
+        const query = parseOr400(recipeListQuerySchema, req.query, res);
         if (query === null) return;
-        const { search, limit, offset } = query;
+        const { search, tag, limit, offset } = query;
 
         if (search) {
-            const { matches, total } = await fuzzySearchByName('Recipe', search, { limit, offset });
+            const { matches, total } = await fuzzySearchByName(
+                'Recipe',
+                search,
+                { limit, offset },
+                tag === undefined ? undefined : recipesTagged(tag),
+            );
 
             const ids = matches.map((m) => m.id);
             const recipes = await prisma.recipe.findMany({
@@ -158,14 +191,16 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
             return;
         }
 
+        const where = tag === undefined ? {} : { tags: { some: { tagId: tag } } };
         const [recipes, total] = await Promise.all([
             prisma.recipe.findMany({
+                where,
                 select: RECIPE_SUMMARY_SELECT,
                 orderBy: [{ name: 'asc' }, { id: 'asc' }],
                 take: limit,
                 skip: offset,
             }),
-            prisma.recipe.count(),
+            prisma.recipe.count({ where }),
         ]);
         res.status(200).set('X-Total-Count', String(total)).json(recipes);
     } catch (error) {
@@ -209,9 +244,12 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
  *  - `description`, `servings`, `prepTime`, `cookTime` (optional)
  *  - `sections` (array of `{ name, steps: [{ text, timerSeconds }] }`, optional, 3b)
  *  - `ingredients` (array of `{ ingredientId, quantity, quantityMax, unit, note, sectionIndex }`, optional)
+ *  - `tagIds` (array of tag ids, in order, optional, 3b)
+ *  - `equipment` (array of `{ equipmentId, quantity, optional }`, optional, 3b)
  *
  * @returns 201 with the created Recipe and its `ETag`, 400 on validation
- *          failure, or 409 if a recipe already has the given `id`.
+ *          failure or an unknown ingredient, tag or item, or 409 if a recipe
+ *          already has the given `id`.
  */
 router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -220,13 +258,15 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
 
         // Spreading is safe here: the strict schema has already rejected
         // any field that isn't on its allowlist.
-        const { ingredients = [], sections = [], ...fields } = body;
+        const { ingredients = [], sections = [], tagIds = [], equipment = [], ...fields } = body;
 
-        // One transaction: a taken id or a bad ingredient id leaves nothing behind
+        // One transaction: a taken id or a bad ingredient, tag or item id leaves nothing behind
         const recipe = await prisma.$transaction(async (tx) => {
             const created = await tx.recipe.create({ data: fields });
             const sectionIds = await writeSections(tx, created.id, sections);
             await writeLines(tx, created.id, ingredients, sectionIds);
+            await writeTags(tx, created.id, tagIds);
+            await writeEquipment(tx, created.id, equipment);
             return tx.recipe.findUniqueOrThrow({ where: { id: created.id }, include: RECIPE_INCLUDE });
         });
 
@@ -236,8 +276,10 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
             // A recipe's only unique fields are its id and its main image, which
             // can't be set here, so this is a taken id. The transaction changed nothing.
             res.status(409).json({ error: 'A recipe with that id already exists.' });
+        } else if (error instanceof UnknownReference) {
+            res.status(400).json({ error: error.message });
         } else if (isPrismaError(error, 'P2003')) {
-            res.status(400).json({ error: 'One or more ingredient IDs are invalid.' });
+            res.status(400).json(BAD_INGREDIENTS);
         } else {
             next(error);
         }
@@ -248,7 +290,7 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
 /**
  * Partially update a recipe. Only supplied fields are changed.
  *
- * `ingredients` and `sections` (3b):
+ * `ingredients`, and from 3b `sections`, `tagIds` and `equipment`:
  *  - absent: left untouched.
  *  - an array: **replaced** entirely (delete all, then re-create), in one
  *    transaction with the rest of the change.
@@ -272,7 +314,7 @@ router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => 
         if (body === null) return;
 
         // Fields absent from the body are undefined, which Prisma leaves unchanged.
-        const { ingredients, sections, ...fields } = body;
+        const { ingredients, sections, tagIds, equipment, ...fields } = body;
         const id = req.params.id;
 
         const recipe = await prisma.$transaction(async (tx) => {
@@ -290,6 +332,14 @@ router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => 
                 await tx.recipeIngredient.deleteMany({ where: { recipeId: id } });
                 await writeLines(tx, id, ingredients, sectionIds);
             }
+            if (tagIds) {
+                await tx.recipeTag.deleteMany({ where: { recipeId: id } });
+                await writeTags(tx, id, tagIds);
+            }
+            if (equipment) {
+                await tx.recipeEquipment.deleteMany({ where: { recipeId: id } });
+                await writeEquipment(tx, id, equipment);
+            }
             return tx.recipe.findUniqueOrThrow({ where: { id }, include: RECIPE_INCLUDE });
         });
 
@@ -297,8 +347,10 @@ router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => 
     } catch (error) {
         if (isPrismaError(error, 'P2025')) {
             await sendMissOrStale(res, req.params.id, expected);
+        } else if (error instanceof UnknownReference) {
+            res.status(400).json({ error: error.message });
         } else if (isPrismaError(error, 'P2003')) {
-            res.status(400).json({ error: 'One or more ingredient IDs are invalid.' });
+            res.status(400).json(BAD_INGREDIENTS);
         } else {
             next(error);
         }

@@ -19,7 +19,9 @@
  *
  * From 3b the ingredients are grouped by section, lines in no section first
  * with no heading, and the method is shown by section. A step with a timer
- * has a button that starts it with one tap.
+ * has a button that starts it with one tap. All of the recipe's tags show
+ * under its name, each opening the list filtered by it, and its equipment
+ * follows the ingredients.
  *
  * The cooking mode switch keeps the screen on, and changes nothing else: the
  * whole recipe stays readable. It's off for each recipe you open, and leaving
@@ -37,6 +39,7 @@ import { useWaitingChanges } from '../offline/waiting';
 import { SettleChange, WaitingNotice } from '../components/Waiting';
 import { CookingMode } from '../cooking/CookingMode';
 import { StepTimerButton } from '../timers/StepTimerButton';
+import { pillColours, tagLabel } from '../tags/colour';
 import { BackLink } from '../components/BackLink';
 import { DeleteRecipeDialog } from '../components/DeleteRecipeDialog';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -152,7 +155,24 @@ function RecipeContent({ recipe, onDelete, cooking, onCookingChange }: RecipeCon
                         buttonClassName={styles.menuButton}
                     />
                 </div>
-                {/* 3b adds all of the recipe's tags here */}
+                {recipe.tags.length > 0 && (
+                    <ul aria-label="Tags" className={styles.tags}>
+                        {recipe.tags.map(({ tag }) => (
+                            <li key={tag.id}>
+                                {/* A tag made offline has no id yet, so nothing to filter by until it uploads */}
+                                {tag.id.startsWith('new:') ? (
+                                    <span className={styles.tag} style={pillColours(tag.color)}>
+                                        {tagLabel(tag.name)}
+                                    </span>
+                                ) : (
+                                    <Link to={`/?tag=${encodeURIComponent(tag.id)}`} className={styles.tag} style={pillColours(tag.color)}>
+                                        {tagLabel(tag.name)}
+                                    </Link>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                )}
                 {recipe.description && <p className={styles.description}>{recipe.description}</p>}
                 <p className={styles.meta}>{recipeMeta(recipe)}</p>
                 <div className={styles.cooking}>
@@ -161,33 +181,52 @@ function RecipeContent({ recipe, onDelete, cooking, onCookingChange }: RecipeCon
             </header>
 
             <div className={styles.columns}>
-                <section aria-labelledby="ingredients-heading" className={styles.ingredients}>
-                    <h2 id="ingredients-heading" className={styles.sectionTitle}>
-                        Ingredients
-                    </h2>
-                    {groups.length === 0 ? (
-                        <p className={styles.empty}>No ingredients yet.</p>
-                    ) : (
-                        groups.map((group) => (
-                            <div key={group.section?.id ?? 'none'} className={styles.ingredientGroup}>
-                                {group.section && <h3 className={styles.groupName}>{group.section.name}</h3>}
-                                <ul className={styles.lines}>
-                                    {group.lines.map((line) => (
-                                        <li key={line.id} className={styles.line}>
-                                            <span className={styles.amount}>
-                                                {formatAmount(line.quantity, line.quantityMax, line.unit)}
-                                            </span>
-                                            <span>
-                                                {line.ingredient.name}
-                                                {line.note && <span className={styles.note}>, {line.note}</span>}
-                                            </span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        ))
+                <div className={styles.ingredients}>
+                    <section aria-labelledby="ingredients-heading">
+                        <h2 id="ingredients-heading" className={styles.sectionTitle}>
+                            Ingredients
+                        </h2>
+                        {groups.length === 0 ? (
+                            <p className={styles.empty}>No ingredients yet.</p>
+                        ) : (
+                            groups.map((group) => (
+                                <div key={group.section?.id ?? 'none'} className={styles.ingredientGroup}>
+                                    {group.section && <h3 className={styles.groupName}>{group.section.name}</h3>}
+                                    <ul className={styles.lines}>
+                                        {group.lines.map((line) => (
+                                            <li key={line.id} className={styles.line}>
+                                                <span className={styles.amount}>
+                                                    {formatAmount(line.quantity, line.quantityMax, line.unit)}
+                                                </span>
+                                                <span>
+                                                    {line.ingredient.name}
+                                                    {line.note && <span className={styles.note}>, {line.note}</span>}
+                                                </span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            ))
+                        )}
+                    </section>
+
+                    {recipe.equipment.length > 0 && (
+                        <section aria-labelledby="equipment-heading" className={styles.equipment}>
+                            <h2 id="equipment-heading" className={styles.sectionTitle}>
+                                Equipment
+                            </h2>
+                            <ul className={styles.lines}>
+                                {recipe.equipment.map((line) => (
+                                    <li key={line.id} className={styles.line}>
+                                        <span className={styles.amount}>{line.quantity}</span>
+                                        <span className={styles.equipmentName}>{line.equipment.name}</span>
+                                        {line.optional && <span className={styles.note}>optional</span>}
+                                    </li>
+                                ))}
+                            </ul>
+                        </section>
                     )}
-                </section>
+                </div>
 
                 <section aria-labelledby="method-heading" className={styles.method}>
                     <h2 id="method-heading" className={styles.sectionTitle}>

@@ -657,7 +657,8 @@ Validation:
 - `sections[].name`: 1–100 characters after trimming. `steps[].text`: 1–2,000 characters after trimming. `timerSeconds`: a whole number from 1 to 86,400, or null.
 - `sectionIndex` must point inside `sections`.
 - A body with `sections` must also have `ingredients`, because replacing the sections gives them new ids, and lines would otherwise silently lose their section.
-- `equipment[].quantity`: a whole number of at least 1, default 1. `optional`: a boolean, default false.
+- `equipment[].quantity`: a whole number from 1 to 99, default 1. `optional`: a boolean, default false.
+- `tagIds`: each tag once (400 otherwise). An unknown tag or item is a 400 that says which list: `"One or more tag IDs are invalid."` or `"One or more equipment IDs are invalid."`.
 - `primaryImageId` must be one of this recipe's images (400 otherwise).
 - Unknown fields are rejected, as in Phase 1.
 

@@ -13,7 +13,8 @@
  *
  * From 3b the method is `sections`, each with its `steps`, and an ingredient
  * line can sit in a section (`sectionIndex`). Phase 1's `instructions` is no
- * longer accepted: a migration moved it into steps (spec §7.2).
+ * longer accepted: a migration moved it into steps (spec §7.2). A recipe's
+ * tags are `tagIds`, in order, and its equipment lines `equipment`.
  */
 
 import { z } from 'zod';
@@ -62,6 +63,34 @@ export const sectionSchema = z.strictObject({
 });
 
 const sections = z.array(sectionSchema, { error: 'Must be an array of sections.' });
+
+/**
+ * The recipe's tags, in its own order: the list shows the first two (3b).
+ * Each tag once, since a tag can't be on a recipe twice.
+ */
+const tagIds = z
+    .array(z.uuid({ error: 'Must be a tag id.' }).transform((id) => id.toLowerCase()), {
+        error: 'Must be an array of tag ids.',
+    })
+    .superRefine((ids, ctx) => {
+        ids.forEach((id, index) => {
+            if (ids.indexOf(id) !== index) ctx.addIssue({ code: 'custom', path: [index], message: 'Each tag only once.' });
+        });
+    });
+
+/** One equipment line: which item, how many, and whether the recipe works without it (3b). */
+export const equipmentLineSchema = z.strictObject({
+    equipmentId: z.uuid({ error: requiredOr('Must be an equipment id.') }),
+    quantity: z
+        .number({ error: 'Must be a number.' })
+        .int('Must be a whole number.')
+        .min(LIMITS.equipmentQuantity.min, `Must be at least ${LIMITS.equipmentQuantity.min}.`)
+        .max(LIMITS.equipmentQuantity.max, `Must be at most ${LIMITS.equipmentQuantity.max}.`)
+        .default(1),
+    optional: z.boolean({ error: 'Must be true or false.' }).default(false),
+});
+
+const equipmentLines = z.array(equipmentLineSchema, { error: 'Must be an array of equipment lines.' });
 
 const servings = z
     .number({ error: 'Must be a number.' })
@@ -173,6 +202,8 @@ export const createRecipeSchema = z
         cookTime: minutes.optional(),
         sections: sections.optional(),
         ingredients: ingredientLines.optional(),
+        tagIds: tagIds.optional(),
+        equipment: equipmentLines.optional(),
     })
     .superRefine(checkSections);
 
@@ -191,8 +222,11 @@ export const updateRecipeSchema = z
         cookTime: minutes.optional(),
         sections: sections.optional(),
         ingredients: ingredientLines.optional(),
+        tagIds: tagIds.optional(),
+        equipment: equipmentLines.optional(),
     })
     .superRefine(checkSections);
 
 export type IngredientLine = z.output<typeof ingredientLineSchema>;
 export type Section = z.output<typeof sectionSchema>;
+export type EquipmentLine = z.output<typeof equipmentLineSchema>;
