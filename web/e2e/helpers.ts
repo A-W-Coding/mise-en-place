@@ -1,9 +1,10 @@
 /**
  * @module web/e2e/helpers
- * Steps the offline tests share (3c).
+ * Steps and checks the tests share: the offline ones (3c), and where a
+ * picker's suggestions open (Step 26).
  */
 
-import type { APIRequestContext, Page } from '@playwright/test';
+import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import { expect } from './fixtures';
 
 /** Add a recipe through the API, as another device would. */
@@ -20,6 +21,21 @@ export async function openAndSaveCopy(page: Page, recipes: string) {
     });
     await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null)).toBe(true);
     await expect(page.getByRole('region', { name: 'Offline copy' })).toContainText(`${recipes} on this device`);
+}
+
+/**
+ * Check a picker's suggestions open just under its box. Placed against the
+ * page instead, as the tag box's were until Step 26, they open below the
+ * bottom of the screen, where a phone never shows them; a test's click still
+ * reaches them, since Playwright scrolls to whatever it clicks.
+ */
+export async function expectJustUnder(suggestions: Locator, box: Locator) {
+    await expect(suggestions).toBeVisible();
+    const list = (await suggestions.boundingBox())!;
+    const field = (await box.boundingBox())!;
+    const gap = list.y - (field.y + field.height);
+    expect(gap).toBeGreaterThanOrEqual(0);
+    expect(gap).toBeLessThan(12);
 }
 
 /** The banner shown while a page reads the offline copy. */

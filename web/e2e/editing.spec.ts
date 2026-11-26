@@ -6,6 +6,7 @@
 
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
+import { expectJustUnder } from './helpers';
 
 /** Open a recipe's ⋮ menu (on its page or its list row) and choose an item. */
 async function fromMenu(page: Page, recipe: string, item: string) {
@@ -27,7 +28,9 @@ test('create a recipe with lines and a new ingredient, edit it, and delete it', 
     await page.getByLabel('Name').fill('Garlic Bread');
     await page.getByLabel('Serves').fill('4');
     await page.getByLabel('Amount, line 1').fill('2 cloves');
-    await page.getByRole('combobox', { name: 'Ingredient, line 1' }).fill('garl');
+    const ingredientBox = page.getByRole('combobox', { name: 'Ingredient, line 1' });
+    await ingredientBox.fill('garl');
+    await expectJustUnder(page.getByRole('listbox', { name: 'Matching ingredients' }), ingredientBox);
     await page.getByRole('option', { name: 'garlic' }).click();
 
     await page.getByRole('button', { name: 'Add ingredient' }).click();
