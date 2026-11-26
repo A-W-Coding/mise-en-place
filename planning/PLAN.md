@@ -3,8 +3,8 @@
 # Mise en place: hardening plan (Phase 1 to Phase 4)
 
 > **Status**
-> - Current step: **Step 27: security fixes, and fresh images on every deploy**, built (2026-11-26); its deploy is next (you), with CI to be confirmed when its PR opens. Then Step 28, Dependabot. Phase 4's plan (Steps 27–32, D16–D19) merged as PR #35. **Phase 3 is complete (2026-11-26):** 3a (2026-11-23), 3c (2026-11-24) and 3b (Steps 20–26, PRs #24–#32, CI green), all deployed on the Pi and checked on your phone. Step 8 waits only on the SSD (8.1, about a month away)
-> - Last updated: 2026-11-26 (Step 27: security fixes, and fresh images on every deploy)
+> - Current step: **Step 27: security fixes, and fresh images on every deploy**, done (2026-11-26): merged as PR #36 (CI run #75 green) and deployed. Next: Step 28, Dependabot. Phase 4's plan (Steps 27–32, D16–D19) merged as PR #35. **Phase 3 is complete (2026-11-26):** 3a (2026-11-23), 3c (2026-11-24) and 3b (Steps 20–26, PRs #24–#32, CI green), all deployed on the Pi and checked on your phone. Step 8 waits only on the SSD (8.1, about a month away)
+> - Last updated: 2026-11-26 (Step 27 deployed)
 > - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
@@ -924,7 +924,7 @@ And: no known advisory in the API's production dependencies, and the Pi runs Pri
 - [x] `deploy.sh` downloads before it builds: `compose pull db`, then `compose build --pull api`, so each deploy starts from the newest `node:22-slim` and `postgres:17`. The `17` tag only moves through 17.x releases, which keep the same data format. `up -d` then recreates the database container only when its image changed: a restart of a few seconds, after the deploy's backup
 - [x] The runbook says so, and that a new Postgres major version (18) is a task of its own, since it needs a dump and restore. (The README's deploy line too)
 - [x] Tests: Jest, the client's Vitest, lint and type-check, and the end-to-end tests in Chromium here; CI runs Firefox. (575 Jest, 311 Vitest, 70 end-to-end in Chromium, all passing. Both new Compose commands checked with `--dry-run` against the production file)
-- [ ] Deploy (you): the health check passes, and `docker compose exec db postgres --version` shows the newest 17.x
+- [x] Deploy (you): the health check passes, and `docker compose exec db postgres --version` shows the newest 17.x. ("Deploy OK", and the Pi answers its health check from the PC; the version number wasn't recorded here)
 
 **Done when:** CI is green, `npm audit --omit=dev` reports nothing, and the Pi runs it.
 
@@ -1958,3 +1958,6 @@ And: no known advisory in the API's production dependencies, and the Pi runs Pri
   - **Tests:** 575 Jest, 311 Vitest, and 70 end-to-end in Chromium, all passing; lint and type-check clean.
 
   Next: your deploy, then Step 28, Dependabot.
+- **2026-11-26:** Step 27 merged (PR #36, CI run #75 green) and deployed: "Deploy OK", with the newest images downloaded, and the Pi answers its health check. Step 27 done.
+
+  Next: Step 28, Dependabot.
