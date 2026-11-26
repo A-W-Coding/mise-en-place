@@ -3,8 +3,8 @@
 # Mise en place: hardening plan (Phase 1 to Phase 3b)
 
 > **Status**
-> - Current step: **Step 25: images in the app**, done (2026-11-26), with CI to be confirmed when its PR opens. Next: Step 26, deploy, check on the phone and drop `instructions` (Phase 3b done). Step 24 merged as PR #29 (CI green); none of 3b is deployed yet. Step 23 merged as PR #28 (CI green). Step 22 merged as PR #27 (CI green). Step 21 (the 3b wireframes) merged as PR #26. Step 20 merged as PR #25 (CI green); it isn't deployed (3b deploys in Step 26). Phase 3b's steps merged as PR #24. Phase 3c is complete (2026-11-24): Steps 15–19 merged (PRs #18–#22), deployed on the Pi, and every success criterion met on your phone. Phase 3a is done (2026-11-23), and D15 was settled on 2026-11-24 (offline drafts, in 3c, with 3c before 3b). Step 8 waits only on the SSD (8.1, about a month away); its images backups (8.7) move into 3b with the images
-> - Last updated: 2026-11-26 (Step 25: images in the app)
+> - Current step: **Step 26: deploy, check on the phone, and drop `instructions`**, done (2026-11-26). **Phase 3b, and with it Phase 3, is complete:** Phase 3b's plan and Steps 20–26 merged (PRs #24–#32, CI green), deployed on the Pi, and every 3b success criterion met on your phone. Phase 3c is complete (2026-11-24), and Phase 3a (2026-11-23). This plan ends here: Phase 4 (hardening and monitoring, in the Backlog) needs a plan of its own. Step 8 waits only on the SSD (8.1, about a month away)
+> - Last updated: 2026-11-26 (Step 26: Phase 3b, and with it Phase 3, complete)
 > - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
@@ -882,17 +882,18 @@ And since 3c came first, its criteria still hold with all of this: offline, reci
 
 **Why:** the migration meets your real recipes here, and the camera, its GPS data and the image backups need the real phone and Pi.
 
-- [ ] Merge to `main`, then run `scripts/deploy.sh`: it backs up, then migrates (§7.2)
-- [ ] Check a few migrated recipes in the app: each method is a "Method" section with the same steps (you). The backup taken before migrating is the way back
-- [ ] Then a last migration drops `Recipe.instructions` (§7.2), and a second deploy
-- [ ] On your phone (you):
+- [x] Merge to `main`, then run `scripts/deploy.sh`: it backs up, then migrates (§7.2)
+- [x] Check a few migrated recipes in the app: each method is a "Method" section with the same steps (you). The backup taken before migrating is the way back. (Also compared from the PC: the Pi's snapshot before and after)
+- [x] Then a last migration drops `Recipe.instructions` (§7.2), and a second deploy
+- [x] On your phone (you):
   - create a recipe with two sections, a step with a timer, grouped ingredient lines, two tags, equipment, and a photo taken there and then
   - start the step's timer with one tap; edit the recipe
   - offline: read it, thumbnail included, and edit its sections and tags, then reconnect and see the change upload by itself
-- [ ] The stored photo has no GPS position (checked from the PC, on the file the Pi serves)
-- [ ] The nightly backup includes the images, and so does the off-site copy
-- [ ] Docs: anything the deploy changed
-- [ ] Tick the boxes, then update the Status block and the Progress log
+  - (As found: a typed tag offered no "Create tag", since its suggestions opened below the bottom of the screen. Fixed in PR #32, redeployed and checked again. The recipe left on the Pi has no ingredient lines, so grouping them by section is shown by `sections.spec.ts` in CI, not on the phone)
+- [x] The stored photo has no GPS position (checked from the PC, on the file the Pi serves)
+- [x] The nightly backup includes the images, and so does the off-site copy
+- [x] Docs: anything the deploy changed
+- [x] Tick the boxes, then update the Status block and the Progress log
 
 **Done when:** every 3b success criterion above is met, and CI is green. **Phase 3b, and with it Phase 3, is then complete.**
 
@@ -900,7 +901,7 @@ And since 3c came first, its criteria still hold with all of this: offline, reci
 | When | Items |
 |---|---|
 | Any time after Step 6 | M6: a JSON export of all data (small, and cheap insurance) |
-| Phase 3 | 3a: Steps 9–14 (done). 3c: Steps 15–19 (done), before 3b (D15). 3b: Steps 20–26 |
+| Phase 3 | 3a: Steps 9–14 (done). 3c: Steps 15–19 (done), before 3b (D15). 3b: Steps 20–26 (done) |
 | Later, unscheduled | Ingredient usage, from your wireframe review: see which recipes use an ingredient, then either replace it in all of them at once (a merge) so it can be deleted, or delete those recipes with it. Phone VPNs: Android runs one VPN at a time, so Tailscale and Proton VPN take turns, and Proton doesn't reconnect by itself (Android's Always-on VPN blocks Tailscale outright). Ways to automate or avoid the switch: an automation app (MacroDroid: start Proton when Tailscale disconnects), the Pi as a Tailscale exit node sending its traffic through Proton, or Tailscale's Mullvad add-on |
 | Phase 4 | Uptime and disk-space alerts, log rotation, and automated dependency updates (Dependabot or Renovate). V5: the Prisma upgrade, as its own task |
 | Phase 5 | F7: the shopping-list tables must exist before Phase 5 can deliver shopping lists. D14: timer alerts while another app is open, through Web Push from the Pi (test it on the phone first, because Firefox for Android has had push bugs) |
@@ -1794,3 +1795,14 @@ And since 3c came first, its criteria still hold with all of this: offline, reci
   - **Docs:** no API change, so none.
 
   Next: Step 26, deploy, check on the phone, and drop `instructions` (Phase 3b done).
+- **2026-11-26:** Step 25 merged (PR #30, CI green). Step 26 done: **Phase 3b, and with it Phase 3, is complete.**
+  - **The first deploy** (3b's two migrations, and the images volume): `deploy.sh` backed up, then migrated. The Pi's snapshot, saved before and after, shows each recipe's text became a "Method" section with a step for each line ("phone test toast": "Put toast in toaster"; "test 2": "Eat the onion."), with the ingredient lines unchanged and tags and equipment added. You checked both recipes in the app.
+  - **Dropping the column** (PR #31): a last migration drops `Recipe.instructions`, and `prisma/client.ts` loses its global `omit`. The test of the earlier migration now adds the column back inside a transaction, runs that migration's SQL, then rolls it all back, and a new test checks the column is gone. Then the second deploy.
+  - **On the phone:** a recipe with two sections, a step with a 5-minute timer started with one tap, equipment, a tag and photos taken there and then, edited afterwards; offline, read with its thumbnail and edited, then uploaded by itself on reconnecting.
+  - **Found on the phone:** typing a tag offered no "Create tag", so no colour panel, and the typed name was dropped on Save. The suggestion list is placed absolutely, and the tag box had no positioned box around it, as an ingredient or equipment row has, so the list was placed against the page, below the bottom of the screen. A wrapper fixes it (PR #32, CI green); redeployed, and tags checked again on the phone. The tests had missed it: jsdom doesn't lay pages out, and Playwright scrolls to whatever it clicks. `expectJustUnder()` in `e2e/helpers.ts` now checks the tag, equipment and ingredient suggestions open just under their boxes; without the fix it fails, with the tag list 547 px below its box.
+  - **The photo:** downloaded from the Pi, the full size (1506×2000, upright) and the thumbnail (301×400) hold only image data, with no EXIF or XMP, so no GPS position.
+  - **Backups:** you ran `backup.sh` (the dump and its `.media.tar`), `restore-check.sh` (the image check passed) and `offsite.sh`, and the B2 copy lists the `.media.tar`.
+  - **Not shown on the phone:** the recipe left on the Pi has no ingredient lines, so grouping lines by section is covered by `sections.spec.ts` in CI rather than on the phone.
+  - **Docs:** `docs/api.md` and `docs/erd.md` say the column is gone (PR #31); the README's status and `docs/api.md`'s opening line now that 3b is done.
+
+  Next: this plan ends with Phase 3. Phase 4 (hardening and monitoring, in the Backlog) needs a plan of its own. Still open: the SSD (8.1).

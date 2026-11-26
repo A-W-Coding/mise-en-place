@@ -1,6 +1,6 @@
 # API reference
 
-The mise-en-place API as of Phase 1, plus Phase 3a's JSON 404s and recipe ETags, Phase 3c's snapshot and recipe ids chosen by the client, and so far in Phase 3b a recipe's sections and steps, tags, equipment and images. The design behind it is in the technical spec, §3 (`planning/specs/technical-spec.md`).
+The mise-en-place API as of Phase 1, plus Phase 3a's JSON 404s and recipe ETags, Phase 3c's snapshot and recipe ids chosen by the client, and Phase 3b's sections and steps, tags, equipment and images. The design behind it is in the technical spec, §3 (`planning/specs/technical-spec.md`).
 
 - [Conventions](#conventions)
 - [Objects](#objects): Recipe, ingredient line, Section, tag line, equipment line, Image, Ingredient, Tag, Equipment
