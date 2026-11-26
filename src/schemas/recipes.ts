@@ -14,7 +14,8 @@
  * From 3b the method is `sections`, each with its `steps`, and an ingredient
  * line can sit in a section (`sectionIndex`). Phase 1's `instructions` is no
  * longer accepted: a migration moved it into steps (spec §7.2). A recipe's
- * tags are `tagIds`, in order, and its equipment lines `equipment`.
+ * tags are `tagIds`, in order, its equipment lines `equipment`, and its main
+ * image `primaryImageId`, which the route checks is one of its own.
  */
 
 import { z } from 'zod';
@@ -91,6 +92,12 @@ export const equipmentLineSchema = z.strictObject({
 });
 
 const equipmentLines = z.array(equipmentLineSchema, { error: 'Must be an array of equipment lines.' });
+
+/** The main image: one of the recipe's own (checked by the route), or null for none. */
+const primaryImageId = z
+    .uuid({ error: 'Must be an image id or null.' })
+    .transform((id) => id.toLowerCase())
+    .nullable();
 
 const servings = z
     .number({ error: 'Must be a number.' })
@@ -204,6 +211,7 @@ export const createRecipeSchema = z
         ingredients: ingredientLines.optional(),
         tagIds: tagIds.optional(),
         equipment: equipmentLines.optional(),
+        primaryImageId: primaryImageId.optional(),
     })
     .superRefine(checkSections);
 
@@ -224,6 +232,7 @@ export const updateRecipeSchema = z
         ingredients: ingredientLines.optional(),
         tagIds: tagIds.optional(),
         equipment: equipmentLines.optional(),
+        primaryImageId: primaryImageId.optional(),
     })
     .superRefine(checkSections);
 

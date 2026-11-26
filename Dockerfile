@@ -54,6 +54,10 @@ COPY --from=build /app/dist ./dist
 COPY --from=web /app/web/dist ./web/dist
 COPY prisma ./prisma
 
+# Where recipe images go (3b): the one folder the app writes to. Docker gives a
+# new, empty volume mounted here this folder's owner, so the app can write to it
+RUN mkdir -p /app/media && chown node:node /app/media
+
 # Everything above is owned by root and only readable by the app
 USER node
 

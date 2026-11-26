@@ -108,7 +108,9 @@ Run `crontab -e` and add a line to back up at 03:30 every day:
 30 3 * * * $HOME/mise-en-place/scripts/backup.sh >> $HOME/miseenplace-backup.log 2>&1
 ```
 
-Then test a restore. This restores the newest dump into a scratch database, `miseenplace_restore_check`, compares row counts with the live database, and drops the scratch database again:
+Each backup is a pair with the same name: `<label>-<stamp>.dump`, the database, and from 3b `<label>-<stamp>.media.tar`, the recipe images, made from the `media` volume at the same moment.
+
+Then test a restore. This restores the newest dump into a scratch database, `miseenplace_restore_check`, compares row counts with the live database, checks the images archive beside it holds both files of every image in the dump, and drops the scratch database again:
 
 ```bash
 cd ~/mise-en-place
@@ -122,7 +124,7 @@ Section 7 adds an encrypted copy off the Pi.
 
 The backups folder is on the same disk as the database, so one dead SD card or SSD would take both. `scripts/offsite.sh` keeps an encrypted copy in Backblaze B2 with restic. restic encrypts on the Pi, so B2 only ever holds encrypted data.
 
-1. **Account:** sign up for B2 Cloud Storage at <https://www.backblaze.com/sign-up/cloud-storage>. When it asks for a region, choose **EU Central**. The first 10 GB are free, and the dumps are far smaller than that.
+1. **Account:** sign up for B2 Cloud Storage at <https://www.backblaze.com/sign-up/cloud-storage>. When it asks for a region, choose **EU Central**. The first 10 GB are free, and the dumps are far smaller than that. So are the images: at most 10 per recipe, a few hundred kilobytes each, and restic stores a file it has seen before only once, however many nightly archives hold it.
 2. **Bucket:** under **Buckets**, create one with a unique name, for example `miseenplace-` plus a few random characters. Use **lowercase letters only**: buckets used through B2's S3-compatible API must follow S3's naming rules, and a bucket can't be renamed later. Make its files **Private**, and leave Object Lock off. Note its **Endpoint**, such as `s3.eu-central-003.backblazeb2.com`.
 3. **Key for the Pi:** under **Application Keys**, add a key named after the Pi, allowed into that bucket only, with **Read and Write** access.
    - Tick **Allow listing all bucket names including bucket creation dates**: B2's S3-compatible API needs it for a key limited to one bucket.
@@ -173,7 +175,15 @@ The backups folder is on the same disk as the database, so one dead SD card or S
    rm -rf /tmp/offsite-restore
    ```
 
-Each night it keeps 7 daily, 4 weekly and 6 monthly snapshots. On Sundays it also downloads a random tenth of the stored data and checks it.
+Each night it keeps 7 daily, 4 weekly and 6 monthly snapshots. On Sundays it also downloads a random tenth of the stored data and checks it. It copies the whole backups folder, so the images archives go with the dumps.
+
+### The images volume
+
+Recipe images (3b) live in the `media` Docker volume, mounted into the API at `/app/media`. The image creates that folder owned by its `node` user, and Docker gives a new, empty volume the same owner, so the API can write to it. If uploads ever fail with "permission denied" in `docker compose logs api` (a volume made some other way), give it back to `node`:
+
+```bash
+docker compose run --rm --no-deps --user root --entrypoint chown api node:node /app/media
+```
 
 ## 8. Installing the app on your phone
 
@@ -223,34 +233,40 @@ All of these run in `~/mise-en-place` on the Pi:
 | Check the newest backup restores | `scripts/restore-check.sh` |
 | Copy the backups to B2 now | `scripts/offsite.sh` |
 | List the copies in B2 | `scripts/offsite.sh snapshots` |
+| How much room the images take | `docker compose run --rm --no-deps --entrypoint du api -sh /app/media` |
 
-Backups go to `/srv/miseenplace/backups`. Set `BACKUP_DIR` to use another folder, and `KEEP_DAYS` to keep dumps for longer than 7 days.
+Backups go to `/srv/miseenplace/backups`. Set `BACKUP_DIR` to use another folder, and `KEEP_DAYS` to keep backups for longer than 7 days.
 
-Never run `docker compose down -v`: `-v` deletes the database volume.
+Never run `docker compose down -v`: `-v` deletes the database volume and the images volume.
 
 ### Restoring for real
 
-This replaces everything in the live database with the dump. Take a fresh backup first. If the dumps on the Pi are gone, fetch one from B2 first (section 7, step 9). Then:
+This replaces everything in the live database with the dump, and the images with the archive beside it. Take a fresh backup first. If the backups on the Pi are gone, fetch them from B2 first (section 7, step 9). Then, with `<file>` the backup's name without its extension:
 
 ```bash
 docker compose stop api
 docker compose exec -T db sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists --no-owner --exit-on-error' \
   < /srv/miseenplace/backups/<file>.dump
+# The images: empty the volume, then unpack the archive into it, as the node user, so the API owns the files
+docker compose run --rm --no-deps -T --entrypoint sh api -c 'find /app/media -mindepth 1 -delete && tar -C /app/media -xf -' \
+  < /srv/miseenplace/backups/<file>.media.tar
 docker compose start api
 ```
 
+A backup from before 3b has no `.media.tar`: skip that line.
+
 ## Moving to an SSD
 
-Everything on the Pi is in git, in `.env` or in the database, so moving from the SD card to an SSD is a fresh install plus a restore. The SD card stays untouched, as a fallback.
+Everything on the Pi is in git, in `.env`, in the database or, from 3b, in the images volume, so moving from the SD card to an SSD is a fresh install plus a restore. The SD card stays untouched, as a fallback.
 
-1. On the Pi, take a backup and note the file name it prints, then send it to B2:
+1. On the Pi, take a backup and note the file names it prints (a `.dump` and a `.media.tar`), then send them to B2:
    ```bash
    ~/mise-en-place/scripts/backup.sh pre-ssd
    ~/mise-en-place/scripts/offsite.sh
    ```
-   Without the off-site copy, copy the dump to your PC instead, with a USB stick or with `scp`, which Windows has built in:
+   Without the off-site copy, copy both files to your PC instead, with a USB stick or with `scp`, which Windows has built in:
    ```bash
-   scp <user>@<pi-lan-ip>:/srv/miseenplace/backups/pre-ssd-<stamp>.dump .
+   scp <user>@<pi-lan-ip>:/srv/miseenplace/backups/pre-ssd-<stamp>.* .
    ```
 2. Shut the Pi down with `sudo poweroff`, take the SD card out and keep it.
 3. In the Tailscale admin console, under **Machines**, remove the old Pi. The new install can then take the same name, so the `https://<name>.<tailnet>.ts.net` address stays the same.
@@ -260,14 +276,14 @@ Everything on the Pi is in git, in `.env` or in the database, so moving from the
    sudo mkdir -p /srv/miseenplace/backups
    sudo chown "$USER": /srv/miseenplace/backups
    ```
-   Fetch the dump from B2. First install restic and write `~/.config/miseenplace/restic.env` from your password manager, as in section 7, steps 4–6. Don't generate a new password: only the saved one can decrypt the copy.
+   Fetch the backup from B2. First install restic and write `~/.config/miseenplace/restic.env` from your password manager, as in section 7, steps 4–6. Don't generate a new password: only the saved one can decrypt the copy.
    ```bash
    ~/mise-en-place/scripts/offsite.sh restore latest --target /tmp/offsite-restore
-   cp /tmp/offsite-restore/srv/miseenplace/backups/pre-ssd-<stamp>.dump /srv/miseenplace/backups/
+   cp /tmp/offsite-restore/srv/miseenplace/backups/pre-ssd-<stamp>.* /srv/miseenplace/backups/
    ```
-   Without the off-site copy, copy the dump back from your PC. If `scp` warns that the host key has changed, that's the fresh install: run `ssh-keygen -R <pi-lan-ip>` and try again.
+   Without the off-site copy, copy both files back from your PC. If `scp` warns that the host key has changed, that's the fresh install: run `ssh-keygen -R <pi-lan-ip>` and try again.
    ```bash
-   scp pre-ssd-<stamp>.dump <user>@<pi-lan-ip>:/srv/miseenplace/backups/
+   scp pre-ssd-<stamp>.dump pre-ssd-<stamp>.media.tar <user>@<pi-lan-ip>:/srv/miseenplace/backups/
    ```
    Then restore it into the new, empty database on the Pi:
    ```bash
@@ -275,5 +291,11 @@ Everything on the Pi is in git, in `.env` or in the database, so moving from the
    docker compose up -d --wait db
    docker compose exec -T db sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --exit-on-error' \
      < /srv/miseenplace/backups/pre-ssd-<stamp>.dump
+   ```
+   And the images, into the new, empty volume. Building the image first makes the folder the volume takes its owner from:
+   ```bash
+   docker compose build api
+   docker compose run --rm --no-deps -T --entrypoint tar api -C /app/media -xf - \
+     < /srv/miseenplace/backups/pre-ssd-<stamp>.media.tar
    ```
 6. Carry on with sections 5 and 6, then section 7 from step 8: the repository already exists. Then run the checks. `deploy.sh` applies any migrations newer than the dump.

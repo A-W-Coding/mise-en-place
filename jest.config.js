@@ -6,6 +6,8 @@ export default {
     roots: ['<rootDir>/tests'],
     // Loads .env.test, checks for a _test database and migrates it, once per run (T1).
     globalSetup: '<rootDir>/tests/helpers/global-setup.ts',
+    // Image files go to a temporary folder, never the project's own media/ (3b).
+    setupFiles: ['<rootDir>/tests/helpers/media-dir.ts'],
     // Database-backed tests can be slow in CI or on the Pi.
     testTimeout: 15_000,
     // With --coverage: a table in the terminal, an HTML report in

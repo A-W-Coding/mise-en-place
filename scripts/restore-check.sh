@@ -5,6 +5,8 @@
 #
 # Restores the dump into a scratch database, compares its row counts with the
 # live database, then drops the scratch database. The live database is only read.
+# From 3b, it also checks the images archive saved beside the dump holds both
+# files of every image the dump has.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -32,14 +34,34 @@ trap drop_scratch EXIT
 echo "Restoring $dump into $scratch"
 compose exec -T db sh -c 'pg_restore -U "$POSTGRES_USER" -d "$1" --no-owner --exit-on-error' sh "$scratch" < "$dump"
 
-counts='SELECT format($$%-20s %s$$, t, n) FROM (
-    SELECT $$Recipe$$ AS t, count(*) AS n FROM "Recipe"
-    UNION ALL SELECT $$Ingredient$$, count(*) FROM "Ingredient"
-    UNION ALL SELECT $$RecipeIngredient$$, count(*) FROM "RecipeIngredient"
-    UNION ALL SELECT $$_prisma_migrations$$, count(*) FROM "_prisma_migrations"
-) c'
+# The Image table arrived with 3b: a dump from before it hasn't got one
+has_images=$(in_db "$scratch" "SELECT to_regclass('public.\"Image\"') IS NOT NULL")
+image_count=''
+[ "$has_images" = t ] && image_count='UNION ALL SELECT $$Image$$, count(*) FROM "Image"'
+
+counts="SELECT format(\$\$%-20s %s\$\$, t, n) FROM (
+    SELECT \$\$Recipe\$\$ AS t, count(*) AS n FROM \"Recipe\"
+    UNION ALL SELECT \$\$Ingredient\$\$, count(*) FROM \"Ingredient\"
+    UNION ALL SELECT \$\$RecipeIngredient\$\$, count(*) FROM \"RecipeIngredient\"
+    $image_count
+    UNION ALL SELECT \$\$_prisma_migrations\$\$, count(*) FROM \"_prisma_migrations\"
+) c"
 restored=$(in_db "$scratch" "$counts")
 current=$(in_db "$live" "$counts")
+
+# Each image is two files in the archive beside the dump: <id>.webp and <id>-thumb.webp
+media="${dump%.dump}.media.tar"
+if [ "$has_images" = t ] && [ -f "$media" ]; then
+    images=$(in_db "$scratch" 'SELECT count(*) FROM "Image"')
+    files=$(tar -tf "$media" | grep -c '\.webp$' || true)
+    if [ "$files" -ne $((images * 2)) ]; then
+        echo "Image check failed: $images images in the dump, but $files files in $media (expected $((images * 2)))" >&2
+        exit 1
+    fi
+    echo "Image check passed: $images images, $files files in $(basename "$media")"
+elif [ "$has_images" = t ]; then
+    echo "No images archive beside this dump ($(basename "$media")); the image check is skipped"
+fi
 
 echo "Rows in the restored copy:"
 echo "$restored"

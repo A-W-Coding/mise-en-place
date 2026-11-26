@@ -13,11 +13,13 @@ import compression from 'compression';
 import healthRouter from './routes/health.js';
 import ingredientsRouter from './routes/ingredients.js';
 import equipmentRouter from './routes/equipment.js';
+import imagesRouter from './routes/images.js';
 import recipesRouter from './routes/recipes.js';
 import syncRouter from './routes/sync.js';
 import tagsRouter from './routes/tags.js';
 import { globalErrorHandler } from './middleware/error-handler.js';
 import { corsPolicy } from './middleware/cors.js';
+import { mediaFiles } from './middleware/media.js';
 import { webClient, webDistDir } from './middleware/web-client.js';
 
 const app = express();
@@ -41,11 +43,16 @@ app.use('/api/recipes', recipesRouter);
 app.use('/api/sync', syncRouter);
 app.use('/api/tags', tagsRouter);
 app.use('/api/equipment', equipmentRouter);
+// POST /api/recipes/:id/images and DELETE /api/images/:id (3b)
+app.use('/api', imagesRouter);
 
 // ── Unknown API paths: JSON, not Express's HTML page ────────────────────────
 app.use('/api', (_req, res) => {
     res.status(404).json({ error: 'Not found.' });
 });
+
+// ── Image files (3b): <id>.webp and <id>-thumb.webp from MEDIA_DIR ──────────
+app.use('/media', mediaFiles());
 
 // ── The web client, from the same origin (F1) ───────────────────────────────
 app.use(webClient(webDistDir()));

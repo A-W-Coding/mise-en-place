@@ -54,8 +54,8 @@ flowchart LR
         api["Express: the API and the web client<br/>127.0.0.1:3000"]
         prisma["Prisma Client"]
         db[("PostgreSQL 17<br/>Compose network only")]
-        images["Image store<br/>(Phase 3b)"]
-        backups["Daily pg_dump to the SSD,<br/>plus an encrypted copy off the Pi"]
+        images[("Image files<br/>the media volume (3b)")]
+        backups["Daily pg_dump and images tar,<br/>plus an encrypted copy off the Pi"]
     end
 
     pwa --- sw
@@ -64,14 +64,16 @@ flowchart LR
     shell -->|HTTPS over the tailnet| serve
     serve --> api
     api --> prisma --> db
-    api -.-> images
+    api --> images
     db -.-> backups
+    images -.-> backups
 ```
 
 - Only `tailscale serve` is reachable from other devices, and only over the tailnet. The same `https://…ts.net` address works at home and away, so the app has one origin and HTTPS everywhere (F1). Installing it and its service worker both need HTTPS.
 - The API listens on 127.0.0.1, and the database has no published port at all.
 - The service worker keeps the app's own files on each device, so the app opens without a connection, and the offline copy (below) has the recipes. A new deploy takes over the next time the app starts.
 - There's no Electron app: decision D7 dropped it, and the installed app covers the phone and the laptop.
+- Recipe images (3b) are WebP files the API writes into the `media` volume, after re-encoding every upload with sharp (D11), and serves under `/media`. The database holds a row for each, named by the same id as its files, so a backup is a pair: the dump, and a tar of the volume taken at the same moment.
 
 ## From Phase 3c: working offline
 
