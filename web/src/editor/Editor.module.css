@@ -515,6 +515,12 @@ textarea.stepText {
     gap: 6px;
 }
 
+/* What the suggestions are placed against, so they open just under the box, as a line's row is for its ingredient.
+   Without it they're placed against the page, and opened below the bottom of the screen (found on the phone, Step 26) */
+.tagBox {
+    position: relative;
+}
+
 .removeTag {
     width: 28px;
     height: 28px;

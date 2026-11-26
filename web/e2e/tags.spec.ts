@@ -7,6 +7,7 @@
 
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
+import { expectJustUnder } from './helpers';
 
 /** Open Beef Chili's editor through its ⋮ menu, since a phone-width page hides the Edit link. */
 async function editBeefChili(page: Page) {
@@ -22,7 +23,10 @@ test('tag a recipe with a new tag and its colour, then filter the list by it', a
     expect((await request.post('/api/recipes', { data: { name: 'Toast' } })).status()).toBe(201);
     await editBeefChili(page);
 
-    await page.getByRole('combobox', { name: 'Add a tag' }).fill('Weeknight');
+    const tagBox = page.getByRole('combobox', { name: 'Add a tag' });
+    await tagBox.fill('Weeknight');
+    // Just under the box, where the phone shows it (Step 26)
+    await expectJustUnder(page.getByRole('listbox', { name: 'Matching tags' }), tagBox);
     await page.getByRole('option', { name: 'Create tag “weeknight”' }).click();
     const panel = page.getByRole('region', { name: 'Colour for the new tag Weeknight' });
     await panel.getByRole('radio', { name: 'Sky' }).click();
@@ -52,7 +56,9 @@ test('add equipment: a new item, how many, and optional', async ({ page }) => {
     await editBeefChili(page);
 
     await page.getByRole('button', { name: 'Add equipment' }).click();
-    await page.getByRole('combobox', { name: 'Item, equipment line 1' }).fill('Dutch oven');
+    const itemBox = page.getByRole('combobox', { name: 'Item, equipment line 1' });
+    await itemBox.fill('Dutch oven');
+    await expectJustUnder(page.getByRole('listbox', { name: 'Matching equipment' }), itemBox);
     await page.getByRole('option', { name: 'Create item “dutch oven”' }).click();
     await expect(page.getByRole('combobox', { name: 'Item, equipment line 1' })).toHaveValue('dutch oven');
     await page.getByRole('group', { name: 'How many, equipment line 1' }).getByRole('button', { name: 'One more' }).click();

@@ -101,24 +101,26 @@ export function TagPicker({ tags, errors, dispatch }: TagPickerProps) {
                     ))}
                 </ul>
             )}
-            <SharedListPicker
-                list="tags"
-                label="Add a tag"
-                placeholder="Add a tag, like weeknight"
-                text={text}
-                picked={null}
-                exclude={tags.map((tag) => tag.name)}
-                error={error}
-                errorId="tags-error"
-                onTextChange={setText}
-                onPick={(item) => add({ id: item.id, name: item.name, color: item.color ?? null })}
-                onCreate={(name) => {
-                    setCreating(name);
-                    setColour(freshColour(tags));
-                    setCreateError(null);
-                }}
-                renderItem={(item) => <TagPill name={item.name} color={item.color ?? null} size="small" />}
-            />
+            <div className={styles.tagBox}>
+                <SharedListPicker
+                    list="tags"
+                    label="Add a tag"
+                    placeholder="Add a tag, like weeknight"
+                    text={text}
+                    picked={null}
+                    exclude={tags.map((tag) => tag.name)}
+                    error={error}
+                    errorId="tags-error"
+                    onTextChange={setText}
+                    onPick={(item) => add({ id: item.id, name: item.name, color: item.color ?? null })}
+                    onCreate={(name) => {
+                        setCreating(name);
+                        setColour(freshColour(tags));
+                        setCreateError(null);
+                    }}
+                    renderItem={(item) => <TagPill name={item.name} color={item.color ?? null} size="small" />}
+                />
+            </div>
             {error && (
                 <p id="tags-error" className={styles.error}>
                     {error}
