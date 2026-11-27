@@ -1,0 +1,61 @@
+# Dependabot (D17, Step 28): every Monday, pull requests that update the
+# API's and the client's packages and the workflow's actions. CI tests each
+# one like any other pull request; nothing merges itself.
+#
+# Minor and patch updates come grouped, one pull request per folder. Each new
+# major version comes on its own, since it may need code changes, except the
+# Jest packages, which only work together.
+#
+# Not here: the Docker images. Both use a tag that names only the major
+# version (node:22-slim, postgres:17), so Dependabot could only offer new
+# major versions, and those move on purpose: Node to an LTS (Step 32), and
+# Postgres with a dump and restore. Their minor releases and security fixes
+# reach the Pi through deploy.sh, which downloads the newest of each tag
+# (Step 27).
+
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    groups:
+      # A dependency goes in the first group it matches
+      jest:
+        patterns: [jest, "@types/jest", ts-jest]
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    ignore:
+      # Prisma moves in steps of its own (D18). Step 31 removes these two
+      - dependency-name: prisma
+      - dependency-name: "@prisma/client"
+      # Follows the Node version itself (Step 32)
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    groups:
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]

@@ -3,8 +3,8 @@
 # Mise en place: hardening plan (Phase 1 to Phase 4)
 
 > **Status**
-> - Current step: **Step 27: security fixes, and fresh images on every deploy**, built (2026-11-26); its deploy is next (you), with CI to be confirmed when its PR opens. Then Step 28, Dependabot. Phase 4's plan (Steps 27–32, D16–D19) merged as PR #35. **Phase 3 is complete (2026-11-26):** 3a (2026-11-23), 3c (2026-11-24) and 3b (Steps 20–26, PRs #24–#32, CI green), all deployed on the Pi and checked on your phone. Step 8 waits only on the SSD (8.1, about a month away)
-> - Last updated: 2026-11-26 (Step 27: security fixes, and fresh images on every deploy)
+> - Current step: **Step 28: dependency updates as pull requests**, in progress (2026-11-27): the Dependabot config is written; next, you merge it and turn on Dependabot security updates, then its first pull requests are tested and merged or closed. Step 27 merged as PR #36 (CI run #75 green) and deployed. Phase 4's plan (Steps 27–32, D16–D19) merged as PR #35. **Phase 3 is complete (2026-11-26):** 3a (2026-11-23), 3c (2026-11-24) and 3b (Steps 20–26, PRs #24–#32, CI green), all deployed on the Pi and checked on your phone. Step 8 waits only on the SSD (8.1, about a month away)
+> - Last updated: 2026-11-27 (Step 28: the Dependabot config)
 > - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
@@ -924,7 +924,7 @@ And: no known advisory in the API's production dependencies, and the Pi runs Pri
 - [x] `deploy.sh` downloads before it builds: `compose pull db`, then `compose build --pull api`, so each deploy starts from the newest `node:22-slim` and `postgres:17`. The `17` tag only moves through 17.x releases, which keep the same data format. `up -d` then recreates the database container only when its image changed: a restart of a few seconds, after the deploy's backup
 - [x] The runbook says so, and that a new Postgres major version (18) is a task of its own, since it needs a dump and restore. (The README's deploy line too)
 - [x] Tests: Jest, the client's Vitest, lint and type-check, and the end-to-end tests in Chromium here; CI runs Firefox. (575 Jest, 311 Vitest, 70 end-to-end in Chromium, all passing. Both new Compose commands checked with `--dry-run` against the production file)
-- [ ] Deploy (you): the health check passes, and `docker compose exec db postgres --version` shows the newest 17.x
+- [x] Deploy (you): the health check passes, and `docker compose exec db postgres --version` shows the newest 17.x. ("Deploy OK", and the Pi answers its health check from the PC; the version number wasn't recorded here)
 
 **Done when:** CI is green, `npm audit --omit=dev` reports nothing, and the Pi runs it.
 
@@ -933,16 +933,17 @@ And: no known advisory in the API's production dependencies, and the Pi runs Pri
 
 **Why:** dependencies fall behind silently: 17 of the API's packages are behind today. This is the design spec's second success criterion.
 
-- [ ] `.github/dependabot.yml`, every Monday:
+- [x] `.github/dependabot.yml`, every Monday:
   - `npm` for `/` and for `/web`; `github-actions` for the workflow's actions (`checkout`, `setup-node` and `upload-artifact`, all on v4); `docker` for the Dockerfile's `node` image; `docker-compose` for the Compose files' `postgres` image
   - minor and patch updates grouped, one pull request per ecosystem and folder; each new major version on its own
   - ignored: `prisma` and `@prisma/client` until Step 31 has upgraded them (D18); new major versions of the `node` image and of `@types/node`, since Node moves only to an LTS, on purpose (Step 32); new major versions of `postgres`, since one needs a dump and restore
   - nothing merges itself: you review and merge, as now
+  - (As built: the Jest packages, `jest`, `@types/jest` and `ts-jest`, form one group whatever the update, since a new Jest major needs all three. The `docker` and `docker-compose` entries were left out: both images use a tag naming only the major version, `22-slim` and `17`, so Dependabot could only offer new majors, which are ignored on purpose; their minor releases reach the Pi through Step 27's downloads instead. At most 10 open pull requests per folder, since the API has six majors waiting)
 - [ ] Dependabot security updates turned on in the repository's settings (you), so a fix for a new advisory arrives when it's published rather than on the weekly round
 - [ ] CI runs on Dependabot's pull requests as it is: they're pull requests into `main`, and the workflow needs no secrets. Checked on the first ones
 - [ ] The first round: the grouped minor and patch updates merged once green. Each major version (among them TypeScript 7, Jest 30, `dotenv` 18 and the actions' new majors) is merged if CI is green with nothing to change; one that needs code changes is closed with `@dependabot ignore this major version` and a backlog line saying what it needs
-- [ ] The local working notes' rule "don't upgrade dependencies unless a step says so" becomes: updates arrive as Dependabot's pull requests, each reviewed on its own
-- [ ] Docs: the README says how updates arrive
+- [x] The local working notes' rule "don't upgrade dependencies unless a step says so" becomes: updates arrive as Dependabot's pull requests, each reviewed on its own
+- [x] Docs: the README says how updates arrive
 
 **Done when:** Dependabot's first pull requests have opened, CI has tested them, and each is merged or closed with its reason.
 
@@ -1958,3 +1959,6 @@ And: no known advisory in the API's production dependencies, and the Pi runs Pri
   - **Tests:** 575 Jest, 311 Vitest, and 70 end-to-end in Chromium, all passing; lint and type-check clean.
 
   Next: your deploy, then Step 28, Dependabot.
+- **2026-11-26:** Step 27 merged (PR #36, CI run #75 green) and deployed: "Deploy OK", with the newest images downloaded, and the Pi answers its health check. Step 27 done.
+
+  Next: Step 28, Dependabot.
