@@ -68,7 +68,7 @@ DATABASE_URL=postgresql://miseenplace:change-me@localhost:5432/miseenplace_test
 | `CORS_ORIGINS` | API | Optional. Comma-separated origins a browser may call the API from, such as `http://localhost:5173`. Unset means none |
 | `NODE_ENV` | Seed, tests | When `production`, the seed and the test reset refuse to run |
 
-`.env` and `.env.test` are git-ignored; [`.env.example`](.env.example) is the template. Prisma and the server read `.env`, but never override a variable that's already set in your shell. `npm test` is the exception: it loads `.env.test` over anything already set, so tests can't be pointed at another database by accident.
+`.env` and `.env.test` are git-ignored; [`.env.example`](.env.example) is the template. Prisma and the server read `.env`, but never override a variable that's already set in your shell. `npm test` is the exception: it loads `.env.test` over anything already set, so tests can't be pointed at another database by accident, and it stops if `.env.test` is missing.
 
 ### Safety guard
 
