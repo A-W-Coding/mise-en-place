@@ -37,7 +37,7 @@ jobs:
           --health-retries 10
 
     env:
-      # Ends in _test, so the test guard allows it. There's no .env.test in CI.
+      # Ends in _test, so the test guard allows it. Written to .env.test below.
       DATABASE_URL: postgresql://test:test@localhost:5432/recipe_test
 
     steps:
@@ -61,6 +61,11 @@ jobs:
       # The tests don't type-check (ts-jest only transpiles), so do it here
       - name: Type-check
         run: npx tsc --noEmit
+
+      # npm test loads .env.test with dotenv's own command, which stops if
+      # the file it's given is missing, so write one from the job's database
+      - name: Write .env.test
+        run: echo "DATABASE_URL=$DATABASE_URL" > .env.test
 
       - name: Test with coverage
         run: npm test -- --coverage

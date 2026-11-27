@@ -4,7 +4,7 @@
  *
  *  1. Loads `.env.test`, overriding any DATABASE_URL already in the
  *     environment, so a shell that has `.env` loaded can't redirect the tests.
- *     In CI there is no `.env.test`, and the workflow's DATABASE_URL is used.
+ *     In CI, the workflow writes a `.env.test` from its own DATABASE_URL.
  *  2. Refuses to continue unless DATABASE_URL names a `_test` database.
  *  3. Applies migrations once per run, instead of once per test file.
  */
@@ -13,7 +13,8 @@ import { execSync } from 'child_process';
 import dotenv from 'dotenv';
 
 export default function globalSetup(): void {
-    dotenv.config({ path: '.env.test', override: true });
+    // quiet: since dotenv 17, config() prints a line for every file it loads
+    dotenv.config({ path: '.env.test', override: true, quiet: true });
 
     // Same rule as assertSafeDatabase(TEST_ONLY) in prisma/utils/safe-database.ts.
     // Jest loads this file outside its module mapping, so it can't import that
