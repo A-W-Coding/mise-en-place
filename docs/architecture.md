@@ -47,6 +47,7 @@ flowchart LR
         sw["Its service worker<br/>the app's files, for offline starts"]
         idb[("IndexedDB<br/>the offline copy, and<br/>changes waiting to upload")]
         shell["curl, scripts"]
+        ntfyapp["The ntfy app<br/>phone"]
     end
 
     subgraph pi["Raspberry Pi"]
@@ -56,6 +57,12 @@ flowchart LR
         db[("PostgreSQL 17<br/>Compose network only")]
         images[("Image files<br/>the media volume (3b)")]
         backups["Daily pg_dump and images tar,<br/>plus an encrypted copy off the Pi"]
+        alerts["monitor.sh, every 5 minutes<br/>nightly.sh, after each backup"]
+    end
+
+    subgraph outside["Outside: the Pi connects out, nothing connects in"]
+        hc["Healthchecks.io<br/>checks: health, backup"]
+        ntfy["ntfy.sh<br/>a topic with a random name"]
     end
 
     pwa --- sw
@@ -67,12 +74,18 @@ flowchart LR
     api --> images
     db -.-> backups
     images -.-> backups
+    alerts -.->|asks /api/health| api
+    alerts -.->|and through| serve
+    alerts -->|"HTTPS: ok and the disk use,<br/>or only what failed"| hc
+    hc -->|"a failure, or no ping in time"| ntfy
+    ntfy --> ntfyapp
 ```
 
 - Only `tailscale serve` is reachable from other devices, and only over the tailnet. The same `https://…ts.net` address works at home and away, so the app has one origin and HTTPS everywhere (F1). Installing it and its service worker both need HTTPS.
 - The API listens on 127.0.0.1, and the database has no published port at all.
 - The service worker keeps the app's own files on each device, so the app opens without a connection, and the offline copy (below) has the recipes. A new deploy takes over the next time the app starts.
 - There's no Electron app: decision D7 dropped it, and the installed app covers the phone and the laptop.
+- Alerts (Phase 4, D16): every 5 minutes, `monitor.sh` checks the API, locally and through `tailscale serve`, and the disk, then pings Healthchecks.io; `nightly.sh` pings it after each backup and off-site copy. Healthchecks pushes an alert through `ntfy.sh` to the phone when a ping says something failed, or when one doesn't come, which is how the Pi going silent is noticed. It's all outbound HTTPS from the Pi, carrying only the status and the disk use, and the ping addresses and the topic stay in a settings file on the Pi.
 - Recipe images (3b) are WebP files the API writes into the `media` volume, after re-encoding every upload with sharp (D11), and serves under `/media`. The database holds a row for each, named by the same id as its files, so a backup is a pair: the dump, and a tar of the volume taken at the same moment.
 
 ## From Phase 3c: working offline
