@@ -130,6 +130,10 @@ GitHub Actions runs on every pull request into `main` and every push to `main`, 
 - **The client:** its lint, type-check, and unit and component tests.
 - **End-to-end:** builds both, then runs Playwright in Firefox and Chromium on a PostgreSQL service of its own. If it fails, the run keeps Playwright's report.
 
+### Dependency updates
+
+Dependabot ([`.github/dependabot.yml`](.github/dependabot.yml)) opens pull requests every Monday for the API's and the client's packages and for the workflow's actions, and CI tests each one. Minor and patch updates come grouped, one pull request per folder; each new major version comes on its own. Nothing merges itself. Prisma is left out until its upgrade is done (D18), and so are new major versions of Node's types, which follow Node itself. The Docker images update on the Pi instead: each deploy downloads the newest `node:22-slim` and `postgres:17`.
+
 ## API
 
 | Method | Endpoint | Description |
