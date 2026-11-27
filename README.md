@@ -170,7 +170,7 @@ curl -X POST http://localhost:3000/api/ingredients \
 
 ## Deployment
 
-From Phase 2 the app runs on a Raspberry Pi, in Docker, on `127.0.0.1:3000` only. `tailscale serve` publishes it over HTTPS to your own devices, and the database has no published port. The API serves the web client too, so the app and its data share one address: open it in Firefox on your phone and choose Install from the menu. `scripts/deploy.sh` backs up, pulls `main`, downloads the newest PostgreSQL 17 and Node 22 images, builds, migrates and waits for the health check; `scripts/backup.sh` runs daily from cron, and `scripts/offsite.sh` then keeps an encrypted copy in Backblaze B2. [`docs/deployment.md`](docs/deployment.md) covers the setup, from the operating system to the restore test.
+From Phase 2 the app runs on a Raspberry Pi, in Docker, on `127.0.0.1:3000` only. `tailscale serve` publishes it over HTTPS to your own devices, and the database has no published port. The API serves the web client too, so the app and its data share one address: open it in Firefox on your phone and choose Install from the menu. `scripts/deploy.sh` backs up, pulls `main`, downloads the newest PostgreSQL 17 and Node 22 images, builds, migrates and waits for the health check; Each night `scripts/nightly.sh` runs `scripts/backup.sh`, then `scripts/offsite.sh`, which keeps an encrypted copy in Backblaze B2. Every 5 minutes `scripts/monitor.sh` checks the API and the disk; it and the nightly run ping Healthchecks.io, which sends an alert to your phone through ntfy when something fails or the Pi goes silent. [`docs/deployment.md`](docs/deployment.md) covers the setup, from the operating system to the alerts.
 
 ## Project structure
 
@@ -205,7 +205,7 @@ docker-compose.prod.yml  The Pi: the API and PostgreSQL
 Dockerfile               The production image: the API and the built web client
 docs/                    API reference, ERD, architecture, deployment
 planning/                The hardening plan, code audit, design review and specs
-scripts/                 Deploy, backup, off-site and restore-check scripts for the Pi, and a CI helper
+scripts/                 Deploy, backup, off-site, restore-check and monitoring scripts for the Pi, and a CI helper
 ```
 
 ## Documentation
@@ -213,5 +213,5 @@ scripts/                 Deploy, backup, off-site and restore-check scripts for 
 - [`docs/api.md`](docs/api.md): the API reference
 - [`docs/erd.md`](docs/erd.md): the database schema as an entity-relationship diagram
 - [`docs/architecture.md`](docs/architecture.md): how the pieces connect, now and from Phase 2
-- [`docs/deployment.md`](docs/deployment.md): setting up the Pi, deploying, backups and restores
+- [`docs/deployment.md`](docs/deployment.md): setting up the Pi, deploying, backups and restores, and alerts
 - [`planning/`](planning): the hardening plan, the code audit, the design review, and the technical and design specs

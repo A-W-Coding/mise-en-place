@@ -2,7 +2,7 @@
 
 How the app runs on the Pi from Phase 2: in Docker, listening on `127.0.0.1:3000` only, published to your own devices by `tailscale serve` over HTTPS. The API serves the web client as well, so the app and its data share that one address. The database has no published port. [`architecture.md`](architecture.md) has the diagram.
 
-Sections 1–7 are a one-time setup, and section 8 installs the app on your phone. After that, deploying is one command (see [Day to day](#day-to-day)).
+Sections 1–7 are a one-time setup, section 8 installs the app on your phone, and section 9 sets up alerts. After that, deploying is one command (see [Day to day](#day-to-day)).
 
 | File | What it does |
 |---|---|
@@ -12,6 +12,8 @@ Sections 1–7 are a one-time setup, and section 8 installs the app on your phon
 | `scripts/backup.sh` | Dumps the database into the backups folder, checks the dump, and removes dumps older than 7 days |
 | `scripts/restore-check.sh` | Restores a dump into a scratch database and compares row counts with the live one |
 | `scripts/offsite.sh` | Keeps an encrypted copy of the backups folder in Backblaze B2, with restic |
+| `scripts/nightly.sh` | Runs the backup, then the off-site copy, every night, and tells Healthchecks how they went |
+| `scripts/monitor.sh` | Every 5 minutes: checks the API, locally and over the `ts.net` address, and the disk, and tells Healthchecks |
 
 ## What you need
 
@@ -163,7 +165,7 @@ The backups folder is on the same disk as the database, so one dead SD card or S
    scripts/offsite.sh
    scripts/offsite.sh snapshots
    ```
-8. **Every night, straight after the backup:** this replaces section 6's cron line with one that runs both, and copies only if the backup succeeded:
+8. **Every night, straight after the backup:** this replaces section 6's cron line with one that runs both, and copies only if the backup succeeded. Section 9 replaces it again, with `nightly.sh`, which does the same and then tells Healthchecks:
    ```bash
    (crontab -l | grep -v scripts/backup.sh; echo '30 3 * * * ($HOME/mise-en-place/scripts/backup.sh && $HOME/mise-en-place/scripts/offsite.sh) >> $HOME/miseenplace-backup.log 2>&1') | crontab -
    ```
@@ -206,6 +208,85 @@ Things worth knowing:
 - **Timers** ring only while the app is on screen. If you switch to another app, one that ends rings when you come back.
 - **Options** (the sliders icon) holds the theme, the text size and the timer sound, which are saved on each device.
 
+## 9. Alerts
+
+`scripts/monitor.sh` and `scripts/nightly.sh` tell [Healthchecks.io](https://healthchecks.io) how the Pi is doing, and Healthchecks pushes an alert to the ntfy app on your phone when something is wrong, then another when it's fixed (D16).
+
+**What leaves the Pi:** every 5 minutes, one HTTPS request to `hc-ping.com`, saying "ok, disk 41%" or only what failed, such as "api: 503"; and one each night for the backup, "ok" or which part failed. Nothing connects in. Healthchecks sees the address the requests come from, your home's public IP, as any website you visit does. A watcher outside the Pi is the only way to notice the Pi itself going silent. Healthchecks then sends the alert to `ntfy.sh`, which passes it to the phone.
+
+What each alert means, and what to look at first:
+
+| Alert | What it means | First look |
+|---|---|---|
+| `health`: `api: 503` | The API is running but can't reach the database | `docker compose ps`, then `docker compose logs --tail=50 db` |
+| `health`: `api: no answer` | The API isn't running, or is stuck | `docker compose ps`, then `docker compose logs --tail=50 api`; `docker compose up -d` starts it again |
+| `health`: `tailnet: …` alone | The API is fine, but `tailscale serve` isn't passing requests to it | `tailscale status` and `tailscale serve status` |
+| `health`: `disk 91%, limit 85%` | The fuller of the disks holding Docker's data and the backups has passed the limit | `df -h` and `docker system df`; `docker image prune` removes the old images that deploys leave behind |
+| `health`: `disk: can't read` | `df` couldn't read one of those folders | Does `/srv/miseenplace/backups` still exist? |
+| `health` down, with no message | No ping for 10 minutes: the Pi is off or offline, or cron has stopped | The Pi's power and network, then `systemctl status cron` |
+| `backup`: `backup failed` | `backup.sh` failed, so the off-site copy was skipped; the older backups are kept | `tail -50 ~/miseenplace-backup.log` |
+| `backup`: `offsite failed` | The night's backup is on the Pi, but the copy to B2 failed | The same log, then `scripts/offsite.sh snapshots` |
+| `backup` down, with no message | No ping by 05:30: cron didn't start it, or it's still running | The same log, and `crontab -l` |
+
+`monitor.sh` retries a failed health check for 30 seconds before it counts, so a deploy's restart doesn't raise an alert.
+
+1. **The ntfy app** on your phone: from F-Droid, which keeps its own connection to `ntfy.sh` and doesn't use Google's push service, or from the Play Store, which gets its notifications through Google's push service, so Google relays them. Subscribe to a new topic on `ntfy.sh` with a long random name: anyone who knows a topic's name can read it and send to it, so the name is its password. On the Pi, `openssl rand -hex 16` makes one. Keep it in your password manager.
+2. **A Healthchecks.io account:** sign up at <https://healthchecks.io>. The free plan is enough. Under **Integrations**, add **ntfy**: server `https://ntfy.sh`, your topic, priority **High** for "down" and **Default** for "up". Its **Test** button should reach the phone.
+3. **Two checks,** with plain names that say nothing about your home, and no description:
+   - `health`: schedule **Simple**, period 5 minutes, grace time 5 minutes, so it alerts after 10 minutes without a ping
+   - `backup`: schedule **Cron**, `30 3 * * *`, in the Pi's time zone (`timedatectl | grep 'Time zone'`), grace time 2 hours
+
+   Make sure each has the ntfy integration ticked. Each shows a ping URL, `https://hc-ping.com/<uuid>`: keep both secret, since anyone with one can ping that check.
+4. **Settings,** in a file only you can read, like `restic.env`:
+   ```bash
+   mkdir -p ~/.config/miseenplace
+   cat > ~/.config/miseenplace/alerts.env <<'EOF'
+   HEALTH_PING_URL=https://hc-ping.com/<health-uuid>
+   BACKUP_PING_URL=https://hc-ping.com/<backup-uuid>
+   TAILNET_URL=https://<name>.<tailnet>.ts.net
+   DISK_LIMIT=85
+   EOF
+   chmod 600 ~/.config/miseenplace/alerts.env
+   nano ~/.config/miseenplace/alerts.env
+   ```
+   In nano, put in the two ping URLs from step 3 and the Pi's address, the one in section 8. Keep a copy of the file in your password manager too.
+5. **Try both by hand:**
+   ```bash
+   cd ~/mise-en-place
+   scripts/monitor.sh && echo ok
+   scripts/nightly.sh
+   ```
+   `monitor.sh` prints nothing but `ok`, and Healthchecks shows the ping with the disk use. `nightly.sh` makes a real backup and off-site copy, then Healthchecks shows "ok" on `backup`.
+6. **Cron:** this replaces section 7's nightly line with `nightly.sh`, which does the same and then tells Healthchecks, and adds `monitor.sh` every 5 minutes. Each logs to a file in your home folder; `monitor.sh` writes only failures, so its log stays small:
+   ```bash
+   (crontab -l | grep -v -e scripts/backup.sh -e scripts/nightly.sh -e scripts/monitor.sh
+    echo '30 3 * * * $HOME/mise-en-place/scripts/nightly.sh >> $HOME/miseenplace-backup.log 2>&1'
+    echo '*/5 * * * * $HOME/mise-en-place/scripts/monitor.sh >> $HOME/miseenplace-monitor.log 2>&1') | crontab -
+   crontab -l
+   ```
+7. **Log rotation** for those two logs: weekly, 8 weeks kept, compressed. Docker's own logs already rotate (the `local` log driver). This writes the rule with your home folder and user filled in, then shows what logrotate would do, without doing it:
+   ```bash
+   sudo tee /etc/logrotate.d/miseenplace > /dev/null <<EOF
+   $HOME/miseenplace-backup.log $HOME/miseenplace-monitor.log {
+       weekly
+       rotate 8
+       compress
+       delaycompress
+       missingok
+       notifempty
+       su $(id -un) $(id -gn)
+   }
+   EOF
+   sudo logrotate --debug /etc/logrotate.d/miseenplace
+   ```
+8. **Check that each alert arrives,** then its recovery notice (Step 29's checks):
+   - the API stopped: `docker compose stop api`; at `monitor.sh`'s next run, within 5 minutes, `health` goes down with `api: no answer`. Then `docker compose start api`, and the run after brings the recovery notice
+   - the disk limit: set `DISK_LIMIT=1` in `alerts.env` and run `scripts/monitor.sh`; then put it back to 85 and run it again
+   - a failed backup: `mv ~/.config/miseenplace/restic.env ~/restic.env.away`, run `scripts/nightly.sh` (`offsite failed`), then move it back and run `scripts/offsite.sh`
+   - the Pi silent: `sudo systemctl stop cron` for 15 minutes, then `sudo systemctl start cron`
+
+**Pausing for maintenance,** such as a restore or the move to an SSD: pause the `health` check in Healthchecks, and `touch ~/.config/miseenplace/monitor.paused`, which makes `monitor.sh` check and send nothing. Both are needed: any ping, a failed one included, resumes a paused check. Afterwards, `rm ~/.config/miseenplace/monitor.paused`, and the next ping resumes the check. With the Pi switched off, pausing the checks in Healthchecks is enough.
+
 ## Checks
 
 These are Step 8's "done when" checks:
@@ -235,6 +316,9 @@ All of these run in `~/mise-en-place` on the Pi:
 | Copy the backups to B2 now | `scripts/offsite.sh` |
 | List the copies in B2 | `scripts/offsite.sh snapshots` |
 | How much room the images take | `docker compose run --rm --no-deps --entrypoint du api -sh /app/media` |
+| Check the API and the disk now, as cron does | `scripts/monitor.sh && echo ok` |
+| The last alerts' details | `tail ~/miseenplace-monitor.log` |
+| Pause the alerts for maintenance, then resume | [Section 9](#9-alerts): `touch ~/.config/miseenplace/monitor.paused` and pause `health` in Healthchecks; afterwards `rm` the file |
 
 Backups go to `/srv/miseenplace/backups`. Set `BACKUP_DIR` to use another folder, and `KEEP_DAYS` to keep backups for longer than 7 days.
 
@@ -262,7 +346,7 @@ A backup from before 3b has no `.media.tar`: skip that line.
 
 Everything on the Pi is in git, in `.env`, in the database or, from 3b, in the images volume, so moving from the SD card to an SSD is a fresh install plus a restore. The SD card stays untouched, as a fallback.
 
-1. On the Pi, take a backup and note the file names it prints (a `.dump` and a `.media.tar`), then send them to B2:
+1. In Healthchecks, pause both checks (section 9), so the Pi's silence during the move raises no alert; the new install's first pings resume them. Then, on the Pi, take a backup and note the file names it prints (a `.dump` and a `.media.tar`), then send them to B2:
    ```bash
    ~/mise-en-place/scripts/backup.sh pre-ssd
    ~/mise-en-place/scripts/offsite.sh
@@ -301,4 +385,4 @@ Everything on the Pi is in git, in `.env`, in the database or, from 3b, in the i
    docker compose run --rm --no-deps -T --entrypoint tar api -C /app/media -xf - \
      < /srv/miseenplace/backups/pre-ssd-<stamp>.media.tar
    ```
-6. Carry on with sections 5 and 6, then section 7 from step 8: the repository already exists. Then run the checks. `deploy.sh` applies any migrations newer than the dump.
+6. Carry on with sections 5 and 6, then section 7 from step 8: the repository already exists. Then section 9 from step 4, with `alerts.env` from your password manager. Then run the checks. `deploy.sh` applies any migrations newer than the dump.

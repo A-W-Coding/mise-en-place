@@ -3,8 +3,8 @@
 # Mise en place: hardening plan (Phase 1 to Phase 4)
 
 > **Status**
-> - Current step: **Step 28: dependency updates as pull requests**, done (2026-11-27): the config merged as PR #37, security updates are on, and Dependabot's first round of 12 pull requests (#38–#49) is settled: seven merged, three closed until they can be used, and Jest 30 and dotenv 18 replaced by `phase-4/step-28-jest-dotenv`, whose CI is confirmed when its PR opens. Next: Step 29, alerts. Step 27 merged as PR #36 (CI run #75 green) and deployed. **Phase 3 is complete (2026-11-26):** 3a (2026-11-23), 3c (2026-11-24) and 3b (Steps 20–26, PRs #24–#32, CI green), all deployed on the Pi and checked on your phone. Step 8 waits only on the SSD (8.1, about a month away)
-> - Last updated: 2026-11-27 (Step 28: Dependabot's first round)
+> - Current step: **Step 29: alerts**, built (2026-11-27): `monitor.sh`, `nightly.sh` and the runbook's section 9, checked here against a stand-in for Healthchecks. Next (you): deploy, which brings the scripts and Step 28's updates to the Pi, then the accounts, the two checks, `alerts.env`, cron and log rotation, then each alert on the phone. Step 28 done (2026-11-27): Dependabot's first round settled, PRs #37–#50. **Phase 3 is complete (2026-11-26):** 3a (2026-11-23), 3c (2026-11-24) and 3b (Steps 20–26, PRs #24–#32, CI green), all deployed on the Pi and checked on your phone. Step 8 waits only on the SSD (8.1, about a month away)
+> - Last updated: 2026-11-27 (Step 29: alerts, built)
 > - Blockers: the SSD for 8.1, about a month away
 
 ## How to use this file
@@ -961,25 +961,28 @@ And: no known advisory in the API's production dependencies, and the Pi runs Pri
 - [ ] Two checks, with plain names that say nothing about the home:
   - `health`: a ping every 5 minutes, an alert after 10 minutes without one
   - `backup`: daily at 03:30 (Healthchecks takes the cron expression and the Pi's time zone), an alert after 2 hours without one
-- [ ] `scripts/monitor.sh`, run by cron every 5 minutes:
+- [x] `scripts/monitor.sh`, run by cron every 5 minutes:
   - asks `http://127.0.0.1:3000/api/health` (the API and its database), then the `ts.net` address's `/api/health`, so `tailscale serve` is checked as well
   - reads how full the filesystems holding Docker's data and the backups are (`df`)
   - a failed check is retried for 30 seconds first, so a deploy's restart doesn't raise an alert
   - pings `health` with "ok, disk 41%", or `health/fail` with what failed ("api: 503", "disk 91%, limit 85%")
-- [ ] `scripts/nightly.sh` replaces the cron line's `(backup.sh && offsite.sh)`: it runs both, pings `backup`, or `backup/fail` with which part failed, and exits with their status. No log lines go in the ping, only which part failed
-- [ ] Both scripts:
+  - (As built: the `ts.net` check is named `tailnet`, so `tailnet: 502` alone means `tailscale serve`, not the API. The limit counts when reached (85% alerts). `disk: can't read` if `df` can't read a folder. It prints only failures. And a pause file, `~/.config/miseenplace/monitor.paused`: Healthchecks' docs say any ping resumes a paused check, a /fail one included, so pausing there alone wouldn't silence a restore; while the file exists, `monitor.sh` checks and sends nothing)
+- [x] `scripts/nightly.sh` replaces the cron line's `(backup.sh && offsite.sh)`: it runs both, pings `backup`, or `backup/fail` with which part failed, and exits with their status. No log lines go in the ping, only which part failed
+  - (As built: it reads `alerts.env` only after both scripts have run, so its settings never reach them, and without the file the backup still runs, Healthchecks isn't told, and it alerts on the silence. It starts each night's log with a dated line)
+- [x] Both scripts:
   - read their settings from `~/.config/miseenplace/alerts.env`, readable only by you (`chmod 600`), like `restic.env`: the two ping addresses, the `ts.net` address and the disk limit (85%). None of it goes in the repo
   - send each request over HTTPS with a 10-second limit and 3 tries (`curl -fsS -m 10 --retry 3`); if the internet is down, the ping just fails, and Healthchecks alerts on the silence
   - LF line endings and the executable bit, like the other scripts
 - [ ] Cron (you): `monitor.sh` every 5 minutes, and the nightly line running `nightly.sh`, each logging to a file in your home folder. `monitor.sh` logs only failures, so its log stays small
 - [ ] Log rotation for those logs: a `logrotate` rule (`/etc/logrotate.d/miseenplace`: weekly, 8 kept, compressed). Docker's own logs already rotate (Step 8)
-- [ ] Checked here first, against a stand-in ping server that records each request: all well, an API error, a full disk (a low limit), a backup that fails, and no request carrying more than the status and the disk use
+- [x] Checked here first, against a stand-in ping server that records each request: all well, an API error, a full disk (a low limit), a backup that fails, and no request carrying more than the status and the disk use
+  - (As built: `monitor.sh` against the real API on the dev database and its no-database twin: all well ("ok, disk 87%"), `api: 503` and `api: no answer` after the 30 seconds, `tailnet: no answer`, a low limit, an unreadable folder, two failures at once, the API back within the 30 seconds (no alert), the pause file, no settings file, and Healthchecks unreachable or answering 404. This PC couldn't reach the Pi's `ts.net` address at the time, so the `tailnet` check was pointed at the local API and at a dead port; the Pi checks the real one. `nightly.sh` with stand-ins for the two scripts: all well, the backup failing (the copy skipped), the copy failing, no settings file, and Healthchecks unreachable. Each request held only curl's own headers and a body such as "ok, disk 87%", "api: 503; disk 87%, limit 50%" or "offsite failed")
 - [ ] On the Pi (you), each alert reaches the phone, then its recovery notice:
   - the API stopped (`docker compose stop api`), then started again
   - a disk limit below the current use for one run, then put back
   - a backup that fails: `nightly.sh` run with `restic.env` renamed for a moment
   - the Pi silent: cron stopped for 15 minutes (`sudo systemctl stop cron`), then started again
-- [ ] Docs: a new Alerts section in the runbook (setting up, what each alert means and what to do first, and pausing a check in Healthchecks during maintenance), the new cron lines, and `docs/architecture.md`'s Pi diagram showing Healthchecks and ntfy, outbound only
+- [x] Docs: a new Alerts section in the runbook (setting up, what each alert means and what to do first, and pausing a check in Healthchecks during maintenance), the new cron lines, and `docs/architecture.md`'s Pi diagram showing Healthchecks and ntfy, outbound only
 
 **Done when:** every alert above has reached your phone, and its recovery notice too.
 
@@ -1973,3 +1976,12 @@ And: no known advisory in the API's production dependencies, and the Pi runs Pri
   - **Tests:** on the branch, rebased onto the merged round: 575 Jest, 311 Vitest and 70 end-to-end in Chromium, all passing; lint and type-check clean in both projects.
 
   Next: Step 29, alerts.
+- **2026-11-27:** Step 29 built: alerts through Healthchecks.io and ntfy (D16).
+  - **`scripts/monitor.sh`:** every 5 minutes, the API's health check on `127.0.0.1:3000` and on the `ts.net` address, retried for 30 seconds so a deploy's restart doesn't count, and the fuller of the disks holding Docker's data and the backups. Then one ping: "ok, disk 41%", or to `/fail` with only what failed. A pause file silences it during maintenance, since any ping, a failed one too, resumes a paused check.
+  - **`scripts/nightly.sh`:** replaces the cron line's `(backup.sh && offsite.sh)`: the same two, then "ok" or "backup failed" / "offsite failed", never their output. Without `alerts.env` the backup still runs.
+  - **Both** read `~/.config/miseenplace/alerts.env` (two ping URLs, the `ts.net` address, the disk limit), kept on the Pi only, and send with `curl -fsS -m 10 --retry 3`.
+  - **Checked here** against a stand-in for Healthchecks that recorded every request, and the real API (see the box above). Each request carried only curl's standard headers and the short status.
+  - **Docs:** the runbook's new section 9 (what leaves the Pi, what each alert means and what to look at first, the setup, the cron lines, the logrotate rule, the four alert checks, and pausing), the SSD move pausing both checks, and `docs/architecture.md`'s Pi diagram with Healthchecks and ntfy, outbound only.
+  - **Also:** the local Browser pane configs moved from `dotenv-cli`'s options to dotenv 18's `dotenv run` with `cross-env` (Step 28 had removed `dotenv-cli`).
+
+  Next (you): deploy, which brings the scripts and Step 28's updates to the Pi, then the runbook's section 9 and each alert on the phone.
